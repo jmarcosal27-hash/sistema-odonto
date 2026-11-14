@@ -196,6 +196,7 @@ await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
 const item = (name, extra = {}) => ({ name, quantity: 1, unit: "caixa", posology: "Conforme orientação", route: "internal", controlled: false, ...extra });
 const { data: rxId, error: rx1 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: "2026-11-14", p_notes: null,
   p_prof_name: "Dono A", p_prof_cro: "1", p_prof_cro_uf: "SP", p_items: [item("Medicamento Fictício X"), item("Pomada Fictícia", { route: "external", controlled: true })] });
+if (rx1) console.log("rx1:", rx1.code, rx1.message, rx1.details ?? "");
 check(!rx1 && rxId, "A emite receita com 2 itens (RPC save_prescription)");
 const { data: meds } = await a.from("medications").select("id,name").eq("clinic_id", clinicA);
 check(meds?.length === 2, "nomes usados na receita viram medicamentos da clínica (catálogo começa vazio)");
