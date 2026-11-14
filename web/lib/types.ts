@@ -167,6 +167,9 @@ export interface MessageTemplate { kind: "confirmation" | "recall"; body: string
 export interface Profile {
   professionalName?: string;
   cro?: string;
+  croUf?: string; // 2 letras
+  cpf?: string; // só dígitos (opcional)
+  birthDate?: string; // yyyy-mm-dd (opcional)
   workMode: "solo" | "in_clinic" | "owns_clinic";
   contact?: string;
   pdfColor?: string;
@@ -217,6 +220,61 @@ export interface AnamnesisRecord {
   createdAt: string;
 }
 
+export type MedicationRoute = "internal" | "external";
+
+/** Medicamento da clínica: só nomes já usados por ela (a lista começa vazia). */
+export interface Medication {
+  id: string;
+  name: string;
+  route: MedicationRoute;
+  controlled: boolean;
+  unit?: string;
+  defaultPosology?: string;
+  createdAt: string;
+}
+
+export interface PrescriptionItem {
+  id: string;
+  medicationId?: string;
+  name: string;
+  quantity?: number;
+  unit?: string;
+  posology: string;
+  route: MedicationRoute;
+  /** Só sinaliza: o SmileOS não gera receita de controle especial válida. */
+  controlled: boolean;
+}
+
+/** Dados do profissional ficam copiados no documento (snapshot da emissão). */
+interface ProfessionalSnapshot { professionalName?: string; professionalCro?: string; professionalCroUf?: string }
+
+export interface Prescription extends ProfessionalSnapshot {
+  id: string;
+  patientId: string;
+  issuedOn: string; // yyyy-mm-dd
+  notes?: string;
+  items: PrescriptionItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PrescriptionTemplate { id: string; name: string; items: Omit<PrescriptionItem, "id" | "medicationId">[]; createdAt: string }
+
+export interface Certificate extends ProfessionalSnapshot {
+  id: string;
+  patientId: string;
+  issuedOn: string; // yyyy-mm-dd
+  startsOn: string; // yyyy-mm-dd
+  kind: "days" | "hours";
+  amount: number;
+  cid?: string;
+  /** CID só entra com o consentimento do paciente. */
+  cidConsent: boolean;
+  purpose?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Db {
   version: number;
   patients: Patient[];
@@ -238,4 +296,8 @@ export interface Db {
   clinicalNotes: ClinicalNote[];
   anamnesisTemplates: AnamnesisTemplate[];
   anamnesisRecords: AnamnesisRecord[];
+  medications: Medication[];
+  prescriptions: Prescription[];
+  prescriptionTemplates: PrescriptionTemplate[];
+  certificates: Certificate[];
 }

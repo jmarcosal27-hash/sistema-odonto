@@ -111,9 +111,16 @@ await c.from("clinic_members").update({ role: "owner" }).eq("user_id", cUser.id)
 check((await memberRow())?.role === "dentist", "membro NÃO vira owner alterando a própria linha");
 await c.from("clinic_members").update({ clinic_id: clinicB }).eq("user_id", cUser.id);
 check((await memberRow())?.clinic_id === clinicA, "membro NÃO troca o clinic_id da própria linha");
-const { error: up1 } = await c.rpc("update_my_profile", { p_professional_name: "Dra. Teste", p_cro: "CRO-SP 1", p_theme: "dark" });
-const { data: prof } = await admin.from("clinic_members").select("professional_name,theme,role").eq("user_id", cUser.id).eq("clinic_id", clinicA).single();
+const { error: up1 } = await c.rpc("update_my_profile", { p_professional_name: "Dra. Teste", p_cro: "12345", p_theme: "dark", p_cro_uf: "SP", p_cpf: "123.456.789-09", p_birth_date: "1990-05-20" });
+const { data: prof } = await admin.from("clinic_members").select("professional_name,cro,cro_uf,cpf,birth_date,theme,role,status,clinic_id").eq("user_id", cUser.id).eq("clinic_id", clinicA).single();
 check(!up1 && prof?.professional_name === "Dra. Teste" && prof?.theme === "dark" && prof?.role === "dentist", "update_my_profile muda nome/CRO/tema e nada além");
+check(prof?.cro === "12345" && prof?.cro_uf === "SP" && prof?.cpf === "12345678909" && prof?.birth_date === "1990-05-20" && prof?.status === "active" && prof?.clinic_id === clinicA,
+  "update_my_profile grava CRO, UF, CPF (só dígitos) e nascimento, sem mexer em papel, status ou clínica");
+const { error: upBad1 } = await c.rpc("update_my_profile", { p_professional_name: "x", p_cro: "1", p_theme: "dark", p_cro_uf: "XX" });
+check(!!upBad1, "CHECK: UF do CRO inválida é recusada");
+const { error: upBad2 } = await c.rpc("update_my_profile", { p_professional_name: "x", p_cro: "1", p_theme: "dark", p_cpf: "123" });
+check(!!upBad2, "CHECK: CPF com menos de 11 dígitos é recusado");
+check((await memberRow())?.role === "dentist", "update_my_profile não eleva papel (continua dentista)");
 await admin.from("clinic_members").update({ status: "disabled" }).eq("user_id", cUser.id).eq("clinic_id", clinicA);
 await c.from("clinic_members").update({ status: "active" }).eq("user_id", cUser.id);
 check((await memberRow())?.status === "disabled", "membro desativado NÃO se reativa sozinho");
@@ -184,6 +191,127 @@ const { error: reassign } = await a.from("patients").update({ dentist_id: cUser.
 check(!reassign, "dono muda o responsável do paciente");
 await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
 
+
+// ===== Onda B1: documentos (migration 20261114000003) =====
+const item = (name, extra = {}) => ({ name, quantity: 1, unit: "caixa", posology: "Conforme orientação", route: "internal", controlled: false, ...extra });
+const { data: rxId, error: rx1 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: "2026-11-14", p_notes: null,
+  p_prof_name: "Dono A", p_prof_cro: "1", p_prof_cro_uf: "SP", p_items: [item("Medicamento Fictício X"), item("Pomada Fictícia", { route: "external", controlled: true })] });
+check(!rx1 && rxId, "A emite receita com 2 itens (RPC save_prescription)");
+const { data: meds } = await a.from("medications").select("id,name").eq("clinic_id", clinicA);
+check(meds?.length === 2, "nomes usados na receita viram medicamentos da clínica (catálogo começa vazio)");
+const { data: rxItems } = await a.from("prescription_items").select("id,medication_id").eq("prescription_id", rxId);
+check(rxItems?.length === 2 && rxItems.every((i) => i.medication_id), "itens da receita ligados aos medicamentos");
+const { data: rx2 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: "2026-11-14", p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("  medicamento fictício x  ")] });
+const { data: medsAfter } = await a.from("medications").select("id").eq("clinic_id", clinicA);
+check(rx2 && medsAfter?.length === 2, "mesmo nome (maiúsculas/espaços diferentes) reaproveita o medicamento, sem duplicar");
+const { error: md1 } = await a.from("medications").insert({ clinic_id: clinicA, name: "MEDICAMENTO FICTÍCIO X" });
+check(!!md1, "medicamento duplicado (case-insensitive) é recusado");
+const { error: md2 } = await a.from("medications").insert({ clinic_id: clinicA, name: "Outro", route: "oral" });
+check(!!md2, "CHECK: via do medicamento precisa ser interna ou externa");
+const { data: cert, error: ce1 } = await a.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "days", amount: 2, professional_name: "Dono A" }).select("id").single();
+check(!ce1 && cert, "A emite atestado por dias");
+const { error: ce2 } = await a.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "hours", amount: 3 });
+check(!ce2, "A emite atestado por horas");
+const { data: tplRx, error: tp1 } = await a.from("prescription_templates").insert({ clinic_id: clinicA, name: "Modelo teste", items: [item("Medicamento Fictício X")] }).select("id").single();
+check(!tp1 && tplRx, "A salva modelo de receita");
+
+// CHECKs
+for (const [label, row] of [
+  ["dias = 0", { kind: "days", amount: 0 }], ["dias negativos", { kind: "days", amount: -1 }], ["horas = 0", { kind: "hours", amount: 0 }],
+  ["tipo inválido", { kind: "weeks", amount: 1 }], ["mais de 24 horas", { kind: "hours", amount: 25 }],
+  ["CID sem consentimento", { kind: "days", amount: 1, cid: "K02" }]]) {
+  const { error } = await a.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, ...row });
+  check(!!error, `CHECK atestado: ${label} é recusado`);
+}
+const { error: ce3 } = await a.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "days", amount: 1, cid: "K02", cid_consent: true });
+check(!ce3, "atestado com CID e consentimento é aceito");
+const { error: it1 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Zero", { quantity: 0 })] });
+check(!!it1, "CHECK: quantidade do item precisa ser maior que zero");
+const { error: it2 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [] });
+check(!!it2, "receita sem itens é recusada");
+const { error: it3 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Sem posologia", { posology: "  " })] });
+check(!!it3, "CHECK: item sem posologia é recusado");
+
+// Isolamento entre clínicas: B não vê, não insere, não altera, não exclui
+for (const t of ["medications", "prescriptions", "prescription_items", "prescription_templates", "certificates"]) {
+  const { data: rows } = await b.from(t).select("id").eq("clinic_id", clinicA);
+  check(rows?.length === 0, `B NÃO vê ${t} da clínica A`);
+}
+const { error: bx1 } = await b.from("medications").insert({ clinic_id: clinicA, name: "Intruso" });
+check(!!bx1, "B NÃO cria medicamento na clínica A");
+const { error: bx2 } = await b.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "days", amount: 1 });
+check(!!bx2, "B NÃO emite atestado na clínica A");
+const { error: bx3 } = await b.from("certificates").insert({ clinic_id: clinicB, patient_id: pat.id, kind: "days", amount: 1 });
+check(!!bx3, "B NÃO emite atestado na própria clínica apontando para paciente de A");
+const { error: bx4 } = await b.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Intruso")] });
+check(!!bx4, "B NÃO emite receita na clínica A (RPC)");
+const { error: bx5 } = await b.rpc("save_prescription", { p_id: null, p_clinic: clinicB, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Cruzado")] });
+check(!!bx5, "B NÃO emite receita na clínica B para paciente da clínica A");
+const { error: bx6 } = await b.rpc("save_prescription", { p_id: rxId, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: "alterada", p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Alterado")] });
+check(!!bx6, "B NÃO edita receita de A (RPC)");
+const { data: bu1 } = await b.from("prescriptions").update({ notes: "alterada por B" }).eq("id", rxId).select("id");
+check(!bu1 || bu1.length === 0, "B NÃO altera receita de A");
+const { data: bu2 } = await b.from("certificates").update({ amount: 9 }).eq("id", cert.id).select("id");
+check(!bu2 || bu2.length === 0, "B NÃO altera atestado de A");
+const { data: bd1 } = await b.from("prescriptions").delete().eq("id", rxId).select("id");
+check(!bd1 || bd1.length === 0, "B NÃO exclui receita de A");
+const { data: bd2 } = await b.from("certificates").delete().eq("id", cert.id).select("id");
+check(!bd2 || bd2.length === 0, "B NÃO exclui atestado de A");
+const { data: bd3 } = await b.from("medications").delete().eq("id", meds[0].id).select("id");
+check(!bd3 || bd3.length === 0, "B NÃO exclui medicamento de A");
+const { data: bd4 } = await b.from("prescription_templates").delete().eq("id", tplRx.id).select("id");
+check(!bd4 || bd4.length === 0, "B NÃO exclui modelo de receita de A");
+// medicamento de outra clínica referenciado por item
+const { data: medB } = await b.from("medications").insert({ clinic_id: clinicB, name: "Medicamento da B" }).select("id").single();
+const { error: xm1 } = await a.from("prescription_items").insert({ clinic_id: clinicA, prescription_id: rxId, medication_id: medB.id, name: "x", posology: "y" });
+check(!!xm1, "item de receita NÃO aponta para medicamento de outra clínica");
+const { error: xm2 } = await a.from("prescription_items").insert({ clinic_id: clinicB, prescription_id: rxId, name: "x", posology: "y" });
+check(!!xm2, "item NÃO usa clinic_id diferente do da receita");
+const { error: xm3 } = await a.from("prescriptions").update({ patient_id: patB.id }).eq("id", rxId);
+check(!!xm3, "receita NÃO muda de paciente");
+const { error: xm4 } = await a.from("certificates").update({ clinic_id: clinicB }).eq("id", cert.id);
+check(!!xm4, "atestado NÃO muda de clínica");
+
+// Autoria: dentista C emite em nome próprio; só dono ou autor editam/excluem
+const { data: cRx, error: cr1 } = await c.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: "Dra. Teste", p_prof_cro: "12345", p_prof_cro_uf: "SP", p_items: [item("Do C")] });
+check(!cr1 && cRx, "dentista C emite receita");
+const { data: cRxRow } = await a.from("prescriptions").select("professional_id").eq("id", cRx).single();
+check(cRxRow?.professional_id === cUser.id, "o autor da receita é quem emitiu (auth.uid)");
+const { error: cr2 } = await c.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "days", amount: 1, professional_id: (await a.auth.getUser()).data.user.id });
+check(!!cr2, "dentista NÃO emite atestado em nome de outro profissional");
+const { data: cEditOwn, error: cr3 } = await c.rpc("save_prescription", { p_id: cRx, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: "ok", p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Do C editado")] });
+check(!cr3 && cEditOwn, "autor edita a própria receita");
+const { error: cr4 } = await c.rpc("save_prescription", { p_id: rxId, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: "x", p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Invasão")] });
+check(!!cr4, "dentista NÃO edita receita de outro profissional");
+const { data: cDelOther } = await c.from("prescriptions").delete().eq("id", rxId).select("id");
+check(!cDelOther || cDelOther.length === 0, "dentista NÃO exclui receita de outro profissional");
+const { data: cDelCert } = await c.from("certificates").delete().eq("id", cert.id).select("id");
+check(!cDelCert || cDelCert.length === 0, "dentista NÃO exclui atestado de outro profissional");
+const { data: cDelOwn } = await c.from("prescriptions").delete().eq("id", cRx).select("id");
+check(cDelOwn?.length === 1, "autor exclui a própria receita");
+const { data: aDelC } = await a.from("prescriptions").delete().eq("id", rx2).select("id");
+check(aDelC?.length === 1, "dono exclui receita (inclusive de outro autor)");
+
+// Modo dividido: C só vê documentos dos pacientes que enxerga
+await a.from("clinics").update({ practice_mode: "split" }).eq("id", clinicA);
+for (const t of ["prescriptions", "certificates"]) {
+  const { data: rows } = await c.from(t).select("id").eq("patient_id", pat.id);
+  check(rows?.length === 0, `split: C NÃO vê ${t} de paciente de outro dentista`);
+}
+const { data: splitItems } = await c.from("prescription_items").select("id").eq("clinic_id", clinicA);
+check(splitItems?.length === 0, "split: C NÃO vê itens de receitas de paciente de outro dentista");
+const { error: sp1 } = await c.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Paciente alheio")] });
+check(!!sp1, "split: C NÃO emite receita para paciente de outro dentista");
+const { error: sp2 } = await c.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "days", amount: 1 });
+check(!!sp2, "split: C NÃO emite atestado para paciente de outro dentista");
+const { data: spOwn } = await c.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: cPat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Paciente próprio")] });
+check(!!spOwn, "split: C emite receita para o próprio paciente");
+await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
+
+// Medicamentos e modelos não têm dado de paciente: todos os membros leem
+const { data: cMeds } = await c.from("medications").select("id").eq("clinic_id", clinicA);
+check((cMeds?.length ?? 0) >= 2, "membro da clínica lê o catálogo de medicamentos");
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
@@ -204,6 +332,23 @@ const { error: x4 } = await a.from("anamnesis_records").insert({ clinic_id: clin
 check(!!x4, "acesso vencido: A NÃO preenche anamnese");
 const { error: x5 } = await a.from("anamnesis_templates").insert({ clinic_id: clinicA, name: "Após vencer", questions: [] });
 check(!!x5, "acesso vencido: A NÃO cria modelo de anamnese");
+
+const { data: expRx } = await a.from("prescriptions").select("id").eq("clinic_id", clinicA);
+check((expRx?.length ?? 0) >= 2, "acesso vencido: A ainda LÊ as receitas");
+const { data: expCert } = await a.from("certificates").select("id").eq("clinic_id", clinicA);
+check((expCert?.length ?? 0) >= 1, "acesso vencido: A ainda LÊ os atestados");
+const { error: xd1 } = await a.rpc("save_prescription", { p_id: null, p_clinic: clinicA, p_patient: pat.id, p_issued_on: null, p_notes: null, p_prof_name: null, p_prof_cro: null, p_prof_cro_uf: null, p_items: [item("Após vencer")] });
+check(!!xd1, "acesso vencido: A NÃO emite receita");
+const { error: xd2 } = await a.from("certificates").insert({ clinic_id: clinicA, patient_id: pat.id, kind: "days", amount: 1 });
+check(!!xd2, "acesso vencido: A NÃO emite atestado");
+const { data: xd3 } = await a.from("certificates").update({ amount: 5 }).eq("id", cert.id).select("id");
+check(!xd3 || xd3.length === 0, "acesso vencido: A NÃO edita atestado");
+const { data: xd4 } = await a.from("certificates").delete().eq("id", cert.id).select("id");
+check(!xd4 || xd4.length === 0, "acesso vencido: A NÃO exclui atestado");
+const { error: xd5 } = await a.from("medications").insert({ clinic_id: clinicA, name: "Após vencer" });
+check(!!xd5, "acesso vencido: A NÃO cria medicamento");
+const { error: xd6 } = await a.from("prescription_templates").insert({ clinic_id: clinicA, name: "Após vencer", items: [item("x")] });
+check(!!xd6, "acesso vencido: A NÃO cria modelo de receita");
 
 // Limpeza
 await admin.from("clinics").delete().in("id", [clinicA, clinicB]);

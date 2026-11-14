@@ -6,6 +6,7 @@ import { useDb, api } from "@/lib/store";
 import { Button, Card, Field, Input, PageSkeleton, Segmented, cx } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import type { Profile } from "@/lib/types";
+import { maskCpf } from "@/lib/format";
 
 const COLORS = ["#6d4fd8", "#0f766e", "#8a5a00", "#b42318", "#1f1b2e"];
 
@@ -37,6 +38,9 @@ export default function Page() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Nome profissional">{(id) => <Input id={id} value={p.professionalName ?? ""} onChange={(e) => set({ professionalName: e.target.value })} placeholder="Ex.: Dra. Camila Rocha" />}</Field>
           <Field label="CRO (opcional)">{(id) => <Input id={id} value={p.cro ?? ""} onChange={(e) => set({ cro: e.target.value })} />}</Field>
+          <Field label="UF do CRO" hint="Obrigatória para receitas e atestados.">{(id, d) => <Input id={id} aria-describedby={d} maxLength={2} value={p.croUf ?? ""} onChange={(e) => set({ croUf: e.target.value.toUpperCase().replace(/[^A-Z]/g, "") })} placeholder="SP" autoCapitalize="characters" />}</Field>
+          <Field label="CPF (opcional)">{(id) => <Input id={id} inputMode="numeric" autoComplete="off" value={maskCpf(p.cpf ?? "")} onChange={(e) => set({ cpf: e.target.value.replace(/D/g, "").slice(0, 11) })} />}</Field>
+          <Field label="Data de nascimento (opcional)">{(id) => <Input id={id} type="date" value={p.birthDate ?? ""} onChange={(e) => set({ birthDate: e.target.value })} />}</Field>
           <Field label="Contato no documento" className="sm:col-span-2">{(id) => <Input id={id} value={p.contact ?? ""} onChange={(e) => set({ contact: e.target.value })} placeholder="Telefone e endereço do consultório" />}</Field>
         </div>
         <div className="flex flex-col gap-1">

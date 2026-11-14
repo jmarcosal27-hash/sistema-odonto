@@ -123,3 +123,16 @@ Pendências e riscos:
 - Já existiam pacientes com `dentist_id` nulo: continuam visíveis a todos os dentistas até o dono atribuir um responsável.
 - A conferência de senha na exclusão não serve para quem entra só por link/OAuth (hoje o app só tem senha).
 - `loadRemote` continua carregando tudo; a paginação só remove o corte, não o custo para clínicas muito grandes.
+
+## Onda B1 — documentos simples (2026-11-14)
+
+Migration `20261114000003_documentos.sql`. **Ainda não aplicada**; depois de aplicar, rodar `node scripts/rls-test.mjs`.
+
+- [x] `clinic_members` ganhou `cro_uf`, `cpf` (11 dígitos) e `birth_date`. RPC `update_my_profile(nome, cro, tema, uf, cpf, nascimento)` substitui a de 3 parâmetros; continua mexendo só nesses campos da linha ativa do próprio usuário (nada de papel, status ou clínica).
+- [x] Tabelas `medications`, `prescriptions`, `prescription_items`, `prescription_templates`, `certificates` com CHECKs (dias 1–365, horas 1–24, tipo, via interna/externa, quantidade > 0, CID só com consentimento).
+- [x] Leitura: membro ativo + `can_see_patient` (respeita "consultório dividido"). Medicamentos e modelos não têm dado de paciente: leitura por qualquer membro.
+- [x] Emitir receita/atestado: só `owner` ou `dentist`, em nome de si mesmo (`professional_id = auth.uid()`). Editar e excluir: só o dono da clínica ou o autor. Justificativa: são documentos de responsabilidade do profissional; recepção e financeiro só leem. Medicamentos e modelos: criar por dono/dentista; excluir pelo dono ou criador.
+- [x] Gatilhos: clínica, paciente e autor do documento não mudam; item e medicamento precisam ser da mesma clínica da receita.
+- [x] RPC `save_prescription` (security invoker, RLS vale): receita + itens numa transação; nomes novos entram no catálogo da clínica.
+- [x] Nada de dado de saúde em URL: só ids (`/receitas/[id]/imprimir`, `/atestados/[id]/imprimir`).
+- [ ] Riscos e decisões a revisar: (1) a policy `members_read` deixa qualquer membro ler a linha de todos, então CPF e nascimento de colegas ficam visíveis dentro da clínica (confirmado); se for um problema, mover para tabela privada; (2) nome/CRO/UF do documento são um snapshot enviado pelo cliente (não há verificação de que o CRO é real); (3) sem trilha de auditoria de edição/exclusão dos documentos; (4) sem assinatura digital: o documento vale só impresso e assinado à mão.

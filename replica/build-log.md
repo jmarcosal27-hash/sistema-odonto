@@ -100,3 +100,25 @@ Fonte: design system em `D:\SISTEMA DENTISTA\design-system` (tokens, logos, regr
 | Ícones | done | — | O app já usava Lucide (traço 2px por padrão); nada a trocar |
 | Contraste (leitura + cálculo WCAG dos pares principais, claro e escuro) | done | — | Todos os pares passam; `brand-violet` sobre `brand-ink` (3,0:1) não é usado |
 | Verificação | lint e `tsc` limpos; `build` ok | Conferência visual das telas **não testada** (sem servidor) | A primeira execução do build falhou ao baixar a fonte do Google (rede); a seguinte passou |
+
+## Onda B1 (documentos simples) — 2026-11-14
+
+Receita e atestado sem storage, sem assinatura digital e sem receita controlada digital. Migration nova:
+`web/supabase/migrations/20261114000003_documentos.sql` (as anteriores não foram editadas; só a RPC
+`update_my_profile` foi substituída por uma versão com mais campos). Camada falsa em versão 4 (migração só
+acrescenta listas vazias) e equivalente em `lib/remote.ts`. Clean-room: textos, rótulos, modelos e sugestões
+de unidade são próprios; a lista de medicamentos começa vazia.
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| Perfil profissional (CRO, UF, CPF, nascimento) | done | em Ajustes; RPC `update_my_profile` estendida sem reabrir a escalada de privilégio (só nome, CRO, UF, CPF, nascimento e tema); CPF guardado só com dígitos | CPF e nascimento são legíveis por outros membros da clínica porque `members_read` é ampla (ver riscos em `backend.md`) | trocar a assinatura da RPC exige remover a antiga (senão a chamada por nome fica ambígua) |
+| Medicamentos por clínica | done | `medications`, único por clínica + nome sem diferenciar maiúsculas; nome novo usado na receita é cadastrado na hora e volta no autocomplete (datalist) | editar/excluir medicamento pela tela | — |
+| Receita simples | done | `prescriptions` + `prescription_items`; criar, ver, editar, excluir; "controlado" só sinaliza e avisa que precisa de talonário oficial; receita e itens gravados numa transação (`save_prescription`) | receita de controle especial, assinatura digital | itens herdam a regra da receita via `exists` (a RLS de `prescriptions` vale dentro dele) |
+| Atestado | done | por dias ou por horas, CID opcional só com consentimento (CHECK no banco), texto livre | horário de início/término; busca de CID | — |
+| Modelos de receita | done | `prescription_templates` (itens em jsonb), usar ao criar receita, salvar a partir da receita | editar/excluir modelo pela tela | — |
+| Ficha do paciente: Documentos | done | lista mista por data, estados vazio/preenchido/erro (no modal); só leitura quando o acesso venceu | — | — |
+| Impressão A4 | done | `/receitas/[id]/imprimir` e `/atestados/[id]/imprimir`, sem o shell; cabeçalho com nome da clínica, profissional com CRO/UF, linha de assinatura à mão e aviso de minuta; avisa na tela se faltar nome, CRO ou UF | logo da clínica (não há upload), PDF no servidor | nome/CRO/UF ficam copiados no documento na emissão (não mudam se o perfil mudar) |
+| Banco, RLS e `rls-test.mjs` | partial | RLS no padrão existente, `can_see_patient` nas tabelas com paciente, gatilhos de mesma clínica; casos novos no `rls-test.mjs` | **migration não aplicada e teste não executado** | — |
+
+Verificação: `npm run lint`, `npx tsc --noEmit` e `node --check scripts/rls-test.mjs` limpos.
+Não testado no navegador (sem servidor) nem contra um Supabase. Pendentes: 390px e passada só de teclado.

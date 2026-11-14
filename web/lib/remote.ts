@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
-  AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, ClinicalNote,
+  AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Certificate, ClinicalNote, Medication, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Budget, Db, Expense, Installment, MessageTemplate, Patient, PatientEvent, PaymentMethod,
   PlanItem, Procedure, Profile, RecallState, RecallStatus, Treatment, TreatmentPlan, WaitlistEntry,
 } from "./types";
@@ -64,7 +64,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const c = m.clinic_id as string;
   const by = (t: string, order?: [string, boolean][]) => loadAll(sb, t, c, order);
 
-  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords] =
+  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs] =
     await Promise.all([
       q(sb.from("clinics").select("*").eq("id", c).single()), by("access_grants", [["expires_at", false], ["id", true]]),
       by("patients"), by("patient_events"), by("custom_procedures"), by("procedure_settings", [["procedure_id", true]]),
@@ -73,6 +73,9 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       by("appointments"), by("message_templates", [["kind", true]]), by("waitlist_entries"), by("recall_states", [["patient_id", true]]),
       by("clinical_notes", [["note_date", false], ["id", true]]), by("anamnesis_templates", [["created_at", true], ["id", true]]),
       by("anamnesis_records", [["filled_on", false], ["id", true]]),
+      by("medications", [["name", true], ["id", true]]), by("prescriptions", [["issued_on", false], ["id", true]]),
+      by("prescription_items", [["position", true], ["id", true]]), by("prescription_templates", [["name", true], ["id", true]]),
+      by("certificates", [["issued_on", false], ["id", true]]),
     ]);
   const cl = clinic as Row;
   const g = (grants as Row[])[0];
@@ -87,8 +90,19 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
     itemsByPlan.set(r.plan_id as string, list);
   }
 
+  const rxItemsBy = new Map<string, PrescriptionItem[]>();
+  for (const r of rxItems as Row[]) {
+    const list = rxItemsBy.get(r.prescription_id as string) ?? [];
+    list.push({
+      id: r.id as string, medicationId: s(r.medication_id), name: r.name as string, quantity: r.quantity === null ? undefined : Number(r.quantity),
+      unit: s(r.unit), posology: r.posology as string, route: r.route as PrescriptionItem["route"], controlled: r.controlled as boolean,
+    });
+    rxItemsBy.set(r.prescription_id as string, list);
+  }
+  const snap = (r: Row) => ({ professionalName: s(r.professional_name), professionalCro: s(r.professional_cro), professionalCroUf: s(r.professional_cro_uf) });
+
   const db: Db = {
-    version: 3,
+    version: 4,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -144,8 +158,24 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       id: r.id as string, patientId: r.patient_id as string, templateId: s(r.template_id), templateName: r.template_name as string,
       answers: r.answers as AnamnesisAnswer[], filledOn: r.filled_on as string, createdAt: r.created_at as string,
     })),
+    medications: (meds as Row[]).map((r): Medication => ({
+      id: r.id as string, name: r.name as string, route: r.route as Medication["route"], controlled: r.controlled as boolean,
+      unit: s(r.unit), defaultPosology: s(r.default_posology), createdAt: r.created_at as string,
+    })),
+    prescriptions: (rxs as Row[]).map((r): Prescription => ({
+      id: r.id as string, patientId: r.patient_id as string, ...snap(r), issuedOn: r.issued_on as string, notes: s(r.notes),
+      items: rxItemsBy.get(r.id as string) ?? [], createdAt: r.created_at as string, updatedAt: r.updated_at as string,
+    })),
+    prescriptionTemplates: (rxTemplates as Row[]).map((r): PrescriptionTemplate => ({
+      id: r.id as string, name: r.name as string, items: r.items as PrescriptionTemplate["items"], createdAt: r.created_at as string,
+    })),
+    certificates: (certs as Row[]).map((r): Certificate => ({
+      id: r.id as string, patientId: r.patient_id as string, ...snap(r), issuedOn: r.issued_on as string, startsOn: r.starts_on as string,
+      kind: r.kind as Certificate["kind"], amount: r.amount as number, cid: s(r.cid), cidConsent: r.cid_consent as boolean,
+      purpose: s(r.purpose), createdAt: r.created_at as string, updatedAt: r.updated_at as string,
+    })),
     profile: {
-      professionalName: s(m.professional_name), cro: s(m.cro), workMode: cl.work_mode as Profile["workMode"], contact: s(cl.contact),
+      professionalName: s(m.professional_name), cro: s(m.cro), croUf: s(m.cro_uf), cpf: s(m.cpf), birthDate: s(m.birth_date), workMode: cl.work_mode as Profile["workMode"], contact: s(cl.contact),
       pdfColor: s(cl.pdf_color), theme: m.theme as Profile["theme"], activeSpecialtyIds: cl.active_specialty_ids as string[],
       onboardingDone: cl.onboarding_done as boolean, clinicName: cl.name as string,
     },
@@ -357,6 +387,45 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
       removeRecord: (id: string) => run(async () => { await q(ctx().sb.from("anamnesis_records").delete().eq("id", id)); }),
     },
 
+    prescriptions: {
+      save: (r: { id?: string; patientId: string; issuedOn: string; notes?: string; items: Omit<PrescriptionItem, "id" | "medicationId">[] }) => run(async () => {
+        const { sb, session, db } = ctx();
+        const prof = db.profile;
+        const items = r.items.map((it) => {
+          const med = db.medications.find((m) => m.name.toLowerCase() === it.name.trim().toLowerCase());
+          return { medication_id: med?.id ?? null, name: it.name, quantity: it.quantity ?? null, unit: it.unit ?? null, posology: it.posology, route: it.route, controlled: it.controlled };
+        });
+        await q(sb.rpc("save_prescription", {
+          p_id: r.id ?? null, p_clinic: session.clinicId, p_patient: r.patientId, p_issued_on: r.issuedOn, p_notes: r.notes ?? null,
+          p_prof_name: prof.professionalName ?? null, p_prof_cro: prof.cro ?? null, p_prof_cro_uf: prof.croUf ?? null, p_items: items,
+        }));
+      }),
+      remove: (id: string) => run(async () => { await q(ctx().sb.from("prescriptions").delete().eq("id", id)); }),
+    },
+
+    prescriptionTemplates: {
+      save: (t: { name: string; items: PrescriptionTemplate["items"] }) => run(async () => {
+        const { sb, session } = ctx();
+        const name = t.name.trim();
+        if (name.length < 2) throw new Error("Dê um nome ao modelo.");
+        await q(sb.from("prescription_templates").insert({ clinic_id: session.clinicId, name, items: t.items }));
+      }),
+      remove: (id: string) => run(async () => { await q(ctx().sb.from("prescription_templates").delete().eq("id", id)); }),
+    },
+
+    certificates: {
+      save: (c: { id?: string; patientId: string; issuedOn: string; startsOn: string; kind: Certificate["kind"]; amount: number; cid?: string; cidConsent: boolean; purpose?: string }) => run(async () => {
+        const { sb, session, db } = ctx();
+        const cid = c.cid?.trim() || null;
+        if (cid && !c.cidConsent) throw new Error("O CID só pode constar com o consentimento do paciente.");
+        const row = { issued_on: c.issuedOn, starts_on: c.startsOn, kind: c.kind, amount: c.amount, cid, cid_consent: !!cid, purpose: c.purpose?.trim() || null };
+        if (c.id) await q(sb.from("certificates").update(row).eq("id", c.id));
+        else await q(sb.from("certificates").insert({ ...row, clinic_id: session.clinicId, patient_id: c.patientId,
+          professional_name: db.profile.professionalName ?? null, professional_cro: db.profile.cro ?? null, professional_cro_uf: db.profile.croUf ?? null }));
+      }),
+      remove: (id: string) => run(async () => { await q(ctx().sb.from("certificates").delete().eq("id", id)); }),
+    },
+
     catalog: {
       createCustomProcedure: (name: string, specialtyId: string) => run(async () => {
         const row = (await q(ctx().sb.from("custom_procedures").insert({ clinic_id: ctx().session.clinicId, name, specialty_id: specialtyId }).select("id").single())) as Row;
@@ -383,6 +452,9 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         const member: Row = {}, clinic: Row = {};
         if ("professionalName" in patch) member.professional_name = patch.professionalName ?? null;
         if ("cro" in patch) member.cro = patch.cro ?? null;
+        if ("croUf" in patch) member.cro_uf = patch.croUf ?? null;
+        if ("cpf" in patch) member.cpf = patch.cpf ?? null;
+        if ("birthDate" in patch) member.birth_date = patch.birthDate ?? null;
         if ("theme" in patch) member.theme = patch.theme;
         if ("workMode" in patch) clinic.work_mode = patch.workMode;
         if ("contact" in patch) clinic.contact = patch.contact ?? null;
@@ -390,13 +462,16 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         if ("activeSpecialtyIds" in patch) clinic.active_specialty_ids = patch.activeSpecialtyIds;
         if ("onboardingDone" in patch) clinic.onboarding_done = patch.onboardingDone;
         if ("clinicName" in patch) clinic.name = patch.clinicName;
-        // Linha de equipe só muda por RPC (nome, CRO e tema); papel e status ficam fora do alcance do membro.
+        // Linha de equipe só muda por RPC (nome, CRO, UF, CPF, nascimento e tema); papel e status ficam fora do alcance do membro.
         if (Object.keys(member).length) {
           const cur = ctx().db.profile;
           await q(sb.rpc("update_my_profile", {
             p_professional_name: "professional_name" in member ? member.professional_name : cur.professionalName ?? null,
             p_cro: "cro" in member ? member.cro : cur.cro ?? null,
             p_theme: "theme" in member ? member.theme : cur.theme,
+            p_cro_uf: "cro_uf" in member ? member.cro_uf : cur.croUf ?? null,
+            p_cpf: "cpf" in member ? member.cpf : cur.cpf ?? null,
+            p_birth_date: "birth_date" in member ? member.birth_date : cur.birthDate ?? null,
           }));
         }
         if (Object.keys(clinic).length) {
