@@ -42,7 +42,7 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold">Documentos</h3>
-        <span className="flex gap-1">
+        <span className="flex flex-wrap gap-1">
           <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing("rx")}><Plus className="size-4" />Nova receita</Button>
           <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing("cert")}><Plus className="size-4" />Novo atestado</Button>
           <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing("doc")}><Plus className="size-4" />Novo documento</Button>
@@ -65,7 +65,7 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
                     <span className="font-semibold">{dateBR(e.doc.issuedOn)}</span>
                     {e.type === "rx" && e.doc.items.some((i) => i.controlled) && <Badge tone="warning">Controlado</Badge>}
                   </span>
-                  <span className="flex items-center gap-1">
+                  <span className="flex flex-wrap items-center gap-1">
                     <Link href={href} target="_blank" aria-label={`Ver e imprimir ${label} de ${dateBR(e.doc.issuedOn)}`}
                       className="inline-flex h-9 items-center gap-1 rounded-pill px-4 text-sm font-semibold text-brand hover:bg-brand-soft"><Printer className="size-3.5" />Ver/imprimir</Link>
                     <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(e)} aria-label={`Editar ${label} de ${dateBR(e.doc.issuedOn)}`}><Pencil className="size-3.5" />Editar</Button>
