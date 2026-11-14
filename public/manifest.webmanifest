@@ -1,0 +1,10 @@
+{
+  "name": "Consultório",
+  "short_name": "Consultório",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F3F6F7",
+  "theme_color": "#3D63D6",
+  "lang": "pt-BR",
+  "icons": []
+}
