@@ -183,6 +183,40 @@ export interface Access {
   email: string;
 }
 
+/** Nota de evolução clínica: o que foi feito ou observado numa consulta. */
+export interface ClinicalNote {
+  id: string;
+  patientId: string;
+  treatmentId?: string; // atendimento ligado (opcional)
+  date: string; // yyyy-mm-dd
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnamnesisQuestion {
+  id: string;
+  text: string;
+  kind: "yesno" | "text";
+  /** Resposta "sim" vira alerta na ficha (ex.: alergia, anticoagulante). */
+  alert?: boolean;
+}
+
+export interface AnamnesisTemplate { id: string; name: string; questions: AnamnesisQuestion[]; createdAt: string }
+
+/** Resposta guardada com cópia do texto da pergunta (o modelo pode mudar depois). */
+export interface AnamnesisAnswer { questionId: string; text: string; kind: AnamnesisQuestion["kind"]; alert?: boolean; yes?: boolean; detail?: string }
+
+export interface AnamnesisRecord {
+  id: string;
+  patientId: string;
+  templateId?: string;
+  templateName: string;
+  answers: AnamnesisAnswer[];
+  filledOn: string; // yyyy-mm-dd
+  createdAt: string;
+}
+
 export interface Db {
   version: number;
   patients: Patient[];
@@ -201,4 +235,7 @@ export interface Db {
   waitlist: WaitlistEntry[];
   recall: Record<string, RecallState>; // por paciente
   recallMonths: Record<string, number>; // por procedimento; padrão 6
+  clinicalNotes: ClinicalNote[];
+  anamnesisTemplates: AnamnesisTemplate[];
+  anamnesisRecords: AnamnesisRecord[];
 }

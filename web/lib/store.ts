@@ -6,6 +6,7 @@
 
 import { useSyncExternalStore } from "react";
 import type {
+  AnamnesisAnswer, AnamnesisQuestion, ClinicalNote,
   Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
   Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry,
 } from "./types";
@@ -16,7 +17,7 @@ import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 2;
+const VERSION = 3;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -29,6 +30,7 @@ export function emptyDb(): Db {
     patients: [], events: [], customProcedures: [], prices: {}, plans: [],
     budgets: [], treatments: [], expenses: [], appointments: [],
     installments: [], waitlist: [], recall: {}, recallMonths: {},
+    clinicalNotes: [], anamnesisTemplates: [], anamnesisRecords: [],
     templates: [
       { kind: "confirmation", body: "Olá, {nome}! Passando para confirmar seu horário em {data} às {hora}. Pode responder com SIM para confirmar? 😊" },
       { kind: "recall", body: "Oi, {nome}! Já está na hora da sua revisão. Quer que eu reserve um horário para você nesta semana?" },
@@ -45,6 +47,9 @@ function migrate(db: Db): Db {
   db.waitlist ??= [];
   db.recall ??= {};
   db.recallMonths ??= {};
+  db.clinicalNotes ??= [];
+  db.anamnesisTemplates ??= [];
+  db.anamnesisRecords ??= [];
   db.version = VERSION;
   return db;
 }
@@ -248,6 +253,7 @@ const localApi = {
         const b = db.budgets.find((x) => x.id === budgetId);
         const plan = b && db.plans.find((p) => p.id === b.planId);
         if (!b || !plan) throw new Error("Orçamento não encontrado.");
+        if (b.status !== "presented") throw new Error("Esse orçamento já foi respondido.");
         const chosen = plan.items.filter((i) => !itemIds || itemIds.includes(i.id));
         if (!chosen.length) throw new Error("Escolha pelo menos um item para aprovar.");
         const n = Math.max(1, Math.min(24, Math.round(payment.installments)));
@@ -275,7 +281,9 @@ const localApi = {
       commit((db) => {
         guard(db);
         const b = db.budgets.find((x) => x.id === budgetId);
-        if (b) b.status = "declined";
+        if (!b) throw new Error("Orçamento não encontrado.");
+        if (b.status !== "presented") throw new Error("Esse orçamento já foi respondido.");
+        b.status = "declined";
       });
     },
   },
@@ -379,6 +387,52 @@ const localApi = {
     async setStatus(patientId: string, status: RecallStatus, dueAt: string) {
       commit((db) => { guard(db); db.recall[patientId] = { status, dueAt, updatedAt: new Date().toISOString() }; });
     },
+  },
+
+  clinicalNotes: {
+    async save(n: { id?: string; patientId: string; treatmentId?: string; date: string; body: string }) {
+      commit((db) => {
+        guard(db);
+        const body = n.body.trim();
+        if (!body) throw new Error("Escreva a evolução antes de salvar.");
+        if (n.treatmentId && !db.treatments.some((t) => t.id === n.treatmentId && t.patientId === n.patientId)) throw new Error("Atendimento não encontrado para este paciente.");
+        const now = new Date().toISOString();
+        const existing = n.id ? db.clinicalNotes.find((x) => x.id === n.id) : undefined;
+        if (existing) Object.assign(existing, { treatmentId: n.treatmentId, date: n.date, body, updatedAt: now });
+        else db.clinicalNotes.push({ id: uid(), patientId: n.patientId, treatmentId: n.treatmentId, date: n.date, body, createdAt: now, updatedAt: now } satisfies ClinicalNote);
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.clinicalNotes = db.clinicalNotes.filter((x) => x.id !== id); }); },
+  },
+
+  anamnesis: {
+    async saveTemplate(t: { id?: string; name: string; questions: AnamnesisQuestion[] }) {
+      commit((db) => {
+        guard(db);
+        const name = t.name.trim();
+        if (name.length < 2) throw new Error("Dê um nome ao modelo.");
+        const questions = t.questions.filter((q) => q.text.trim()).map((q) => ({ ...q, text: q.text.trim() }));
+        if (!questions.length) throw new Error("Adicione pelo menos uma pergunta.");
+        const existing = t.id ? db.anamnesisTemplates.find((x) => x.id === t.id) : undefined;
+        if (existing) Object.assign(existing, { name, questions });
+        else db.anamnesisTemplates.push({ id: uid(), name, questions, createdAt: new Date().toISOString() });
+      });
+    },
+    async removeTemplate(id: string) {
+      commit((db) => {
+        guard(db);
+        db.anamnesisTemplates = db.anamnesisTemplates.filter((x) => x.id !== id);
+        db.anamnesisRecords.forEach((r) => { if (r.templateId === id) delete r.templateId; });
+      });
+    },
+    async saveRecord(r: { patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string }) {
+      commit((db) => {
+        guard(db);
+        if (!r.answers.length) throw new Error("A ficha está vazia.");
+        db.anamnesisRecords.push({ ...r, id: uid(), createdAt: new Date().toISOString() });
+      });
+    },
+    async removeRecord(id: string) { commit((db) => { guard(db); db.anamnesisRecords = db.anamnesisRecords.filter((x) => x.id !== id); }); },
   },
 
   expenses: {
@@ -494,6 +548,8 @@ export const api: typeof localApi = remoteApi ? {
   waitlist: remoteApi.waitlist,
   recall: remoteApi.recall,
   expenses: remoteApi.expenses,
+  clinicalNotes: remoteApi.clinicalNotes,
+  anamnesis: remoteApi.anamnesis,
   catalog: remoteApi.catalog,
   account: {
     updateProfile: remoteApi.account.updateProfile,

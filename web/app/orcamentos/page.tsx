@@ -70,7 +70,7 @@ function Budgets() {
         {!rows.length ? (
           <Empty title={db.budgets.length ? "Nada com esse filtro" : "Nenhum orçamento ainda"}
             body={db.budgets.length ? "Tente outra situação ou limpe a busca." : "Todo orçamento nasce de um plano de tratamento. Monte o primeiro e ele aparece aqui."}
-            action={!db.budgets.length && <Link href="/plano" className="inline-flex h-10 items-center rounded-pill bg-accent px-4 text-sm font-semibold text-on-accent">Montar um plano</Link>} />
+            action={!db.budgets.length && <Link href="/plano" className="inline-flex h-10 items-center rounded-pill bg-brand px-4 text-sm font-semibold text-on-brand">Montar um plano</Link>} />
         ) : (
           <ul className="divide-y divide-border">
             {rows.map(({ b, p }) => {
@@ -78,10 +78,10 @@ function Budgets() {
               const expired = b.status === "presented" && Date.now() - new Date(b.presentedAt).getTime() > (plan?.validityDays ?? 30) * 86400000;
               const msg = `Olá, ${p?.fullName.split(" ")[0]}! Segue o seu orçamento: ${money(b.totalCents)} (${plan?.items.length ?? 0} itens). Qualquer dúvida, é só chamar.`;
               return (
-                <li key={b.id} id={`b-${b.id}`} className={`grid gap-3 p-4 md:grid-cols-[1fr_auto_auto] md:items-center ${highlight === b.id ? "bg-surface-info-subtle" : ""}`}>
+                <li key={b.id} id={`b-${b.id}`} className={`grid gap-3 p-4 md:grid-cols-[1fr_auto_auto] md:items-center ${highlight === b.id ? "bg-brand-soft" : ""}`}>
                   <div className="min-w-0">
                     <Link href={`/pacientes/${b.patientId}`} className="font-semibold hover:underline truncate block">{p?.fullName ?? "Paciente removido"}</Link>
-                    <p className="text-xs text-muted">{plan?.items.length ?? 0} itens · apresentado em {dateBR(b.presentedAt)}</p>
+                    <p className="text-xs text-ink-muted">{plan?.items.length ?? 0} itens · apresentado em {dateBR(b.presentedAt)}</p>
                   </div>
                   <div className="flex items-center gap-3 md:justify-end">
                     <span className="font-bold tabular-nums">{money(b.totalCents)}</span>
@@ -90,8 +90,8 @@ function Budgets() {
                     {b.status === "declined" && <Badge tone="neutral">Recusado</Badge>}
                   </div>
                   <div className="flex flex-wrap gap-2 md:justify-end">
-                    <Link href={`/orcamentos/${b.id}/imprimir`} target="_blank" aria-label={`Imprimir orçamento de ${p?.fullName}`} className="inline-flex h-8 items-center gap-1 rounded-pill bg-surface-sidebar px-3 text-xs font-semibold"><Printer className="size-4" />PDF</Link>
-                    {p?.phone && <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-pill bg-surface-success-subtle px-3 text-xs font-semibold"><MessageCircle className="size-4" />Enviar</a>}
+                    <Link href={`/orcamentos/${b.id}/imprimir`} target="_blank" aria-label={`Imprimir orçamento de ${p?.fullName}`} className="inline-flex h-8 items-center gap-1 rounded-pill bg-surface-300 px-3 text-xs font-semibold"><Printer className="size-4" />PDF</Link>
+                    {p?.phone && <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Enviar</a>}
                     {b.status === "presented" && <>
                       <Button size="sm" onClick={() => setAuthorizing(b)}>Aprovar</Button>
                       <Button size="sm" variant="ghost" onClick={() => run(() => api.budgets.decline(b.id), "Marcado como recusado.")}><XIcon className="size-4" />Recusou</Button>

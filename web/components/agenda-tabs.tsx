@@ -16,11 +16,11 @@ export function AgendaTabs() {
   const path = usePathname();
   return (
     <nav aria-label="Seções da agenda" className="flex justify-center">
-      <ul className="inline-flex flex-wrap justify-center rounded-lg sm:rounded-pill bg-surface-sidebar p-1 gap-1">
+      <ul className="inline-flex flex-wrap justify-center rounded-lg sm:rounded-pill bg-surface-300 p-1 gap-1">
         {TABS.map(({ href, label, icon: Icon }) => (
           <li key={href}>
             <Link href={href} aria-current={path === href ? "page" : undefined}
-              className={cx("inline-flex items-center gap-1.5 rounded-pill h-8 px-4 text-sm font-semibold", path === href ? "bg-surface shadow-card" : "text-muted hover:text-text")}>
+              className={cx("inline-flex items-center gap-1.5 rounded-pill h-8 px-4 text-sm font-semibold", path === href ? "bg-surface-200 shadow-sm" : "text-ink-muted hover:text-ink")}>
               <Icon aria-hidden className="size-4" />{label}
             </Link>
           </li>

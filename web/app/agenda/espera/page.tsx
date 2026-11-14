@@ -37,9 +37,9 @@ export default function Page() {
       <AgendaTabs />
 
       {freed.length > 0 && waiting.length > 0 && (
-        <section className="rounded-lg bg-surface-success-subtle p-4" aria-labelledby="vagos">
+        <section className="rounded-lg bg-success-soft p-4" aria-labelledby="vagos">
           <h2 id="vagos" className="font-semibold">Horários que vagaram</h2>
-          <p className="text-xs text-muted mb-2">Consultas canceladas — boa chance para encaixar alguém da lista.</p>
+          <p className="text-xs text-ink-muted mb-2">Consultas canceladas — boa chance para encaixar alguém da lista.</p>
           <ul className="flex flex-wrap gap-2">
             {freed.map((a) => (
               <li key={a.id}>
@@ -71,13 +71,13 @@ export default function Page() {
                   <Avatar name={p.fullName} />
                   <div className="flex-1 min-w-48">
                     <Link href={`/pacientes/${p.id}`} className="font-semibold hover:underline">{p.fullName}</Link>
-                    <p className="text-xs text-muted">{PERIOD[w.period]} · na lista desde {dateBR(w.createdAt)}{w.notes ? ` · ${w.notes}` : ""}</p>
+                    <p className="text-xs text-ink-muted">{PERIOD[w.period]} · na lista desde {dateBR(w.createdAt)}{w.notes ? ` · ${w.notes}` : ""}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {p.phone && (tab === "waiting" || tab === "contacted") && (
                       <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Abriu um horário mais cedo. Quer que eu reserve para você?`)} target="_blank" rel="noreferrer"
                         onClick={() => tab === "waiting" && api.waitlist.setStatus(w.id, "contacted")}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-surface-success-subtle px-3 text-xs font-semibold"><MessageCircle className="size-4" />Avisar</a>
+                        className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Avisar</a>
                     )}
                     {(tab === "waiting" || tab === "contacted") && <>
                       <Button size="sm" onClick={() => setBooking({ entry: w })}><CalendarPlus className="size-4" />Encaixar</Button>

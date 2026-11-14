@@ -1,5 +1,8 @@
 import type { Db } from "./types";
-import { todayISO } from "./format";
+import { todayISO, toISODate } from "./format";
+
+/** Dia local (não UTC) de um instante ISO: evita contar de madrugada no dia errado. */
+const localDay = (iso: string) => toISODate(new Date(iso));
 
 const inPeriod = (date: string | undefined, from: string, to: string) => !!date && date >= from && date <= to;
 
@@ -8,8 +11,7 @@ export function periodFor(kind: "month" | "30d" | "year", ref = todayISO()): [st
   if (kind === "year") return [`${y}-01-01`, `${y}-12-31`, `Ano de ${y}`];
   if (kind === "30d") {
     const d = new Date(); d.setDate(d.getDate() - 29);
-    const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return [from, ref, "Últimos 30 dias"];
+    return [toISODate(d), ref, "Últimos 30 dias"];
   }
   const last = new Date(Number(y), Number(m), 0).getDate();
   return [`${y}-${m}-01`, `${y}-${m}-${last}`, "Este mês"];
@@ -22,9 +24,13 @@ export function received(db: Db, from: string, to: string) {
   return loose + inst;
 }
 
-/** Faturado: valor dos tratamentos realizados (concluídos) no período. */
+/** Faturado: valor dos tratamentos realizados (concluídos) no período, já com o desconto do orçamento de origem. */
 export function billed(db: Db, from: string, to: string) {
-  return db.treatments.filter((t) => t.clinicalStatus === "done" && inPeriod(t.performedAt, from, to)).reduce((s, t) => s + t.priceCents, 0);
+  // O desconto do orçamento é proporcional aos itens aprovados, então vale o mesmo fator para cada item.
+  const factor = new Map(db.budgets.map((b) => [b.id, b.subtotalCents ? b.totalCents / b.subtotalCents : 1]));
+  return db.treatments
+    .filter((t) => t.clinicalStatus === "done" && inPeriod(t.performedAt, from, to))
+    .reduce((s, t) => s + Math.round(t.priceCents * (t.budgetId ? factor.get(t.budgetId) ?? 1 : 1)), 0);
 }
 
 export function receivable(db: Db) {
@@ -57,7 +63,7 @@ export function indicators(db: Db, from: string, to: string) {
   const appts = db.appointments.filter((a) => a.patientId && inPeriod(a.date, from, to) && a.date <= todayISO());
   const done = appts.filter((a) => a.status === "done").length;
   const noShow = appts.filter((a) => a.status === "no_show").length;
-  const budgets = db.budgets.filter((b) => inPeriod(b.presentedAt.slice(0, 10), from, to));
+  const budgets = db.budgets.filter((b) => inPeriod(localDay(b.presentedAt), from, to));
   const decided = budgets.filter((b) => b.status !== "presented");
   const overdueSum = overdue(db).reduce((s, i) => s + i.amountCents, 0);
   return {
@@ -69,7 +75,7 @@ export function indicators(db: Db, from: string, to: string) {
     conversion: decided.length ? budgets.filter((b) => b.status === "authorized").length / decided.length : null,
     budgetsCount: budgets.length,
     visits: done,
-    newPatients: db.patients.filter((p) => inPeriod(p.createdAt.slice(0, 10), from, to)).length,
+    newPatients: db.patients.filter((p) => inPeriod(localDay(p.createdAt), from, to)).length,
   };
 }
 

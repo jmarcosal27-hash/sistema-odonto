@@ -29,12 +29,12 @@ export function CreateClinic({ email }: { email: string }) {
   };
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg px-4">
-      <form className="w-full max-w-md space-y-4 rounded-lg bg-surface p-6 shadow-pop" onSubmit={(e) => { e.preventDefault(); create(); }}>
+    <main className="grid min-h-dvh place-items-center bg-surface-100 px-4">
+      <form className="w-full max-w-md space-y-4 rounded-lg bg-surface-200 p-6 shadow-md" onSubmit={(e) => { e.preventDefault(); create(); }}>
         <div>
           <h1 className="text-lg font-bold">Bem-vindo(a)!</h1>
-          <p className="text-sm text-muted">Conta {email}. Falta criar o seu consultório — você ganha 14 dias para testar tudo.</p>
-          <p className="text-xs text-muted mt-1">Foi convidado(a) por uma clínica? Peça para o dono enviar o convite para este e-mail e entre de novo.</p>
+          <p className="text-sm text-ink-muted">Conta {email}. Falta criar o seu consultório — você ganha 14 dias para testar tudo.</p>
+          <p className="text-xs text-ink-muted mt-1">Foi convidado(a) por uma clínica? Peça para o dono enviar o convite para este e-mail e entre de novo.</p>
         </div>
         <ErrorNote message={error} />
         <Field label="Nome do consultório ou clínica">{(id) => <Input id={id} value={clinic} onChange={(e) => setClinic(e.target.value)} placeholder="Ex.: Clínica Sorriso Centro" />}</Field>

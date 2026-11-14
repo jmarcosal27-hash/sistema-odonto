@@ -60,3 +60,27 @@ lista de espera e horário vago listado. Sem erros no console.
 
 Dados antigos no navegador são migrados (versão 2) sem perder nada.
 Pendente: verificação em 390px das telas novas, prints para replica-diff.
+
+## Onda B (parcial) — 2026-11-14
+
+Itens 9 e 10 do prontuário, sem storage. Imagens/radiografias (11) e documentos
+(12) ficam para quando houver bucket privado. Migration nova:
+`web/supabase/migrations/20261114000001_prontuario_evolucao_anamnese.sql`
+(a migration anterior não foi alterada). Camada falsa em versão 3 (migração
+completa os campos novos sem perder dados) e equivalente em `lib/remote.ts`.
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| 10 Evolução clínica (S22a) | done | nota por consulta na ficha do paciente: criar, editar, excluir; ligada a um atendimento ou só a uma data; estados vazio/preenchido/erro no modal; só leitura quando o acesso venceu | assinatura/travamento da nota após prazo; anexos (precisam de storage) | RLS: a nota precisa respeitar o modo "consultório dividido". Resolvido com `exists` sobre `patients`, cuja RLS vale dentro da política; também impede nota apontando para paciente de outra clínica |
+| 9 Anamnese (S22c) | partial | modelos editáveis por clínica (perguntas sim/não ou texto, "sim vira alerta"), modelo padrão próprio com 13 perguntas, preenchimento na ficha, histórico de fichas, alertas da última ficha em destaque | **envio por link para o paciente preencher** (precisa de token público e rota sem login, com expiração e limite de uso); reordenar perguntas; assinatura | A ficha guarda cópia do texto das perguntas, para editar ou apagar o modelo não alterar respostas antigas |
+
+Não testado no navegador nem contra o Supabase real (a migration e as políticas
+novas só foram escritas; rodar `node scripts/rls-test.mjs` após aplicar).
+Pendente também: teste em 390px e passada só de teclado nas telas novas.
+
+## Correções da revisão de segurança — 2026-11-14
+
+Migration `20261114000002_correcoes_seguranca.sql`, ajustes em `lib/remote.ts`, `lib/finance.ts`,
+`lib/store.ts`, callback de auth, webhook do Stripe, exclusão de conta e `authorize-dialog`.
+Detalhes e pendências em `backend.md` (seção "Revisão 2026-11-14"). Lint, tsc e `node --check`
+limpos; **migration e `rls-test.mjs` ainda não rodados contra um Supabase**.

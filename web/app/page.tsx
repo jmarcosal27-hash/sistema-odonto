@@ -20,24 +20,24 @@ function DayTimeline({ list, name }: { list: Appointment[]; name: (a: Appointmen
   const timed = list.filter((a) => a.time);
   return (
     <div>
-      <div className="relative h-10 rounded-md bg-surface/60" role="list" aria-label="Consultas de hoje ao longo do dia">
+      <div className="relative h-10 rounded-md bg-surface-200/60" role="list" aria-label="Consultas de hoje ao longo do dia">
         {timed.map((a) => {
           const s = toMin(a.time!), e = s + a.durationMinutes;
           const past = e <= nowMin;
           return (
             <Link key={a.id} role="listitem" href="/agenda" title={`${a.time} · ${name(a)}`} aria-label={`${a.time} ${name(a)}`}
               className={cx("absolute top-1 bottom-1 rounded-sm",
-                past ? "bg-text/20" : a.status === "to_confirm" ? "border-2 border-dashed border-accent bg-surface" : "bg-accent")}
+                past ? "bg-ink/20" : a.status === "to_confirm" ? "border-2 border-dashed border-brand bg-surface-200" : "bg-brand")}
               style={{ left: pos(s), width: `max(6px, calc(${pos(e)} - ${pos(s)}))` }} />
           );
         })}
         {nowMin >= DAY_START && nowMin <= DAY_END && <span aria-hidden className="absolute -top-1 -bottom-1 w-0.5 bg-danger" style={{ left: pos(nowMin) }} />}
       </div>
-      <div className="mt-1 flex justify-between text-[11px] text-muted tabular-nums" aria-hidden>{["7h", "10h", "13h", "16h", "20h"].map((h) => <span key={h}>{h}</span>)}</div>
-      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-text/20" />já passou</li>
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border-2 border-dashed border-accent" />falta confirmar</li>
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-accent" />confirmada</li>
+      <div className="mt-1 flex justify-between text-[11px] text-ink-muted tabular-nums" aria-hidden>{["7h", "10h", "13h", "16h", "20h"].map((h) => <span key={h}>{h}</span>)}</div>
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-muted">
+        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-ink/20" />já passou</li>
+        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border-2 border-dashed border-brand" />falta confirmar</li>
+        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-brand" />confirmada</li>
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-0.5 bg-danger" />agora</li>
       </ul>
     </div>
@@ -78,29 +78,29 @@ export default function Home() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold">Olá{first ? `, ${first}` : ""}!</h2>
-        <p className="text-sm text-muted first-letter:uppercase">{dateLong(today)}</p>
+        <p className="text-sm text-ink-muted first-letter:uppercase">{dateLong(today)}</p>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <section className="rounded-lg bg-surface-info-subtle p-5 space-y-4" aria-labelledby="hoje">
+        <section className="rounded-lg bg-brand-soft p-5 space-y-4" aria-labelledby="hoje">
           <div className="flex items-baseline justify-between">
             <h3 id="hoje" className="font-semibold"><span className="text-[22px]">{todays.length}</span> consulta(s) hoje</h3>
             <Link href="/agenda" className="text-sm font-semibold">Abrir agenda</Link>
           </div>
           <DayTimeline list={todays} name={name} />
           {nextPatient ? (
-            <Link href={`/pacientes/${nextPatient.id}`} className="block rounded-md hover:bg-surface/40 -mx-2 px-2 py-1">
-              <p className="text-xs text-muted">Próximo paciente</p>
+            <Link href={`/pacientes/${nextPatient.id}`} className="block rounded-md hover:bg-surface-200/40 -mx-2 px-2 py-1">
+              <p className="text-xs text-ink-muted">Próximo paciente</p>
               <p className="text-lg font-bold break-words">{nextPatient.fullName}</p>
-              <p className="text-sm text-muted">{next!.date === today ? "Hoje" : dateShort(next!.date)} · {next!.time ?? "horário a definir"} · {next!.durationMinutes} min</p>
+              <p className="text-sm text-ink-muted">{next!.date === today ? "Hoje" : dateShort(next!.date)} · {next!.time ?? "horário a definir"} · {next!.durationMinutes} min</p>
             </Link>
-          ) : <p className="text-sm text-muted">Nenhum paciente marcado daqui pra frente.</p>}
-          <ol className="grid grid-cols-7 gap-1 border-t border-text/10 pt-3">
+          ) : <p className="text-sm text-ink-muted">Nenhum paciente marcado daqui pra frente.</p>}
+          <ol className="grid grid-cols-7 gap-1 border-t border-ink/10 pt-3">
             {week.map((d) => {
               const n = live.filter((a) => a.date === d).length;
               return (
                 <li key={d}>
                   <Link href="/agenda" aria-label={`${dateLong(d)}: ${n ? `${n} compromisso(s)` : "livre"}`}
-                    className={cx("flex flex-col items-center rounded-md py-2 text-xs", d === today ? "bg-text text-surface" : "hover:bg-surface/50")}>
+                    className={cx("flex flex-col items-center rounded-md py-2 text-xs", d === today ? "bg-ink text-surface-100" : "hover:bg-surface-200/50")}>
                     <span className="capitalize">{fromISODate(d).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
                     <span className="text-base font-bold">{Number(d.slice(8))}</span>
                     <span>{n ? `${n} marc.` : "livre"}</span>
@@ -118,20 +118,20 @@ export default function Home() {
             <ul className="divide-y divide-border">
               {todo.map((t) => (
                 <li key={t.href} className="flex items-center gap-3 py-2.5">
-                  <span className={cx("w-7 text-lg font-bold tabular-nums", t.n ? "text-text" : "text-muted")}>{t.n}</span>
+                  <span className={cx("w-7 text-lg font-bold tabular-nums", t.n ? "text-ink" : "text-ink-muted")}>{t.n}</span>
                   <span className="flex-1 text-sm">{t.text}</span>
-                  {t.n > 0 && <Link href={t.href} className="inline-flex items-center gap-1 text-xs font-semibold text-accent whitespace-nowrap">{t.link}<ArrowRight className="size-3.5" /></Link>}
+                  {t.n > 0 && <Link href={t.href} className="inline-flex items-center gap-1 text-xs font-semibold text-brand whitespace-nowrap">{t.link}<ArrowRight className="size-3.5" /></Link>}
                 </li>
               ))}
             </ul>
           </Card>
           <Card>
-            <div className="flex items-baseline justify-between"><h3 className="font-semibold first-letter:uppercase">{fromISODate(today).toLocaleDateString("pt-BR", { month: "long" })} em números</h3><Link href="/indicadores" className="text-sm font-semibold text-accent">Indicadores</Link></div>
+            <div className="flex items-baseline justify-between"><h3 className="font-semibold first-letter:uppercase">{fromISODate(today).toLocaleDateString("pt-BR", { month: "long" })} em números</h3><Link href="/indicadores" className="text-sm font-semibold text-brand">Indicadores</Link></div>
             <dl className="mt-3 grid grid-cols-2 gap-3">
-              <div><dt className="text-xs text-muted">Entrou</dt><dd className="text-lg font-bold text-success tabular-nums">{money(s.received)}</dd></div>
-              <div><dt className="text-xs text-muted">Saiu</dt><dd className="text-lg font-bold text-danger tabular-nums">{money(s.spent)}</dd></div>
-              <div><dt className="text-xs text-muted">Sobrou</dt><dd className={cx("text-lg font-bold tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
-              <div><dt className="text-xs text-muted">A receber</dt><dd className="text-lg font-bold tabular-nums">{money(s.receivable)}</dd></div>
+              <div><dt className="text-xs text-ink-muted">Entrou</dt><dd className="text-lg font-bold text-success tabular-nums">{money(s.received)}</dd></div>
+              <div><dt className="text-xs text-ink-muted">Saiu</dt><dd className="text-lg font-bold text-danger tabular-nums">{money(s.spent)}</dd></div>
+              <div><dt className="text-xs text-ink-muted">Sobrou</dt><dd className={cx("text-lg font-bold tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
+              <div><dt className="text-xs text-ink-muted">A receber</dt><dd className="text-lg font-bold tabular-nums">{money(s.receivable)}</dd></div>
             </dl>
           </Card>
         </div>

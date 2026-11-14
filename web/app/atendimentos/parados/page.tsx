@@ -17,10 +17,10 @@ export default function Page() {
 
   return (
     <div className="space-y-4">
-      <Link href="/atendimentos" className="inline-flex items-center gap-1 text-sm font-semibold text-accent"><ArrowLeft className="size-4" />Atendimentos</Link>
+      <Link href="/atendimentos" className="inline-flex items-center gap-1 text-sm font-semibold text-brand"><ArrowLeft className="size-4" />Atendimentos</Link>
       <div>
         <h2 className="text-lg font-bold">Tratamentos parados</h2>
-        <p className="text-sm text-muted">Orçamentos aprovados há mais de 7 dias, ainda em andamento e sem nenhuma consulta marcada. É dinheiro aprovado que não está virando atendimento.</p>
+        <p className="text-sm text-ink-muted">Orçamentos aprovados há mais de 7 dias, ainda em andamento e sem nenhuma consulta marcada. É dinheiro aprovado que não está virando atendimento.</p>
       </div>
       <Card className="p-0 overflow-hidden">
         {!list.length ? <Empty title="Nada parado" body="Todo tratamento aprovado tem consulta marcada ou já foi concluído." /> : (
@@ -34,10 +34,10 @@ export default function Page() {
                   <Avatar name={p.fullName} />
                   <div className="flex-1 min-w-48">
                     <Link href={`/pacientes/${p.id}`} className="font-semibold hover:underline">{p.fullName}</Link>
-                    <p className="text-xs text-muted">Aprovado em {dateBR(b.authorizedAt)} · há {days(b.authorizedAt!)} dias · {pending.length} item(ns) pendente(s): {pending.map((t) => t.procedureName).join(", ")}</p>
+                    <p className="text-xs text-ink-muted">Aprovado em {dateBR(b.authorizedAt)} · há {days(b.authorizedAt!)} dias · {pending.length} item(ns) pendente(s): {pending.map((t) => t.procedureName).join(", ")}</p>
                   </div>
                   <span className="font-bold tabular-nums">{money(b.totalCents)}</span>
-                  {p.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Vamos marcar a continuação do seu tratamento? Tenho horários nesta semana.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-surface-success-subtle px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>}
+                  {p.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Vamos marcar a continuação do seu tratamento? Tenho horários nesta semana.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>}
                   <Button size="sm" onClick={() => setBooking(p.id)}><CalendarPlus className="size-4" />Agendar</Button>
                 </li>
               );

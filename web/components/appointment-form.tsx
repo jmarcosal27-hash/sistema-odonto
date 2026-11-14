@@ -57,7 +57,7 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
             <Field label="Horário" hint="Em branco = a definir">{(id, d) => <Input id={id} aria-describedby={d} type="time" step={300} value={a.time ?? ""} onChange={(e) => set({ time: e.target.value || undefined })} />}</Field>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">Duração</span>
+            <span className="text-xs font-medium text-ink-muted">Duração</span>
             <div className="flex flex-wrap items-center gap-2">
               <Segmented size="sm" label="Duração" value={String(a.durationMinutes)} onChange={(v) => set({ durationMinutes: Number(v) })}
                 options={DURATIONS.map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : m === 60 ? "1 h" : "1h30" }))} />
@@ -66,7 +66,7 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
           </div>
           {editing && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-muted">Situação</span>
+              <span className="text-xs font-medium text-ink-muted">Situação</span>
               <Segmented size="sm" label="Situação" value={a.status as AppointmentStatus} onChange={(v) => set({ status: v })}
                 options={[{ value: "to_confirm", label: "A confirmar" }, { value: "confirmed", label: "Confirmado" }, { value: "done", label: "Atendido" }, { value: "no_show", label: "Faltou" }, { value: "cancelled", label: "Cancelado" }]} />
             </div>

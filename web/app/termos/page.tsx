@@ -7,7 +7,7 @@ export default function Termos() {
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-4 py-10 text-sm leading-6">
       <h1 className="text-xl font-bold">Termos de uso — {APP_NAME}</h1>
-      <p className="rounded-md bg-surface-warning-subtle px-3 py-2">Rascunho. Precisa de revisão jurídica antes do lançamento.</p>
+      <p className="rounded-md bg-warning-soft px-3 py-2">Rascunho. Precisa de revisão jurídica antes do lançamento.</p>
       <ul className="list-disc pl-5 space-y-1">
         <li>O acesso é vendido por período (anual), com pagamento único e sem renovação automática.</li>
         <li>Garantia de 7 dias: o valor é devolvido se pedido nesse prazo.</li>

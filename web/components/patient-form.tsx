@@ -66,13 +66,13 @@ export function PatientForm({ open, onClose, initial, onSaved }: {
       <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <ErrorNote message={formError} />
         <fieldset className="grid gap-3 sm:grid-cols-2">
-          <legend className="text-xs font-bold uppercase tracking-wide text-muted mb-2 sm:col-span-2">Identificação</legend>
+          <legend className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-2 sm:col-span-2">Identificação</legend>
           <Field label="Nome completo" error={errors.fullName} className="sm:col-span-2">
             {(id, d) => <Input id={id} aria-describedby={d} invalid={!!errors.fullName} value={f.fullName ?? ""} onChange={(e) => set({ fullName: e.target.value })} autoComplete="off" />}
           </Field>
           <Field label="Data de nascimento">{(id) => <Input id={id} type="date" value={f.birthDate ?? ""} onChange={(e) => set({ birthDate: e.target.value || undefined })} />}</Field>
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">Sexo</span>
+            <span className="text-xs font-medium text-ink-muted">Sexo</span>
             <Segmented label="Sexo" size="sm" value={f.sex ?? ("" as never)} onChange={(v) => set({ sex: v })}
               options={[{ value: "female", label: "Feminino" }, { value: "male", label: "Masculino" }, { value: "other", label: "Outro" }]} />
           </div>
@@ -82,12 +82,12 @@ export function PatientForm({ open, onClose, initial, onSaved }: {
         </fieldset>
 
         <fieldset className="grid gap-3 sm:grid-cols-2">
-          <legend className="text-xs font-bold uppercase tracking-wide text-muted mb-2">Contato</legend>
+          <legend className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-2">Contato</legend>
           <Field label="Celular (WhatsApp)">{(id) => <Input id={id} type="tel" inputMode="tel" value={f.phone ?? ""} onChange={(e) => set({ phone: maskPhone(e.target.value) || undefined })} placeholder="(00) 00000-0000" />}</Field>
           <Field label="E-mail" error={errors.email}>{(id, d) => <Input id={id} aria-describedby={d} type="email" invalid={!!errors.email} value={f.email ?? ""} onChange={(e) => set({ email: e.target.value || undefined })} />}</Field>
           {!showGuardian
-            ? <button type="button" onClick={() => setShowGuardian(true)} className="text-sm font-semibold text-accent text-left sm:col-span-2">+ Responsável (para menores)</button>
-            : <div className="grid gap-3 sm:grid-cols-3 sm:col-span-2 rounded-md bg-surface-sidebar p-3">
+            ? <button type="button" onClick={() => setShowGuardian(true)} className="text-sm font-semibold text-brand text-left sm:col-span-2">+ Responsável (para menores)</button>
+            : <div className="grid gap-3 sm:grid-cols-3 sm:col-span-2 rounded-md bg-surface-300 p-3">
                 <Field label="Nome do responsável">{(id) => <Input id={id} value={f.guardian?.name ?? ""} onChange={(e) => set({ guardian: { ...f.guardian, name: e.target.value } })} />}</Field>
                 <Field label="Parentesco">{(id) => <Input id={id} value={f.guardian?.relationship ?? ""} onChange={(e) => set({ guardian: { name: f.guardian?.name ?? "", ...f.guardian, relationship: e.target.value } })} />}</Field>
                 <Field label="Telefone">{(id) => <Input id={id} type="tel" value={f.guardian?.phone ?? ""} onChange={(e) => set({ guardian: { name: f.guardian?.name ?? "", ...f.guardian, phone: maskPhone(e.target.value) } })} />}</Field>
@@ -95,7 +95,7 @@ export function PatientForm({ open, onClose, initial, onSaved }: {
         </fieldset>
 
         <fieldset className="grid gap-3 sm:grid-cols-6">
-          <legend className="text-xs font-bold uppercase tracking-wide text-muted mb-2">Endereço</legend>
+          <legend className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-2">Endereço</legend>
           <Field label="CEP" hint={cepLoading ? "Buscando endereço…" : undefined} className="sm:col-span-2">
             {(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" value={f.address?.cep ?? ""} onChange={(e) => { const v = maskCep(e.target.value); setAddr({ cep: v }); lookupCep(v); }} placeholder="00000-000" />}
           </Field>
@@ -108,7 +108,7 @@ export function PatientForm({ open, onClose, initial, onSaved }: {
         </fieldset>
 
         <fieldset className="grid gap-3 sm:grid-cols-2">
-          <legend className="text-xs font-bold uppercase tracking-wide text-muted mb-2">Outros</legend>
+          <legend className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-2">Outros</legend>
           <Field label="Como conheceu você">{(id) => <Select id={id} value={f.referralSource ?? ""} onChange={(e) => set({ referralSource: e.target.value || undefined })}><option value="">—</option>{REFERRAL_SOURCES.map((r) => <option key={r}>{r}</option>)}</Select>}</Field>
           <Field label="Observações" className="sm:col-span-2">{(id) => <Textarea id={id} value={f.notes ?? ""} onChange={(e) => set({ notes: e.target.value || undefined })} placeholder="Alergias, preferências de horário…" />}</Field>
         </fieldset>

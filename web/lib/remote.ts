@@ -4,12 +4,14 @@
 // camada de demonstração, para as telas não mudarem. Toda permissão é checada
 // no banco (RLS + RPCs); aqui só montamos as chamadas.
 //
-// Estratégia: carrega os dados da clínica inteira e recarrega após cada escrita.
-// Bom para consultórios e clínicas pequenas; trocar por consultas paginadas
-// quando uma clínica passar de alguns milhares de pacientes.
+// Estratégia: carrega os dados da clínica inteira (em páginas de 1000 linhas, pois o
+// PostgREST corta em 1000 por consulta) e recarrega após cada escrita. Bom para
+// consultórios e clínicas pequenas; trocar por consultas por tela quando uma clínica
+// passar de alguns milhares de pacientes.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, ClinicalNote,
   Appointment, Budget, Db, Expense, Installment, MessageTemplate, Patient, PatientEvent, PaymentMethod,
   PlanItem, Procedure, Profile, RecallState, RecallStatus, Treatment, TreatmentPlan, WaitlistEntry,
 } from "./types";
@@ -36,23 +38,41 @@ async function q<T>(p: PromiseLike<{ data: T; error: { message: string; code?: s
   return data;
 }
 
+const PAGE = 1000;
+
+/** Lê todas as linhas da clínica numa tabela, página por página, com ordem estável. */
+async function loadAll(sb: SupabaseClient, table: string, clinicId: string, order: [string, boolean][] = [["id", true]]): Promise<Row[]> {
+  const out: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const base = sb.from(table).select("*").eq("clinic_id", clinicId);
+    const ordered = order.reduce((b, [col, asc]) => b.order(col, { ascending: asc }), base);
+    const { data, error } = await ordered.range(from, from + PAGE - 1);
+    if (error) throw friendly(error);
+    out.push(...((data ?? []) as Row[]));
+    if (!data || data.length < PAGE) return out;
+  }
+}
+
 export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promise<RemoteState> {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { status: "error", message: "Sessão expirada. Entre de novo." };
-  await sb.rpc("claim_invites");
+  const { error: claimError } = await sb.rpc("claim_invites");
+  if (claimError) return { status: "error", message: friendly(claimError).message };
   const members = await q(sb.from("clinic_members").select("*").eq("user_id", user.id).eq("status", "active").limit(1));
   const m = (members as Row[])[0];
   if (!m) return { status: "no-clinic", email: user.email ?? "" };
   const c = m.clinic_id as string;
-  const by = (t: string) => sb.from(t).select("*").eq("clinic_id", c);
+  const by = (t: string, order?: [string, boolean][]) => loadAll(sb, t, c, order);
 
-  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall] =
+  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords] =
     await Promise.all([
-      q(sb.from("clinics").select("*").eq("id", c).single()), q(by("access_grants").order("expires_at", { ascending: false })),
-      q(by("patients")), q(by("patient_events")), q(by("custom_procedures")), q(by("procedure_settings")),
-      q(by("treatment_plans")), q(by("plan_items").order("position")), q(by("budgets")), q(by("installments")),
-      q(by("treatments")), m.role === "owner" || m.role === "finance" ? q(by("expenses")) : Promise.resolve([]),
-      q(by("appointments")), q(by("message_templates")), q(by("waitlist_entries")), q(by("recall_states")),
+      q(sb.from("clinics").select("*").eq("id", c).single()), by("access_grants", [["expires_at", false], ["id", true]]),
+      by("patients"), by("patient_events"), by("custom_procedures"), by("procedure_settings", [["procedure_id", true]]),
+      by("treatment_plans"), by("plan_items", [["position", true], ["id", true]]), by("budgets"), by("installments"),
+      by("treatments"), m.role === "owner" || m.role === "finance" ? by("expenses") : Promise.resolve([] as Row[]),
+      by("appointments"), by("message_templates", [["kind", true]]), by("waitlist_entries"), by("recall_states", [["patient_id", true]]),
+      by("clinical_notes", [["note_date", false], ["id", true]]), by("anamnesis_templates", [["created_at", true], ["id", true]]),
+      by("anamnesis_records", [["filled_on", false], ["id", true]]),
     ]);
   const cl = clinic as Row;
   const g = (grants as Row[])[0];
@@ -68,7 +88,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   }
 
   const db: Db = {
-    version: 2,
+    version: 3,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -113,6 +133,17 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       status: r.status as WaitlistEntry["status"], createdAt: r.created_at as string,
     })),
     recall: Object.fromEntries((recall as Row[]).map((r) => [r.patient_id as string, { status: r.status as RecallStatus, dueAt: r.due_at as string, updatedAt: r.updated_at as string } satisfies RecallState])),
+    clinicalNotes: (notes as Row[]).map((r): ClinicalNote => ({
+      id: r.id as string, patientId: r.patient_id as string, treatmentId: s(r.treatment_id), date: r.note_date as string,
+      body: r.body as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string,
+    })),
+    anamnesisTemplates: (anaTemplates as Row[]).map((r): AnamnesisTemplate => ({
+      id: r.id as string, name: r.name as string, questions: r.questions as AnamnesisQuestion[], createdAt: r.created_at as string,
+    })),
+    anamnesisRecords: (anaRecords as Row[]).map((r): AnamnesisRecord => ({
+      id: r.id as string, patientId: r.patient_id as string, templateId: s(r.template_id), templateName: r.template_name as string,
+      answers: r.answers as AnamnesisAnswer[], filledOn: r.filled_on as string, createdAt: r.created_at as string,
+    })),
     profile: {
       professionalName: s(m.professional_name), cro: s(m.cro), workMode: cl.work_mode as Profile["workMode"], contact: s(cl.contact),
       pdfColor: s(cl.pdf_color), theme: m.theme as Profile["theme"], activeSpecialtyIds: cl.active_specialty_ids as string[],
@@ -152,7 +183,9 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
     patients: {
       create: (input: Partial<Patient>) => run(async () => {
         const { sb, session } = ctx();
-        const row = (await q(sb.from("patients").insert({ ...patientRow(input), clinic_id: session.clinicId }).select("id").single())) as Row;
+        // Responsável = quem cadastra (dono/dentista). O banco reforça isso para dentistas.
+        const dentist = session.role === "dentist" || session.role === "owner" ? { dentist_id: session.userId } : {};
+        const row = (await q(sb.from("patients").insert({ ...patientRow(input), ...dentist, clinic_id: session.clinicId }).select("id").single())) as Row;
         await ev(row.id as string, "created", "Cadastro criado");
         return row.id as string;
       }),
@@ -164,7 +197,8 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         rows.forEach((r, i) => {
           if (!r.fullName?.trim()) return errors.push(`Linha ${i + 2}: sem nome`);
           if (r.cpf && db.patients.some((p) => p.cpf === r.cpf)) return errors.push(`Linha ${i + 2}: CPF já cadastrado`);
-          ok.push({ ...patientRow({ ...r, fullName: r.fullName.trim() }), clinic_id: session.clinicId });
+          ok.push({ ...patientRow({ ...r, fullName: r.fullName.trim() }), clinic_id: session.clinicId,
+            ...(session.role === "dentist" || session.role === "owner" ? { dentist_id: session.userId } : {}) });
         });
         for (let i = 0; i < ok.length; i += 500) await q(sb.from("patients").insert(ok.slice(i, i + 500)));
         return { created: ok.length, errors };
@@ -195,7 +229,7 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
           p_first_due: payment.firstDue, p_method: payment.method ?? null, p_paid_now: !!payment.paidNow,
         }));
       }),
-      decline: (budgetId: string) => run(async () => { await q(ctx().sb.from("budgets").update({ status: "declined" }).eq("id", budgetId)); }),
+      decline: (budgetId: string) => run(async () => { await q(ctx().sb.rpc("decline_budget", { p_budget: budgetId })); }),
     },
 
     installments: {
@@ -291,6 +325,38 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
       remove: (id: string) => run(async () => { await q(ctx().sb.from("expenses").delete().eq("id", id)); }),
     },
 
+    clinicalNotes: {
+      save: (n: { id?: string; patientId: string; treatmentId?: string; date: string; body: string }) => run(async () => {
+        const { sb, session } = ctx();
+        const body = n.body.trim();
+        if (!body) throw new Error("Escreva a evolução antes de salvar.");
+        const row = { treatment_id: n.treatmentId ?? null, note_date: n.date, body, updated_at: new Date().toISOString() };
+        if (n.id) await q(sb.from("clinical_notes").update(row).eq("id", n.id));
+        else await q(sb.from("clinical_notes").insert({ ...row, clinic_id: session.clinicId, patient_id: n.patientId }));
+      }),
+      remove: (id: string) => run(async () => { await q(ctx().sb.from("clinical_notes").delete().eq("id", id)); }),
+    },
+
+    anamnesis: {
+      saveTemplate: (t: { id?: string; name: string; questions: AnamnesisQuestion[] }) => run(async () => {
+        const { sb, session } = ctx();
+        const name = t.name.trim();
+        if (name.length < 2) throw new Error("Dê um nome ao modelo.");
+        const questions = t.questions.filter((x) => x.text.trim()).map((x) => ({ ...x, text: x.text.trim() }));
+        if (!questions.length) throw new Error("Adicione pelo menos uma pergunta.");
+        if (t.id) await q(sb.from("anamnesis_templates").update({ name, questions }).eq("id", t.id));
+        else await q(sb.from("anamnesis_templates").insert({ clinic_id: session.clinicId, name, questions }));
+      }),
+      removeTemplate: (id: string) => run(async () => { await q(ctx().sb.from("anamnesis_templates").delete().eq("id", id)); }),
+      saveRecord: (r: { patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string }) => run(async () => {
+        const { sb, session } = ctx();
+        if (!r.answers.length) throw new Error("A ficha está vazia.");
+        await q(sb.from("anamnesis_records").insert({ clinic_id: session.clinicId, patient_id: r.patientId, template_id: r.templateId ?? null,
+          template_name: r.templateName, answers: r.answers, filled_on: r.filledOn }));
+      }),
+      removeRecord: (id: string) => run(async () => { await q(ctx().sb.from("anamnesis_records").delete().eq("id", id)); }),
+    },
+
     catalog: {
       createCustomProcedure: (name: string, specialtyId: string) => run(async () => {
         const row = (await q(ctx().sb.from("custom_procedures").insert({ clinic_id: ctx().session.clinicId, name, specialty_id: specialtyId }).select("id").single())) as Row;
@@ -324,7 +390,15 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         if ("activeSpecialtyIds" in patch) clinic.active_specialty_ids = patch.activeSpecialtyIds;
         if ("onboardingDone" in patch) clinic.onboarding_done = patch.onboardingDone;
         if ("clinicName" in patch) clinic.name = patch.clinicName;
-        if (Object.keys(member).length) await q(sb.from("clinic_members").update(member).eq("id", session.memberId));
+        // Linha de equipe só muda por RPC (nome, CRO e tema); papel e status ficam fora do alcance do membro.
+        if (Object.keys(member).length) {
+          const cur = ctx().db.profile;
+          await q(sb.rpc("update_my_profile", {
+            p_professional_name: "professional_name" in member ? member.professional_name : cur.professionalName ?? null,
+            p_cro: "cro" in member ? member.cro : cur.cro ?? null,
+            p_theme: "theme" in member ? member.theme : cur.theme,
+          }));
+        }
         if (Object.keys(clinic).length) {
           if (session.role !== "owner") throw new Error("Só o dono da clínica muda esses ajustes.");
           await q(sb.from("clinics").update(clinic).eq("id", session.clinicId));

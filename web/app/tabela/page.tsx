@@ -34,7 +34,7 @@ export default function Page() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted"><Badge tone="info">Opcional</Badge> Preço padrão agiliza o plano de tratamento. Sem preço aqui, você digita o valor na hora.</p>
+      <p className="text-sm text-ink-muted"><Badge tone="info">Opcional</Badge> Preço padrão agiliza o plano de tratamento. Sem preço aqui, você digita o valor na hora.</p>
       <div className="grid grid-cols-2 gap-3">
         <Kpi label="Procedimentos disponíveis" value={procs.filter((p) => db.profile.activeSpecialtyIds.includes(p.specialtyId)).length} sub={`${active.length} especialidades ativas`} />
         <Kpi label="Com preço padrão" value={priced} sub={priced ? "usados automaticamente no plano" : "nenhum ainda"} />
@@ -65,25 +65,25 @@ export default function Page() {
               <>
                 <Select aria-label="Especialidade" value={spec} onChange={(e) => setSpec(e.target.value)} className="md:hidden">{active.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
                 <nav aria-label="Especialidades" className="hidden md:block">
-                  <ul className="rounded-lg bg-surface p-2 shadow-card space-y-0.5">
+                  <ul className="rounded-lg bg-surface-200 p-2 shadow-sm space-y-0.5">
                     {active.map((s) => (
                       <li key={s.id}><button type="button" aria-current={spec === s.id ? "true" : undefined} onClick={() => setSpec(s.id)}
-                        className={cx("flex w-full justify-between rounded-md px-3 py-2 text-left text-sm", spec === s.id ? "bg-surface-info-subtle font-semibold" : "hover:bg-surface-sidebar")}>
-                        <span>{s.name}</span><span className="text-muted">{procs.filter((p) => p.specialtyId === s.id).length}</span></button></li>
+                        className={cx("flex w-full justify-between rounded-md px-3 py-2 text-left text-sm", spec === s.id ? "bg-brand-soft font-semibold" : "hover:bg-surface-300")}>
+                        <span>{s.name}</span><span className="text-ink-muted">{procs.filter((p) => p.specialtyId === s.id).length}</span></button></li>
                     ))}
                   </ul>
                 </nav>
               </>
             )}
             <Card className={cx("min-w-0", n && "md:col-span-2")}>
-              {!shown.length && <p className="text-sm text-muted">Nada encontrado.</p>}
+              {!shown.length && <p className="text-sm text-ink-muted">Nada encontrado.</p>}
               {Object.entries(groups).map(([g, list]) => (
                 <section key={g} className="mb-4 last:mb-0">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-muted mb-1">{g}</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-1">{g}</h3>
                   <ul className="divide-y divide-border">
                     {list.map((p) => (
                       <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-                        <span className="text-sm">{p.name}{p.custom && <span className="ml-2 text-xs text-muted">(seu)</span>}</span>
+                        <span className="text-sm">{p.name}{p.custom && <span className="ml-2 text-xs text-ink-muted">(seu)</span>}</span>
                         <span className="flex items-center gap-3">
                         <Select aria-label={`Retorno após ${p.name}`} title="Quando o paciente deve voltar depois deste procedimento" className="h-8 w-36 text-xs"
                           value={db.recallMonths[p.id] ?? ""} onChange={(e) => api.catalog.setRecallMonths(p.id, e.target.value ? Number(e.target.value) : undefined)}>
@@ -98,7 +98,7 @@ export default function Page() {
                           </form>
                         ) : (
                           <button type="button" onClick={() => { setEditing(p.id); setDraft(db.prices[p.id] !== undefined ? (db.prices[p.id] / 100).toFixed(2).replace(".", ",") : ""); }}
-                            className={cx("text-sm font-semibold tabular-nums", db.prices[p.id] !== undefined ? "text-text" : "text-accent")}>
+                            className={cx("text-sm font-semibold tabular-nums", db.prices[p.id] !== undefined ? "text-ink" : "text-brand")}>
                             {db.prices[p.id] !== undefined ? money(db.prices[p.id]) : "+ Definir preço"}
                           </button>
                         )}

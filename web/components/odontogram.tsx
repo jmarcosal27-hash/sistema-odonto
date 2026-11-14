@@ -16,9 +16,9 @@ const toneOf = (c: ToothCondition[]) => {
 
 const fill: Record<string, string> = {
   danger: "fill-danger/25 stroke-danger",
-  accent: "fill-accent/25 stroke-accent",
+  accent: "fill-brand/25 stroke-brand",
   success: "fill-success/25 stroke-success",
-  muted: "fill-transparent stroke-muted [stroke-dasharray:3_2]",
+  muted: "fill-transparent stroke-ink-muted [stroke-dasharray:3_2]",
 };
 
 function roots(n: number) {
@@ -72,7 +72,7 @@ export function Odontogram({ upper, lower, marks, selected, onSelect }: {
   return (
     <div className="overflow-x-auto">
       <div className="mx-auto w-max space-y-2 px-1">
-        <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
           <span>Lado direito do paciente</span><span>Lado esquerdo do paciente</span>
         </div>
         {rows.map((row, ri) => (
@@ -86,23 +86,23 @@ export function Odontogram({ upper, lower, marks, selected, onSelect }: {
                   key={n} type="button" ref={(el) => { refs.current[n] = el; }}
                   aria-label={label} aria-pressed={selected === n}
                   onClick={() => onSelect(n)} onKeyDown={(e) => { if (e.key.startsWith("Arrow")) { e.preventDefault(); move(n, e.key); } }}
-                  className={cx("flex flex-col items-center rounded-md px-0.5 pt-1 transition hover:bg-surface-sidebar",
+                  className={cx("flex flex-col items-center rounded-md px-0.5 pt-1 transition hover:bg-surface-300",
                     ri === 0 ? "flex-col" : "flex-col-reverse",
-                    selected === n && "bg-surface-info-subtle ring-2 ring-accent",
+                    selected === n && "bg-brand-soft ring-2 ring-brand",
                     i === row.length / 2 && "ml-2 sm:ml-3")}
                 >
-                  <ToothShape n={n} upper={ri === 0} className={tone ? fill[tone] : "fill-surface stroke-muted"} />
-                  <span className="text-[11px] tabular-nums text-muted">{n}</span>
+                  <ToothShape n={n} upper={ri === 0} className={tone ? fill[tone] : "fill-surface-200 stroke-ink-muted"} />
+                  <span className="text-[11px] tabular-nums text-ink-muted">{n}</span>
                 </button>
               );
             })}
           </div>
         ))}
-        <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2 text-xs text-muted">
+        <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2 text-xs text-ink-muted">
           <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-success" />Saudável</li>
           <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-danger" />Precisa tratar</li>
-          <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-accent" />Já tratado</li>
-          <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full border border-dashed border-muted" />Ausente / incluso</li>
+          <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-brand" />Já tratado</li>
+          <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full border border-dashed border-ink-muted" />Ausente / incluso</li>
         </ul>
       </div>
     </div>

@@ -16,21 +16,21 @@ export default function PrintBudget({ params }: { params: Promise<{ id: string }
   const plan = b && db.plans.find((p) => p.id === b.planId);
   const patient = b && db.patients.find((p) => p.id === b.patientId);
   if (!b || !plan) return <p className="p-8">Orçamento não encontrado.</p>;
-  const color = db.profile.pdfColor ?? "var(--color-accent)";
+  const color = db.profile.pdfColor ?? "var(--brand)";
   const installments = db.installments.filter((n) => n.budgetId === b.id).sort((x, y) => x.number - y.number);
   const validUntil = addDays(b.presentedAt.slice(0, 10), plan.validityDays);
 
   return (
-    <div className="min-h-dvh bg-surface text-text" style={{ colorScheme: "light" }}>
-      <div className="print:hidden sticky top-0 flex justify-end gap-2 bg-surface-sidebar p-3">
-        <button onClick={() => window.print()} className="rounded-pill bg-accent px-4 h-10 text-sm font-semibold text-on-accent">Imprimir ou salvar PDF</button>
+    <div className="min-h-dvh bg-surface-200 text-ink" style={{ colorScheme: "light" }}>
+      <div className="print:hidden sticky top-0 flex justify-end gap-2 bg-surface-300 p-3">
+        <button onClick={() => window.print()} className="rounded-pill bg-brand px-4 h-10 text-sm font-semibold text-on-brand">Imprimir ou salvar PDF</button>
       </div>
       <article className="mx-auto max-w-3xl p-8 print:p-0">
         <header className="flex items-start justify-between border-b-4 pb-4" style={{ borderColor: color }}>
           <div>
             <h1 className="text-xl font-bold" style={{ color }}>{db.profile.professionalName || APP_NAME}</h1>
             {db.profile.cro && <p className="text-sm">CRO {db.profile.cro}</p>}
-            {db.profile.contact && <p className="text-sm text-muted">{db.profile.contact}</p>}
+            {db.profile.contact && <p className="text-sm text-ink-muted">{db.profile.contact}</p>}
           </div>
           <div className="text-right text-sm">
             <p className="font-semibold">Orçamento</p>
@@ -53,7 +53,7 @@ export default function PrintBudget({ params }: { params: Promise<{ id: string }
                   {items.map((i) => (
                     <tr key={i.id} className="border-b border-border">
                       <td className="py-1.5">{i.procedureName}{(i.quantity ?? 1) > 1 ? ` ×${i.quantity}` : ""}</td>
-                      <td className="py-1.5 w-28 text-muted">{i.tooth ? `Dente ${i.tooth}` : i.region ? regionLabel(i.region) : "—"}</td>
+                      <td className="py-1.5 w-28 text-ink-muted">{i.tooth ? `Dente ${i.tooth}` : i.region ? regionLabel(i.region) : "—"}</td>
                       <td className="py-1.5 w-32 text-right tabular-nums">{i.priceCents !== undefined ? money(itemTotal(i)) : "a combinar"}</td>
                     </tr>
                   ))}
@@ -70,15 +70,15 @@ export default function PrintBudget({ params }: { params: Promise<{ id: string }
               <div><p className="font-semibold">Parcelas</p><ul>{installments.map((n) => <li key={n.id} className="tabular-nums">{n.number}/{n.of} · {dateBR(n.dueDate)} · {money(n.amountCents)}{n.paidAt ? " · pago" : ""}</li>)}</ul></div>
             )}
           </div>
-          <div className="rounded-md px-6 py-3 text-right" style={{ background: "var(--color-surface-sidebar)" }}>
+          <div className="rounded-md px-6 py-3 text-right" style={{ background: "var(--surface-300)" }}>
             {!!b.discountCents && <p className="text-xs">Subtotal {money(b.subtotalCents ?? b.totalCents + b.discountCents)} · desconto {money(b.discountCents)}</p>}
             <p className="text-xs">Total</p>
             <p className="text-2xl font-bold tabular-nums">{money(b.totalCents)}</p>
           </div>
         </div>
         <footer className="mt-16 grid grid-cols-2 gap-12 text-center text-xs">
-          <div className="border-t border-text pt-2">{db.profile.professionalName || "Profissional"}</div>
-          <div className="border-t border-text pt-2">{patient?.fullName ?? "Paciente"}</div>
+          <div className="border-t border-ink pt-2">{db.profile.professionalName || "Profissional"}</div>
+          <div className="border-t border-ink pt-2">{patient?.fullName ?? "Paciente"}</div>
         </footer>
       </article>
     </div>
