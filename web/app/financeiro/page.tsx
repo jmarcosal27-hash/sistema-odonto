@@ -54,7 +54,7 @@ function Finance() {
       <div className="flex flex-wrap items-center gap-2">
         <Segmented label="Seção" value={tab} onChange={setTab} options={[
           { value: "overview", label: "Visão do mês" },
-          { value: "receivable", label: <>A receber{late.length ? <span className="ml-1.5 rounded-pill bg-danger px-1.5 text-[11px] text-on-accent">{late.length}</span> : null}</> },
+          { value: "receivable", label: <>A receber{late.length ? <span className="ml-1.5 rounded-pill bg-danger px-1.5 text-[11px] text-on-brand">{late.length}</span> : null}</> },
           { value: "expenses", label: "Despesas" },
         ]} />
         <div className="flex-1" />
@@ -74,7 +74,7 @@ function Finance() {
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <div><h2 className="font-semibold">Entradas e saídas</h2><p className="text-xs text-muted">Últimos {span} meses até {label(ym)}</p></div>
+              <div><h2 className="font-semibold">Entradas e saídas</h2><p className="text-xs text-ink-muted">Últimos {span} meses até {label(ym)}</p></div>
               <Segmented size="sm" label="Período" value={span} onChange={setSpan} options={[{ value: "6", label: "6 meses" }, { value: "12", label: "12 meses" }]} />
             </div>
             {series.every((x) => !x.received && !x.spent) ? <Empty title="Sem movimento no período" /> : (
@@ -86,22 +86,22 @@ function Finance() {
                         <div className="w-1/3 rounded-t-sm bg-success" style={{ height: `${(x.received / max) * 100}%` }} title={`Recebido ${money(x.received)}`} />
                         <div className="w-1/3 rounded-t-sm bg-danger" style={{ height: `${(x.spent / max) * 100}%` }} title={`Despesas ${money(x.spent)}`} />
                       </div>
-                      <span className={`text-[11px] ${x.m === ym ? "font-bold text-text" : "text-muted"}`}>{label(x.m)}</span>
+                      <span className={`text-[11px] ${x.m === ym ? "font-bold text-ink" : "text-ink-muted"}`}>{label(x.m)}</span>
                     </div>
                   ))}
                 </div>
-                <figcaption className="mt-3 flex gap-4 text-xs text-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-danger" />Despesas</span></figcaption>
+                <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-danger" />Despesas</span></figcaption>
               </figure>
             )}
           </Card>
           <Card>
             <h2 className="font-semibold mb-3">Para onde foi o dinheiro</h2>
-            {!byCat.length ? <p className="text-sm text-muted">Nenhuma despesa neste mês.</p> : (
+            {!byCat.length ? <p className="text-sm text-ink-muted">Nenhuma despesa neste mês.</p> : (
               <ul className="space-y-3">
                 {byCat.map(([c, v]) => (
                   <li key={c}>
                     <div className="flex justify-between text-sm"><span>{c}</span><span className="tabular-nums font-semibold">{money(v)}</span></div>
-                    <div className="mt-1 h-2 rounded-pill bg-surface-sidebar"><div className="h-2 rounded-pill bg-danger" style={{ width: `${(v / s.spent) * 100}%` }} /></div>
+                    <div className="mt-1 h-2 rounded-pill bg-surface-300"><div className="h-2 rounded-pill bg-danger" style={{ width: `${(v / s.spent) * 100}%` }} /></div>
                   </li>
                 ))}
               </ul>
@@ -114,7 +114,7 @@ function Finance() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Kpi tone="warning" label="Total a receber" value={money(s.receivable)} />
           <Kpi label="Vencido" value={money(late.reduce((x, i) => x + i.amountCents, 0))} valueClass={late.length ? "text-danger" : ""} sub={`${new Set(late.map((i) => i.patientId)).size} paciente(s)`} />
-          <Kpi label="Atendimentos avulsos sem pagamento" value={money(loosePending.reduce((x, t) => x + t.priceCents, 0))} sub={<Link href="/atendimentos" className="font-semibold text-accent">ver em Atendimentos</Link>} />
+          <Kpi label="Atendimentos avulsos sem pagamento" value={money(loosePending.reduce((x, t) => x + t.priceCents, 0))} sub={<Link href="/atendimentos" className="font-semibold text-brand">ver em Atendimentos</Link>} />
         </div>
         <Segmented label="Parcelas" value={recFilter} onChange={setRecFilter} options={[{ value: "open", label: "Em aberto" }, { value: "overdue", label: `Vencidas · ${late.length}` }, { value: "paid", label: "Pagas" }]} />
         <Card className="p-0 overflow-hidden">
@@ -127,12 +127,12 @@ function Finance() {
                   <li key={i.id} className="flex flex-wrap items-center gap-3 p-4">
                     <div className="flex-1 min-w-48">
                       <Link href={`/pacientes/${i.patientId}`} className="font-semibold hover:underline">{p?.fullName ?? "—"}</Link>
-                      <p className="text-xs text-muted">Parcela {i.number}/{i.of} · {i.paidAt ? `paga em ${dateBR(i.paidAt)}` : `vence ${dateBR(i.dueDate)}`}{i.method ? ` · ${PAYMENT_METHODS.find((m) => m.id === i.method)?.label}` : ""}</p>
+                      <p className="text-xs text-ink-muted">Parcela {i.number}/{i.of} · {i.paidAt ? `paga em ${dateBR(i.paidAt)}` : `vence ${dateBR(i.dueDate)}`}{i.method ? ` · ${PAYMENT_METHODS.find((m) => m.id === i.method)?.label}` : ""}</p>
                     </div>
                     <span className="font-bold tabular-nums">{money(i.amountCents)}</span>
                     {isLate && <Badge tone="danger">Vencida</Badge>}
                     {!i.paidAt ? <>
-                      {isLate && p?.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Passando para lembrar da parcela ${i.number}/${i.of} de ${money(i.amountCents)}, que venceu em ${dateBR(i.dueDate)}. Qualquer dúvida, é só chamar.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-surface-success-subtle px-3 text-xs font-semibold"><MessageCircle className="size-4" />Lembrar</a>}
+                      {isLate && p?.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Passando para lembrar da parcela ${i.number}/${i.of} de ${money(i.amountCents)}, que venceu em ${dateBR(i.dueDate)}. Qualquer dúvida, é só chamar.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Lembrar</a>}
                       <Button size="sm" onClick={() => setPaying(i)}>Receber</Button>
                     </> : <Button size="sm" variant="ghost" onClick={() => window.confirm("Desfazer o recebimento desta parcela?") && run(() => api.installments.unpay(i.id))}>Desfazer</Button>}
                   </li>
@@ -161,11 +161,11 @@ function Finance() {
                 const isLate = !paid && e.spentAt < todayISO();
                 return (
                   <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-40"><p className="font-medium">{e.category}{e.recurring && <span className="ml-2 text-xs text-muted">(fixa)</span>}</p><p className="text-xs text-muted truncate">{e.description ? `${e.description} · ` : ""}{paid ? "" : "vence "}{dateBR(e.spentAt)}</p></div>
+                    <div className="flex-1 min-w-40"><p className="font-medium">{e.category}{e.recurring && <span className="ml-2 text-xs text-ink-muted">(fixa)</span>}</p><p className="text-xs text-ink-muted truncate">{e.description ? `${e.description} · ` : ""}{paid ? "" : "vence "}{dateBR(e.spentAt)}</p></div>
                     <span className="tabular-nums font-semibold text-danger">{money(e.amountCents)}</span>
                     {paid ? <Badge tone="success">Paga</Badge> : isLate ? <Badge tone="danger">Atrasada</Badge> : <Badge tone="warning">A pagar</Badge>}
                     <Button size="sm" variant={paid ? "ghost" : "secondary"} onClick={() => run(() => api.expenses.setPaid(e.id, !paid))}>{paid ? "Marcar a pagar" : "Paguei"}</Button>
-                    <button type="button" aria-label={`Apagar despesa ${e.category}`} onClick={() => window.confirm("Apagar esta despesa?") && run(() => api.expenses.remove(e.id), "Despesa apagada.")} className="rounded-pill p-2 text-muted hover:text-danger"><Trash2 className="size-4" /></button>
+                    <button type="button" aria-label={`Apagar despesa ${e.category}`} onClick={() => window.confirm("Apagar esta despesa?") && run(() => api.expenses.remove(e.id), "Despesa apagada.")} className="rounded-pill p-2 text-ink-muted hover:text-danger"><Trash2 className="size-4" /></button>
                   </li>
                 );
               })}

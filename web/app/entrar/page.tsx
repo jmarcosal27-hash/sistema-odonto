@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { REMOTE, supabaseBrowser } from "@/lib/supabase/client";
-import { APP_NAME } from "@/lib/brand";
+import { Logo } from "@/components/logo";
 import { Button, Field, Input, Segmented, ErrorNote } from "@/components/ui";
 
 type Mode = "login" | "signup" | "reset";
@@ -20,10 +20,18 @@ export default function Entrar() {
   const [busy, setBusy] = useState(false);
 
   if (!REMOTE) {
+    if (process.env.NODE_ENV === "production") {
+      return (
+        <Center>
+          <h1 className="text-xl font-bold">Serviço indisponível</h1>
+          <p role="alert" className="text-sm text-ink-muted">A configuração do servidor está incompleta. Tente novamente mais tarde.</p>
+        </Center>
+      );
+    }
     return (
       <Center>
         <h1 className="text-xl font-bold">Modo demonstração</h1>
-        <p className="text-sm text-muted">O login aparece quando o Supabase estiver configurado (veja <code>.env.example</code>). Por enquanto, os dados ficam neste navegador.</p>
+        <p className="text-sm text-ink-muted">O login aparece quando o Supabase estiver configurado (veja <code>.env.example</code>). Por enquanto, os dados ficam neste navegador.</p>
         <Button onClick={() => router.push("/")}>Abrir o sistema</Button>
       </Center>
     );
@@ -60,15 +68,12 @@ export default function Entrar() {
 
   return (
     <Center>
-      <div className="flex items-center gap-2">
-        <span aria-hidden className="grid size-10 place-items-center rounded-full bg-accent text-on-accent font-bold">{APP_NAME[0]}</span>
-        <h1 className="text-xl font-bold">{APP_NAME}</h1>
-      </div>
+      <h1 className="m-0"><Logo width={200} /></h1>
       <Segmented label="Entrar ou criar conta" value={mode} onChange={(m) => { setMode(m); setError(null); setInfo(null); }}
         options={[{ value: "login", label: "Entrar" }, { value: "signup", label: "Criar conta" }, { value: "reset", label: "Esqueci a senha" }]} />
       <form className="w-full space-y-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <ErrorNote message={error} />
-        {info && <p role="status" className="rounded-md bg-surface-success-subtle px-3 py-2 text-sm">{info}</p>}
+        {info && <p role="status" className="rounded-md bg-success-soft px-3 py-2 text-sm">{info}</p>}
         <Field label="E-mail">{(id) => <Input id={id} type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />}</Field>
         {mode !== "reset" && (
           <Field label="Senha" hint={mode === "signup" ? "Mínimo de 8 caracteres." : undefined}>
@@ -77,15 +82,15 @@ export default function Entrar() {
         )}
         <Button type="submit" className="w-full" loading={busy}>{mode === "login" ? "Entrar" : mode === "signup" ? "Criar conta" : "Enviar link"}</Button>
       </form>
-      <p className="text-xs text-muted text-center">Ao criar a conta você concorda com os <a href="/termos" className="underline">termos</a> e a <a href="/privacidade" className="underline">política de privacidade</a>.</p>
+      <p className="text-xs text-ink-muted text-center">Ao criar a conta você concorda com os <a href="/termos" className="underline">termos</a> e a <a href="/privacidade" className="underline">política de privacidade</a>.</p>
     </Center>
   );
 }
 
 function Center({ children }: { children: React.ReactNode }) {
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg px-4">
-      <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-lg bg-surface p-6 shadow-pop">{children}</div>
+    <main className="grid min-h-dvh place-items-center bg-surface-100 px-4">
+      <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-lg bg-surface-200 p-6 shadow-md">{children}</div>
     </main>
   );
 }

@@ -1,0 +1,5 @@
+# Design (obsoleto)
+
+Obsoleto: substituído pelo design system do SmileOS (pasta design-system em D:/SISTEMA DENTISTA). Tokens vigentes em web/app/globals.css; componentes em web/components/ui.tsx e web/components/logo.tsx; logos em web/public/brand/.
+
+Os arquivos desta pasta ficam só como histórico do tema provisório.

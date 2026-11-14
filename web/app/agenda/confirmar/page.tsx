@@ -44,10 +44,10 @@ export default function Page() {
                 <span className="w-14 text-center font-bold tabular-nums">{a.time ?? "—"}</span>
                 <div className="flex-1 min-w-40">
                   <p className="font-semibold truncate">{p.fullName}</p>
-                  <p className="text-xs text-muted">{a.kind === "return" ? "Retorno" : "Consulta"} · {a.durationMinutes} min</p>
+                  <p className="text-xs text-ink-muted">{a.kind === "return" ? "Retorno" : "Consulta"} · {a.durationMinutes} min</p>
                 </div>
                 {p.phone
-                  ? <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-surface-success-subtle px-4 text-sm font-semibold"><MessageCircle className="size-4" />Enviar lembrete</a>
+                  ? <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-success-soft px-4 text-sm font-semibold"><MessageCircle className="size-4" />Enviar lembrete</a>
                   : <Badge tone="warning">Sem celular</Badge>}
                 <Button size="sm" variant="secondary" onClick={() => run(() => api.appointments.setStatus(a.id, "confirmed"), "Confirmado.")}><Check className="size-4" />Confirmou</Button>
               </Card>

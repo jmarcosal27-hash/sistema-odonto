@@ -90,9 +90,9 @@ export default function Page() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" role="group" aria-label="Filtrar por situação">
         {buckets.map(([b, label, sub]) => (
           <button key={b} type="button" aria-pressed={bucket === b} onClick={() => setBucket(b)}
-            className={cx("rounded-lg bg-surface p-3 text-left shadow-card transition border-2", bucket === b ? "border-accent" : "border-transparent hover:border-border")}>
+            className={cx("rounded-lg bg-surface-200 p-3 text-left shadow-sm transition border-2", bucket === b ? "border-brand" : "border-transparent hover:border-border")}>
             <span className="block text-[22px] font-bold leading-7">{count(b)}</span>
-            <span className="block text-xs text-muted">{label}</span>
+            <span className="block text-xs text-ink-muted">{label}</span>
             {sub && <span className="block text-xs font-semibold">{sub}</span>}
           </button>
         ))}
@@ -116,15 +116,15 @@ export default function Page() {
               const a = age(p.birthDate);
               return (
                 <li key={p.id}>
-                  <Link href={`/pacientes/${p.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-surface-sidebar/50">
+                  <Link href={`/pacientes/${p.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-surface-300/50">
                     <Avatar name={p.fullName} />
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-1.5 font-semibold"><span className="truncate">{p.fullName}</span>{isBirthdayMonth(p) && <Cake aria-label="Aniversário neste mês" className="size-4 shrink-0 text-warning" />}</span>
-                      <span className="block text-xs text-muted truncate">{[a !== undefined ? `${a} anos` : null, p.phone].filter(Boolean).join(" · ") || "Sem contato"}</span>
-                      {nv && <span className="block text-xs text-accent font-medium">Próxima visita: {dateShort(nv.date)}{nv.time ? ` às ${nv.time}` : ""}</span>}
+                      <span className="block text-xs text-ink-muted truncate">{[a !== undefined ? `${a} anos` : null, p.phone].filter(Boolean).join(" · ") || "Sem contato"}</span>
+                      {nv && <span className="block text-xs text-brand font-medium">Próxima visita: {dateShort(nv.date)}{nv.time ? ` às ${nv.time}` : ""}</span>}
                     </span>
                     <span className="hidden sm:block">{STATUS_BADGE[patientStatus(db, p)]}</span>
-                    <ChevronRight aria-hidden className="size-4 text-muted" />
+                    <ChevronRight aria-hidden className="size-4 text-ink-muted" />
                   </Link>
                 </li>
               );

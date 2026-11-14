@@ -167,6 +167,9 @@ export interface MessageTemplate { kind: "confirmation" | "recall"; body: string
 export interface Profile {
   professionalName?: string;
   cro?: string;
+  croUf?: string; // 2 letras
+  cpf?: string; // só dígitos (opcional)
+  birthDate?: string; // yyyy-mm-dd (opcional)
   workMode: "solo" | "in_clinic" | "owns_clinic";
   contact?: string;
   pdfColor?: string;
@@ -174,6 +177,8 @@ export interface Profile {
   activeSpecialtyIds: string[];
   onboardingDone: boolean;
   clinicName?: string;
+  /** Logo da clínica como data URL (reduzida no navegador); impressa no cabeçalho dos documentos. */
+  logo?: string;
 }
 
 export interface Access {
@@ -181,6 +186,119 @@ export interface Access {
   startsAt: string;
   expiresAt: string;
   email: string;
+}
+
+/** Nota de evolução clínica: o que foi feito ou observado numa consulta. */
+export interface ClinicalNote {
+  id: string;
+  patientId: string;
+  treatmentId?: string; // atendimento ligado (opcional)
+  date: string; // yyyy-mm-dd
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnamnesisQuestion {
+  id: string;
+  text: string;
+  kind: "yesno" | "text";
+  /** Resposta "sim" vira alerta na ficha (ex.: alergia, anticoagulante). */
+  alert?: boolean;
+}
+
+export interface AnamnesisTemplate { id: string; name: string; questions: AnamnesisQuestion[]; createdAt: string }
+
+/** Resposta guardada com cópia do texto da pergunta (o modelo pode mudar depois). */
+export interface AnamnesisAnswer { questionId: string; text: string; kind: AnamnesisQuestion["kind"]; alert?: boolean; yes?: boolean; detail?: string }
+
+export interface AnamnesisRecord {
+  id: string;
+  patientId: string;
+  templateId?: string;
+  templateName: string;
+  answers: AnamnesisAnswer[];
+  filledOn: string; // yyyy-mm-dd
+  createdAt: string;
+}
+
+export type MedicationRoute = "internal" | "external";
+
+/** Medicamento da clínica: só nomes já usados por ela (a lista começa vazia). */
+export interface Medication {
+  id: string;
+  name: string;
+  route: MedicationRoute;
+  controlled: boolean;
+  unit?: string;
+  defaultPosology?: string;
+  createdAt: string;
+}
+
+export interface PrescriptionItem {
+  id: string;
+  medicationId?: string;
+  name: string;
+  quantity?: number;
+  unit?: string;
+  posology: string;
+  route: MedicationRoute;
+  /** Só sinaliza: o SmileOS não gera receita de controle especial válida. */
+  controlled: boolean;
+}
+
+/** Dados do profissional ficam copiados no documento (snapshot da emissão). */
+interface ProfessionalSnapshot { professionalName?: string; professionalCro?: string; professionalCroUf?: string }
+
+export interface Prescription extends ProfessionalSnapshot {
+  id: string;
+  patientId: string;
+  issuedOn: string; // yyyy-mm-dd
+  notes?: string;
+  items: PrescriptionItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PrescriptionTemplate { id: string; name: string; items: Omit<PrescriptionItem, "id" | "medicationId">[]; createdAt: string }
+
+export interface Certificate extends ProfessionalSnapshot {
+  id: string;
+  patientId: string;
+  issuedOn: string; // yyyy-mm-dd
+  startsOn: string; // yyyy-mm-dd
+  kind: "days" | "hours";
+  amount: number;
+  cid?: string;
+  /** CID só entra com o consentimento do paciente. */
+  cidConsent: boolean;
+  purpose?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Documento de texto livre (minuta) com título próprio. */
+export interface CustomDocument extends ProfessionalSnapshot {
+  id: string;
+  patientId: string;
+  title: string;
+  body: string;
+  issuedOn: string; // yyyy-mm-dd
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const FILE_MIMES = ["image/png", "image/jpeg", "image/webp", "application/pdf"] as const;
+
+/** Arquivo do paciente. Na nuvem o conteúdo fica no storage privado; na demonstração, em `dataUrl`. */
+export interface PatientFile {
+  id: string;
+  patientId: string;
+  name: string;
+  mime: (typeof FILE_MIMES)[number];
+  sizeBytes: number;
+  createdAt: string;
+  dataUrl?: string;
 }
 
 export interface Db {
@@ -201,4 +319,13 @@ export interface Db {
   waitlist: WaitlistEntry[];
   recall: Record<string, RecallState>; // por paciente
   recallMonths: Record<string, number>; // por procedimento; padrão 6
+  clinicalNotes: ClinicalNote[];
+  anamnesisTemplates: AnamnesisTemplate[];
+  anamnesisRecords: AnamnesisRecord[];
+  medications: Medication[];
+  prescriptions: Prescription[];
+  prescriptionTemplates: PrescriptionTemplate[];
+  certificates: Certificate[];
+  customDocuments: CustomDocument[];
+  patientFiles: PatientFile[];
 }

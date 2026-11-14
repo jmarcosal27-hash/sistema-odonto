@@ -34,7 +34,7 @@ export function PatientPicker({ patients, value, onChange, onCreate, label = "Pa
 
   return (
     <div className="relative flex flex-col gap-1">
-      <label htmlFor={id} className={cx("text-xs font-medium", invalid ? "text-danger" : "text-muted")}>{label}</label>
+      <label htmlFor={id} className={cx("text-xs font-medium", invalid ? "text-danger" : "text-ink-muted")}>{label}</label>
       <input
         id={id} role="combobox" aria-expanded={open} aria-controls={`${id}-list`} aria-autocomplete="list"
         aria-activedescendant={open && total ? `${id}-opt-${hi}` : undefined} aria-invalid={invalid || undefined}
@@ -48,23 +48,23 @@ export function PatientPicker({ patients, value, onChange, onCreate, label = "Pa
           if (e.key === "Enter" && open && total) { e.preventDefault(); pick(hi); }
           if (e.key === "Escape") setOpen(false);
         }}
-        className={cx("h-10 w-full rounded-md border bg-surface px-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent",
-          invalid ? "border-danger border-2" : "border-border-input")}
+        className={cx("h-11 w-full rounded-md border-[1.5px] bg-surface-100 px-4 text-base text-ink placeholder:text-ink-muted",
+          invalid ? "border-danger" : "border-border-strong")}
       />
       {open && total > 0 && (
-        <ul id={`${id}-list`} role="listbox" className="absolute top-full z-20 mt-1 w-full max-h-64 overflow-auto rounded-md bg-surface shadow-pop border border-border py-1">
+        <ul id={`${id}-list`} role="listbox" className="absolute top-full z-20 mt-1 w-full max-h-64 overflow-auto rounded-md bg-surface-200 shadow-md border border-border py-1">
           {results.map((p, i) => (
             <li key={p.id} id={`${id}-opt-${i}`} role="option" aria-selected={hi === i}
               onMouseDown={(e) => { e.preventDefault(); pick(i); }}
-              className={cx("px-3 py-2 text-sm cursor-pointer", hi === i && "bg-surface-sidebar")}>
+              className={cx("px-3 py-2 text-sm cursor-pointer", hi === i && "bg-surface-300")}>
               <span className="font-medium">{p.fullName}</span>
-              {p.phone && <span className="text-muted"> · {p.phone}</span>}
+              {p.phone && <span className="text-ink-muted"> · {p.phone}</span>}
             </li>
           ))}
           {showCreate && (
             <li id={`${id}-opt-${results.length}`} role="option" aria-selected={hi === results.length}
               onMouseDown={(e) => { e.preventDefault(); pick(results.length); }}
-              className={cx("px-3 py-2 text-sm cursor-pointer text-accent font-semibold", hi === results.length && "bg-surface-sidebar")}>
+              className={cx("px-3 py-2 text-sm cursor-pointer text-brand font-semibold", hi === results.length && "bg-surface-300")}>
               + Cadastrar “{q.trim()}”
             </li>
           )}

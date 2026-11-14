@@ -1,0 +1,65 @@
+feature,area,priority,original,clone,notes
+Cabeçalho fixo do paciente (foto, alerta de saúde, WhatsApp, copiar CPF/telefone),paciente,should,yes,no,SmileOS já tem: parcial (S06 ficha); alerta vem da anamnese
+Abas Visão geral/Anamneses/Orçamentos/Tratamentos/Pagamentos/Evoluções/Documentos/Arquivos,paciente,must,yes,partial,B1: aba Documentos entrou como seção da ficha; faltam Arquivos; SmileOS já tem: parcial (faltam Documentos e Arquivos)
+Bloco de notas livre do paciente com salvamento automático,paciente,could,yes,no,SmileOS já tem: não
+Tarefas por paciente,paciente,could,yes,no,SmileOS já tem: não
+Cadastro: contato de emergência e responsável,paciente,should,yes,no,SmileOS já tem: sim (Guardian); emergência não
+Cadastro: paciente estrangeiro (documento no lugar de CPF),paciente,could,yes,no,SmileOS já tem: não
+Cadastro: categorias/etiquetas e "como conheceu a clínica",paciente,could,yes,no,SmileOS já tem: não
+Link para o paciente preencher o próprio cadastro,paciente,could,yes,no,SmileOS já tem: não; precisa token público
+Anamnese com modelos da clínica,anamnese,must,yes,no,SmileOS já tem: sim (parcial)
+Anamnese: 3 tipos de resposta (sim/não/não sei; +texto; só texto),anamnese,should,yes,no,SmileOS já tem: parcial (sim/não ou texto)
+Anamnese: pergunta marca alerta no prontuário,anamnese,must,yes,no,SmileOS já tem: sim
+Anamnese: reordenar perguntas por arrastar e ativar/desativar,anamnese,should,yes,no,SmileOS já tem: não
+Anamnese: propagar pergunta a todos os modelos,anamnese,could,yes,no,SmileOS já tem: não
+Anamnese: modelos de fábrica (infantil/ortodôntica/cirurgia),anamnese,should,yes,no,SmileOS já tem: parcial (1 padrão); escrever textos próprios
+Anamnese: enviar para paciente responder por link,anamnese,should,yes,no,SmileOS já tem: não; token público com expiração
+Anamnese: solicitar assinatura do paciente com pré-visualização A4,anamnese,should,yes,no,SmileOS já tem: não; ver assinatura
+Anamnese: imprimir,anamnese,must,yes,no,SmileOS já tem: não confirmado
+Evolução com editor rico,evolução,must,yes,no,SmileOS já tem: parcial (texto simples)
+Evolução: imagens anexas (até 20),evolução,should,yes,no,SmileOS já tem: não; exige bucket privado
+Evolução automática ao finalizar tratamento (dente + orçamento),evolução,should,yes,no,SmileOS já tem: não
+Evolução: assinar e travar,evolução,should,yes,no,SmileOS já tem: não (pendência no build-log); revisão jurídica
+Evolução: transcrever por voz com IA e melhorar texto com IA,evolução,could,yes,no,SmileOS já tem: não; recurso pago no original; projeto próprio opcional
+Evolução: histórico por mês e imprimir,evolução,should,yes,no,SmileOS já tem: parcial
+Odontograma permanente e decíduo com status finalizado/em aberto/ausente,tratamento,must,yes,no,SmileOS já tem: sim (S02)
+Tratamento: cartão com preço de tabela x final e vínculo ao orçamento,tratamento,should,yes,no,SmileOS já tem: sim
+Tratamento: convênio e profissional por item,tratamento,should,yes,no,SmileOS já tem: não (Onda C)
+Orçamento: itens com dente/face; entrada, parcelas, desconto, total,orçamento,must,yes,no,SmileOS já tem: sim (S23)
+Orçamento: duplicar e desfazer aprovação,orçamento,should,yes,no,SmileOS já tem: não confirmado
+Orçamento: enviar por WhatsApp e imprimir,orçamento,should,yes,no,SmileOS já tem: parcial (PDF; link público pendente)
+Orçamento: gerar contrato a partir do aprovado,orçamento,should,yes,no,SmileOS já tem: não; depende de modelos de documento
+Pagamentos do paciente: totais, filtros por status, parcelas 1/3, pagar por parcela,financeiro,must,yes,no,SmileOS já tem: sim (parcelas)
+Pagamentos: seleção múltipla de parcelas,financeiro,could,yes,no,SmileOS já tem: não
+Documentos: lista por paciente (receitas, atestados, personalizados),documentos,must,yes,partial,B1: receitas e atestados (sem documentos personalizados); SmileOS já tem: não
+Receita: profissional, data, paciente travado,documentos,must,yes,yes,B1; SmileOS já tem: não
+Receita: itens com nome, quantidade, unidade e posologia,documentos,must,yes,yes,B1; SmileOS já tem: não
+Receita: unidades (ampola, caixa, comprimido, frasco, pacote, tubo, cápsula),documentos,should,yes,yes,B1: sugestões próprias, campo livre; SmileOS já tem: não; lista própria
+Receita: modelos salvos,documentos,should,yes,yes,B1; SmileOS já tem: não
+Receita: gerar/imprimir PDF,documentos,must,yes,partial,B1: impressão A4 pelo navegador; sem PDF no servidor; SmileOS já tem: não; reaproveita layout do orçamento
+Medicamento: cadastro por clínica criado na hora (autocomplete + cadastrar novo),medicamentos,must,yes,yes,B1: começa vazio; nome novo vira medicamento ao salvar a receita; SmileOS já tem: não; NÃO copiar banco do original
+Medicamento: uso interno/externo,medicamentos,should,yes,yes,B1; SmileOS já tem: não
+Medicamento: marcar como controlado,medicamentos,should,yes,yes,B1: só sinaliza e avisa; não gera receita controlada; SmileOS já tem: não; só marcação; receita controlada fora de escopo
+Medicamento: editar do autocomplete,medicamentos,could,yes,no,SmileOS já tem: não
+Receita de controle especial / receita digital certificada,documentos,could,yes,no,SmileOS já tem: não; skip: exige certificado ICP-Brasil e regulação; XL
+Prescrição inteligente (assistida),documentos,could,yes,no,SmileOS já tem: não; skip na primeira versão; exige CRO/CPF do profissional; risco clínico
+Atestado por dias (data, CID opcional, quantidade),documentos,must,yes,yes,B1: CID só com consentimento registrado; SmileOS já tem: não
+Atestado por horas (início e término),documentos,should,yes,partial,B1: quantidade de horas na data; sem horário de início e término; SmileOS já tem: não
+Atestado: busca de CID por código ou nome,documentos,should,yes,no,SmileOS já tem: não; precisa tabela CID própria (dados públicos)
+Documento personalizado com editor e variáveis do paciente/clínica/dentista/data,documentos,should,yes,no,SmileOS já tem: não; nomes de variáveis próprios
+Modelos de fábrica de documentos (contratos, termos de imagem, LGPD, consentimento),documentos,should,yes,no,SmileOS já tem: não; textos próprios com revisão jurídica
+Salvar modelo de documento,documentos,should,yes,no,SmileOS já tem: não
+Solicitar assinatura do profissional e do paciente em documento,assinatura,should,yes,no,SmileOS já tem: não; exige provedor e revisão jurídica
+Assinatura digital com validade legal (quota gratuita no original),assinatura,could,yes,no,SmileOS já tem: não; integrar provedor; L
+Cadastro do profissional com CRO/UF/CPF/nascimento obrigatório para prescrever,documentos,must,yes,yes,B1: CRO, UF, CPF e nascimento em Ajustes; o documento avisa se faltar; SmileOS já tem: não confirmado
+Arquivos: upload de fotos, vídeos e documentos,arquivos,must,yes,no,SmileOS já tem: não; exige bucket privado
+Arquivos: pastas para organizar,arquivos,should,yes,no,SmileOS já tem: não
+Arquivos: URL assinada com expiração e RLS por paciente,arquivos,must,unknown,no,SmileOS já tem: não; requisito nosso (não observado)
+Radiografias com visualizador e comparação,arquivos,could,unknown,no,SmileOS já tem: não; não observado no original nesta conta
+Enviar foto pelo celular (QR/link),arquivos,could,unknown,no,SmileOS já tem: não
+Visão geral: mensagens enviadas ao paciente,paciente,could,yes,no,SmileOS já tem: não (Onda C)
+Visão geral: consulta Serasa por CPF,paciente,could,yes,no,SmileOS já tem: não; skip: parceiro pago e LGPD
+Visão geral: pesquisa de satisfação 2h após consulta finalizada,paciente,could,yes,no,SmileOS já tem: não
+Lista de pacientes: exportar Excel/CSV,paciente,should,yes,no,SmileOS já tem: não confirmado
+Lista de pacientes: aniversariantes e retornos semestrais,paciente,should,yes,no,SmileOS já tem: sim (retornos); aniversariantes não
+Histórico de alterações/auditoria dos documentos,compliance,must,partial,no,SmileOS já tem: não; original guarda 3 meses; fazer melhor com audit_log

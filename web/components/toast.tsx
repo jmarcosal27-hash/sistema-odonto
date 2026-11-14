@@ -18,7 +18,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="polite" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[min(92vw,420px)]">
         {items.map((t) => (
           <div key={t.id} role={t.tone === "error" ? "alert" : "status"}
-            className={`rounded-md px-4 py-3 text-sm font-medium shadow-pop ${t.tone === "error" ? "bg-danger text-on-accent" : "bg-text text-surface"}`}>
+            className={`rounded-md px-4 py-3 text-sm font-medium shadow-md ${t.tone === "error" ? "bg-danger text-on-brand" : "bg-ink text-surface-100"}`}>
             {t.text}
           </div>
         ))}

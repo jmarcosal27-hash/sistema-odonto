@@ -141,3 +141,23 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 export const REFERRAL_SOURCES = ["Indicação", "Instagram", "Google", "Convênio", "Passou na frente", "Outro"];
+
+/** Modelo inicial de anamnese (texto próprio, editável pela clínica). */
+export const DEFAULT_ANAMNESIS: { name: string; questions: { text: string; kind: "yesno" | "text"; alert?: boolean }[] } = {
+  name: "Anamnese geral",
+  questions: [
+    { text: "Está em tratamento médico atualmente?", kind: "yesno", alert: true },
+    { text: "Usa algum medicamento de forma contínua? Quais?", kind: "yesno", alert: true },
+    { text: "Tem alergia a medicamento, anestésico ou látex?", kind: "yesno", alert: true },
+    { text: "Tem problema no coração ou pressão alta?", kind: "yesno", alert: true },
+    { text: "Tem diabetes?", kind: "yesno", alert: true },
+    { text: "Usa anticoagulante ou tem problema de coagulação?", kind: "yesno", alert: true },
+    { text: "Está grávida ou amamentando?", kind: "yesno", alert: true },
+    { text: "Já teve reação ruim a anestesia local?", kind: "yesno", alert: true },
+    { text: "Fuma ou usa outras formas de tabaco?", kind: "yesno" },
+    { text: "Range ou aperta os dentes?", kind: "yesno" },
+    { text: "Sangramento na gengiva ao escovar?", kind: "yesno" },
+    { text: "Motivo da consulta e queixa principal", kind: "text" },
+    { text: "Outras informações importantes de saúde", kind: "text" },
+  ],
+};

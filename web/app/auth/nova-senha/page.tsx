@@ -24,8 +24,8 @@ export default function NovaSenha() {
   };
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg px-4">
-      <form className="w-full max-w-sm space-y-4 rounded-lg bg-surface p-6 shadow-pop" onSubmit={(e) => { e.preventDefault(); save(); }}>
+    <main className="grid min-h-dvh place-items-center bg-surface-100 px-4">
+      <form className="w-full max-w-sm space-y-4 rounded-lg bg-surface-200 p-6 shadow-md" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <h1 className="text-lg font-bold">Criar nova senha</h1>
         <ErrorNote message={error} />
         <Field label="Nova senha">{(id) => <Input id={id} type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />}</Field>

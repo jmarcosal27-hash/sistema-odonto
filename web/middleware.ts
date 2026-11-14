@@ -5,7 +5,11 @@ const PUBLIC = ["/entrar", "/auth", "/api/stripe/webhook", "/privacidade", "/ter
 
 export async function middleware(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) return NextResponse.next(); // modo demonstração
+  if (!url || !anon) {
+    // Em produção, faltar a configuração nunca pode virar "modo demonstração" sem login.
+    if (process.env.NODE_ENV === "production") return new NextResponse("Configuração do servidor incompleta.", { status: 503 });
+    return NextResponse.next(); // modo demonstração (desenvolvimento)
+  }
 
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient(url, anon, {
@@ -30,5 +34,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|brand/).*)"],
 };

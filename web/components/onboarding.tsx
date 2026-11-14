@@ -7,7 +7,7 @@ import { api, useDb } from "@/lib/store";
 import { SPECIALTIES } from "@/lib/catalog";
 import type { Profile } from "@/lib/types";
 
-const COLORS = ["#3D63D6", "#1F7A52", "#8F5F16", "#B3404A", "#16262B"];
+const COLORS = ["#6d4fd8", "#0f766e", "#8a5a00", "#b42318", "#1f1b2e"];
 
 export function Onboarding({ open, onClose }: { open: boolean; onClose: () => void }) {
   const db = useDb();
@@ -28,7 +28,7 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
             return (
               <button key={s.id} type="button" aria-pressed={on}
                 onClick={() => set({ activeSpecialtyIds: on ? p.activeSpecialtyIds.filter((x) => x !== s.id) : [...p.activeSpecialtyIds, s.id] })}
-                className={cx("rounded-pill px-3 h-8 text-sm border", on ? "bg-accent text-on-accent border-accent" : "border-border-input")}>
+                className={cx("rounded-pill px-3 h-8 text-sm border", on ? "bg-brand text-on-brand border-brand" : "border-border-strong")}>
                 {s.name}
               </button>
             );
@@ -58,7 +58,7 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
         <div className="flex gap-3" role="radiogroup" aria-label="Cor do documento">
           {COLORS.map((c) => (
             <button key={c} type="button" role="radio" aria-checked={p.pdfColor === c} aria-label={c} onClick={() => set({ pdfColor: c })}
-              style={{ background: c }} className={cx("size-10 rounded-full ring-offset-2", p.pdfColor === c && "ring-2 ring-text")} />
+              style={{ background: c }} className={cx("size-10 rounded-full ring-offset-2", p.pdfColor === c && "ring-2 ring-ink")} />
           ))}
         </div>
       ),

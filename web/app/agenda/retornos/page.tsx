@@ -37,7 +37,7 @@ export default function Page() {
   return (
     <div className="space-y-4">
       <AgendaTabs />
-      <p className="text-sm text-muted text-center">Pacientes na hora de voltar. O prazo padrão é 6 meses depois da última visita; ajuste por procedimento em <Link href="/tabela" className="font-semibold text-accent">Tabela de preços</Link>.</p>
+      <p className="text-sm text-ink-muted text-center">Pacientes na hora de voltar. O prazo padrão é 6 meses depois da última visita; ajuste por procedimento em <Link href="/tabela" className="font-semibold text-brand">Tabela de preços</Link>.</p>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Segmented label="Etapa" value={tab} onChange={setTab}
           options={(Object.keys(LABEL) as RecallStatus[]).map((s) => ({ value: s, label: `${LABEL[s]} · ${counts[s]}` }))} />
@@ -55,14 +55,14 @@ export default function Page() {
                 <Avatar name={p.fullName} />
                 <div className="flex-1 min-w-48">
                   <Link href={`/pacientes/${p.id}`} className="font-semibold hover:underline">{p.fullName}</Link>
-                  <p className="text-xs text-muted">Última visita {dateBR(r.lastVisit)} · voltar em {dateBR(r.dueAt)}</p>
+                  <p className="text-xs text-ink-muted">Última visita {dateBR(r.lastVisit)} · voltar em {dateBR(r.dueAt)}</p>
                 </div>
                 {late(r.dueAt) && tab === "pending" && <Badge tone="warning">Atrasado</Badge>}
                 <div className="flex flex-wrap gap-2">
                   {tab !== "scheduled" && (p.phone
                     ? <a href={whatsappLink(p.phone, fill(tpl.body, { nome: p.fullName.split(" ")[0] }))} target="_blank" rel="noreferrer"
                         onClick={() => tab === "pending" && api.recall.setStatus(p.id, "contacted", r.dueAt)}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-surface-success-subtle px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>
+                        className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>
                     : <Badge tone="warning">Sem celular</Badge>)}
                   {tab === "pending" && <Button size="sm" variant="secondary" onClick={() => run(() => api.recall.setStatus(p.id, "contacted", r.dueAt), "Marcado como contatado.")}><Check className="size-4" />Contatado</Button>}
                   {tab !== "scheduled" && <Button size="sm" onClick={() => setBooking(p.id)}><CalendarPlus className="size-4" />Agendar</Button>}

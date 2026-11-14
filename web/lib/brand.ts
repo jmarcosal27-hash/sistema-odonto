@@ -1,2 +1,2 @@
-// Nome provisório. /replica-brand define o nome e a identidade finais.
-export const APP_NAME = "Consultório";
+// Grafia exata da marca: "SmileOS". Nunca "Smile OS", "SMILEOS" ou "Smileos".
+export const APP_NAME = "SmileOS";

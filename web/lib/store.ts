@@ -6,17 +6,19 @@
 
 import { useSyncExternalStore } from "react";
 import type {
+  AnamnesisAnswer, AnamnesisQuestion, Certificate, ClinicalNote, CustomDocument, Medication, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
   Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry,
 } from "./types";
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
 import { buildSeed } from "./seed";
+import { MAX_DEMO_FILE_BYTES, checkFile, readAsDataUrl } from "./files";
 import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 2;
+const VERSION = 5;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -29,6 +31,8 @@ export function emptyDb(): Db {
     patients: [], events: [], customProcedures: [], prices: {}, plans: [],
     budgets: [], treatments: [], expenses: [], appointments: [],
     installments: [], waitlist: [], recall: {}, recallMonths: {},
+    clinicalNotes: [], anamnesisTemplates: [], anamnesisRecords: [],
+    medications: [], prescriptions: [], prescriptionTemplates: [], certificates: [], customDocuments: [], patientFiles: [],
     templates: [
       { kind: "confirmation", body: "Olá, {nome}! Passando para confirmar seu horário em {data} às {hora}. Pode responder com SIM para confirmar? 😊" },
       { kind: "recall", body: "Oi, {nome}! Já está na hora da sua revisão. Quer que eu reserve um horário para você nesta semana?" },
@@ -45,6 +49,15 @@ function migrate(db: Db): Db {
   db.waitlist ??= [];
   db.recall ??= {};
   db.recallMonths ??= {};
+  db.clinicalNotes ??= [];
+  db.anamnesisTemplates ??= [];
+  db.anamnesisRecords ??= [];
+  db.medications ??= [];
+  db.prescriptions ??= [];
+  db.prescriptionTemplates ??= [];
+  db.certificates ??= [];
+  db.customDocuments ??= [];
+  db.patientFiles ??= [];
   db.version = VERSION;
   return db;
 }
@@ -144,6 +157,25 @@ function touchVisit(db: Db, patientId: string | undefined, date: string) {
 }
 
 export interface PaymentPlan { installments: number; firstDue: string; method?: PaymentMethod; paidNow?: boolean }
+
+const professionalSnapshot = (db: Db) => ({
+  professionalName: db.profile.professionalName || undefined,
+  professionalCro: db.profile.cro || undefined,
+  professionalCroUf: db.profile.croUf || undefined,
+});
+
+/** Valida e normaliza os itens de uma receita (mesmas regras dos CHECKs do banco). */
+function checkPrescriptionItems(items: Omit<PrescriptionItem, "id" | "medicationId">[]) {
+  if (!items.length) throw new Error("Adicione pelo menos um medicamento.");
+  if (items.length > 30) throw new Error("No máximo 30 itens por receita.");
+  return items.map((it) => {
+    const name = it.name.trim(), posology = it.posology.trim();
+    if (!name) throw new Error("Todo item precisa de nome.");
+    if (!posology) throw new Error(`Informe a posologia de ${name}.`);
+    if (it.quantity !== undefined && !(it.quantity > 0)) throw new Error(`A quantidade de ${name} precisa ser maior que zero.`);
+    return { ...it, name, posology, unit: it.unit?.trim() || undefined };
+  });
+}
 
 const localApi = {
   patients: {
@@ -248,6 +280,7 @@ const localApi = {
         const b = db.budgets.find((x) => x.id === budgetId);
         const plan = b && db.plans.find((p) => p.id === b.planId);
         if (!b || !plan) throw new Error("Orçamento não encontrado.");
+        if (b.status !== "presented") throw new Error("Esse orçamento já foi respondido.");
         const chosen = plan.items.filter((i) => !itemIds || itemIds.includes(i.id));
         if (!chosen.length) throw new Error("Escolha pelo menos um item para aprovar.");
         const n = Math.max(1, Math.min(24, Math.round(payment.installments)));
@@ -275,7 +308,9 @@ const localApi = {
       commit((db) => {
         guard(db);
         const b = db.budgets.find((x) => x.id === budgetId);
-        if (b) b.status = "declined";
+        if (!b) throw new Error("Orçamento não encontrado.");
+        if (b.status !== "presented") throw new Error("Esse orçamento já foi respondido.");
+        b.status = "declined";
       });
     },
   },
@@ -378,6 +413,185 @@ const localApi = {
   recall: {
     async setStatus(patientId: string, status: RecallStatus, dueAt: string) {
       commit((db) => { guard(db); db.recall[patientId] = { status, dueAt, updatedAt: new Date().toISOString() }; });
+    },
+  },
+
+  clinicalNotes: {
+    async save(n: { id?: string; patientId: string; treatmentId?: string; date: string; body: string }) {
+      commit((db) => {
+        guard(db);
+        const body = n.body.trim();
+        if (!body) throw new Error("Escreva a evolução antes de salvar.");
+        if (n.treatmentId && !db.treatments.some((t) => t.id === n.treatmentId && t.patientId === n.patientId)) throw new Error("Atendimento não encontrado para este paciente.");
+        const now = new Date().toISOString();
+        const existing = n.id ? db.clinicalNotes.find((x) => x.id === n.id) : undefined;
+        if (existing) Object.assign(existing, { treatmentId: n.treatmentId, date: n.date, body, updatedAt: now });
+        else db.clinicalNotes.push({ id: uid(), patientId: n.patientId, treatmentId: n.treatmentId, date: n.date, body, createdAt: now, updatedAt: now } satisfies ClinicalNote);
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.clinicalNotes = db.clinicalNotes.filter((x) => x.id !== id); }); },
+  },
+
+  anamnesis: {
+    async saveTemplate(t: { id?: string; name: string; questions: AnamnesisQuestion[] }) {
+      commit((db) => {
+        guard(db);
+        const name = t.name.trim();
+        if (name.length < 2) throw new Error("Dê um nome ao modelo.");
+        const questions = t.questions.filter((q) => q.text.trim()).map((q) => ({ ...q, text: q.text.trim() }));
+        if (!questions.length) throw new Error("Adicione pelo menos uma pergunta.");
+        const existing = t.id ? db.anamnesisTemplates.find((x) => x.id === t.id) : undefined;
+        if (existing) Object.assign(existing, { name, questions });
+        else db.anamnesisTemplates.push({ id: uid(), name, questions, createdAt: new Date().toISOString() });
+      });
+    },
+    async removeTemplate(id: string) {
+      commit((db) => {
+        guard(db);
+        db.anamnesisTemplates = db.anamnesisTemplates.filter((x) => x.id !== id);
+        db.anamnesisRecords.forEach((r) => { if (r.templateId === id) delete r.templateId; });
+      });
+    },
+    async saveRecord(r: { patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string }) {
+      commit((db) => {
+        guard(db);
+        if (!r.answers.length) throw new Error("A ficha está vazia.");
+        db.anamnesisRecords.push({ ...r, id: uid(), createdAt: new Date().toISOString() });
+      });
+    },
+    async removeRecord(id: string) { commit((db) => { guard(db); db.anamnesisRecords = db.anamnesisRecords.filter((x) => x.id !== id); }); },
+  },
+
+  prescriptions: {
+    async save(r: { id?: string; patientId: string; issuedOn: string; notes?: string; items: Omit<PrescriptionItem, "id" | "medicationId">[] }) {
+      commit((db) => {
+        guard(db);
+        const items = checkPrescriptionItems(r.items);
+        if (!db.patients.some((p) => p.id === r.patientId)) throw new Error("Paciente não encontrado.");
+        const now = new Date().toISOString();
+        const linked: PrescriptionItem[] = items.map((it) => {
+          // Nome novo vira medicamento da clínica (único por nome, sem diferenciar maiúsculas).
+          let med = db.medications.find((m) => m.name.toLowerCase() === it.name.toLowerCase());
+          if (!med) {
+            med = { id: uid(), name: it.name, route: it.route, controlled: it.controlled, unit: it.unit, defaultPosology: it.posology, createdAt: now } satisfies Medication;
+            db.medications.push(med);
+          }
+          return { ...it, id: uid(), medicationId: med.id };
+        });
+        const existing = r.id ? db.prescriptions.find((x) => x.id === r.id) : undefined;
+        if (r.id && !existing) throw new Error("Receita não encontrada.");
+        if (existing) Object.assign(existing, { issuedOn: r.issuedOn, notes: r.notes?.trim() || undefined, items: linked, updatedAt: now });
+        else db.prescriptions.push({ id: uid(), patientId: r.patientId, ...professionalSnapshot(db), issuedOn: r.issuedOn, notes: r.notes?.trim() || undefined, items: linked, createdAt: now, updatedAt: now } satisfies Prescription);
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.prescriptions = db.prescriptions.filter((x) => x.id !== id); }); },
+  },
+
+  medications: {
+    async update(id: string, m: { name: string; route: Medication["route"]; controlled: boolean; unit?: string; defaultPosology?: string }) {
+      commit((db) => {
+        guard(db);
+        const cur = db.medications.find((x) => x.id === id);
+        if (!cur) throw new Error("Medicamento não encontrado.");
+        const name = m.name.trim();
+        if (!name) throw new Error("Informe o nome do medicamento.");
+        if (db.medications.some((x) => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) throw new Error("Já existe um medicamento com esse nome.");
+        Object.assign(cur, { name, route: m.route, controlled: m.controlled, unit: m.unit?.trim() || undefined, defaultPosology: m.defaultPosology?.trim() || undefined });
+      });
+    },
+    // Receitas já emitidas guardam o nome em cada item, então seguem iguais.
+    async remove(id: string) {
+      commit((db) => {
+        guard(db);
+        db.medications = db.medications.filter((x) => x.id !== id);
+        db.prescriptions.forEach((r) => r.items.forEach((i) => { if (i.medicationId === id) delete i.medicationId; }));
+      });
+    },
+  },
+
+  prescriptionTemplates: {
+    async rename(id: string, name: string) {
+      commit((db) => {
+        guard(db);
+        const t = db.prescriptionTemplates.find((x) => x.id === id);
+        if (!t) throw new Error("Modelo não encontrado.");
+        const n = name.trim();
+        if (n.length < 2) throw new Error("Dê um nome ao modelo.");
+        if (db.prescriptionTemplates.some((x) => x.id !== id && x.name.toLowerCase() === n.toLowerCase())) throw new Error("Já existe um modelo com esse nome.");
+        t.name = n;
+      });
+    },
+    async save(t: { name: string; items: PrescriptionTemplate["items"] }) {
+      commit((db) => {
+        guard(db);
+        const name = t.name.trim();
+        if (name.length < 2) throw new Error("Dê um nome ao modelo.");
+        if (db.prescriptionTemplates.some((x) => x.name.toLowerCase() === name.toLowerCase())) throw new Error("Já existe um modelo com esse nome.");
+        const items = checkPrescriptionItems(t.items).map(({ name: n, quantity, unit, posology, route, controlled }) => ({ name: n, quantity, unit, posology, route, controlled }));
+        db.prescriptionTemplates.push({ id: uid(), name, items, createdAt: new Date().toISOString() });
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.prescriptionTemplates = db.prescriptionTemplates.filter((x) => x.id !== id); }); },
+  },
+
+  certificates: {
+    async save(c: { id?: string; patientId: string; issuedOn: string; startsOn: string; kind: Certificate["kind"]; amount: number; cid?: string; cidConsent: boolean; purpose?: string }) {
+      commit((db) => {
+        guard(db);
+        if (!db.patients.some((p) => p.id === c.patientId)) throw new Error("Paciente não encontrado.");
+        if (c.kind !== "days" && c.kind !== "hours") throw new Error("Escolha se o atestado é por dias ou por horas.");
+        const max = c.kind === "days" ? 365 : 24;
+        if (!Number.isInteger(c.amount) || c.amount < 1 || c.amount > max) throw new Error(`Informe de 1 a ${max} ${c.kind === "days" ? "dias" : "horas"}.`);
+        const cid = c.cid?.trim() || undefined;
+        if (cid && !c.cidConsent) throw new Error("O CID só pode constar com o consentimento do paciente.");
+        const now = new Date().toISOString();
+        const body = { issuedOn: c.issuedOn, startsOn: c.startsOn, kind: c.kind, amount: c.amount, cid, cidConsent: !!cid, purpose: c.purpose?.trim() || undefined, updatedAt: now };
+        const existing = c.id ? db.certificates.find((x) => x.id === c.id) : undefined;
+        if (c.id && !existing) throw new Error("Atestado não encontrado.");
+        if (existing) Object.assign(existing, body);
+        else db.certificates.push({ id: uid(), patientId: c.patientId, ...professionalSnapshot(db), ...body, createdAt: now } satisfies Certificate);
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.certificates = db.certificates.filter((x) => x.id !== id); }); },
+  },
+
+  customDocuments: {
+    async save(d: { id?: string; patientId: string; issuedOn: string; title: string; body: string }) {
+      commit((db) => {
+        guard(db);
+        if (!db.patients.some((p) => p.id === d.patientId)) throw new Error("Paciente não encontrado.");
+        const title = d.title.trim(), body = d.body.trim();
+        if (!title) throw new Error("Dê um título ao documento.");
+        if (!body) throw new Error("Escreva o texto do documento.");
+        if (title.length > 120 || body.length > 10000) throw new Error("Título ou texto longo demais.");
+        const now = new Date().toISOString();
+        const existing = d.id ? db.customDocuments.find((x) => x.id === d.id) : undefined;
+        if (d.id && !existing) throw new Error("Documento não encontrado.");
+        if (existing) Object.assign(existing, { title, body, issuedOn: d.issuedOn, updatedAt: now });
+        else db.customDocuments.push({ id: uid(), patientId: d.patientId, ...professionalSnapshot(db), title, body, issuedOn: d.issuedOn, createdAt: now, updatedAt: now } satisfies CustomDocument);
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.customDocuments = db.customDocuments.filter((x) => x.id !== id); }); },
+  },
+
+  patientFiles: {
+    // shortcut: na demonstração o arquivo vai inteiro para o localStorage (limite de 1 MB; storage cheio falha em silêncio, como o resto da camada falsa); na nuvem vai para o storage privado.
+    async add(patientId: string, file: File) {
+      guard(load());
+      const mime = checkFile(file, MAX_DEMO_FILE_BYTES);
+      const dataUrl = await readAsDataUrl(file);
+      commit((db) => {
+        guard(db);
+        if (!db.patients.some((p) => p.id === patientId)) throw new Error("Paciente não encontrado.");
+        db.patientFiles.push({ id: uid(), patientId, name: file.name.slice(0, 200), mime, sizeBytes: file.size, createdAt: new Date().toISOString(), dataUrl });
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.patientFiles = db.patientFiles.filter((x) => x.id !== id); }); },
+    async url(id: string): Promise<string> {
+      const f = load().patientFiles.find((x) => x.id === id);
+      if (!f?.dataUrl) throw new Error("Arquivo não encontrado.");
+      // Navegadores bloqueiam abrir data URL em aba nova; um blob: abre.
+      return URL.createObjectURL(await (await fetch(f.dataUrl)).blob());
     },
   },
 
@@ -494,6 +708,14 @@ export const api: typeof localApi = remoteApi ? {
   waitlist: remoteApi.waitlist,
   recall: remoteApi.recall,
   expenses: remoteApi.expenses,
+  clinicalNotes: remoteApi.clinicalNotes,
+  prescriptions: remoteApi.prescriptions,
+  medications: remoteApi.medications,
+  prescriptionTemplates: remoteApi.prescriptionTemplates,
+  certificates: remoteApi.certificates,
+  customDocuments: remoteApi.customDocuments,
+  patientFiles: remoteApi.patientFiles,
+  anamnesis: remoteApi.anamnesis,
   catalog: remoteApi.catalog,
   account: {
     updateProfile: remoteApi.account.updateProfile,

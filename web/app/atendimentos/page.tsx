@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useDb, api, stalledTreatments } from "@/lib/store";
-import { dateBR, money } from "@/lib/format";
+import { dateBR, money, todayISO } from "@/lib/format";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Select } from "@/components/ui";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useAction } from "@/components/toast";
@@ -54,13 +54,13 @@ export default function Page() {
       </div>
 
       {stalled > 0 && (
-        <Link href="/atendimentos/parados" className="flex items-center justify-between gap-3 rounded-lg bg-surface-warning-subtle px-4 py-3 text-sm font-medium">
+        <Link href="/atendimentos/parados" className="flex items-center justify-between gap-3 rounded-lg bg-warning-soft px-4 py-3 text-sm font-medium">
           {stalled} tratamento(s) aprovado(s) parado(s) há mais de 7 dias, sem consulta marcada<span className="font-semibold">Ver →</span>
         </Link>
       )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Kpi tone="success" label="Recebido" value={money(received)} sub="nos atendimentos filtrados" />
-        <Kpi tone="warning" label="A receber (avulsos)" value={money(pending)} sub={<>parcelas de orçamento em <Link href="/financeiro?aba=receivable" className="font-semibold text-accent">Financeiro</Link></>} />
+        <Kpi tone="warning" label="A receber (avulsos)" value={money(pending)} sub={<>parcelas de orçamento em <Link href="/financeiro?aba=receivable" className="font-semibold text-brand">Financeiro</Link></>} />
         <Kpi label="Em andamento" value={inProgress} sub="tratamentos não concluídos" />
       </div>
 
@@ -84,7 +84,7 @@ export default function Page() {
               <li key={t.id} className="grid gap-2 p-4 md:grid-cols-[1fr_auto_auto] md:items-center">
                 <div className="min-w-0">
                   <p className="font-medium truncate">{t.procedureName}</p>
-                  <p className="text-xs text-muted truncate"><Link href={`/pacientes/${t.patientId}`} className="hover:underline">{p?.fullName ?? "—"}</Link> · {dateBR(t.performedAt)}{t.budgetId ? " · do orçamento" : ""}</p>
+                  <p className="text-xs text-ink-muted truncate"><Link href={`/pacientes/${t.patientId}`} className="hover:underline">{p?.fullName ?? "—"}</Link> · {dateBR(t.performedAt)}{t.budgetId ? " · do orçamento" : ""}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold tabular-nums">{money(t.priceCents)}</span>
@@ -92,7 +92,7 @@ export default function Page() {
                   {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">No orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
                 </div>
                 <div className="flex gap-2 md:justify-end">
-                  {t.clinicalStatus === "in_progress" && <Button size="sm" variant="soft" onClick={() => run(() => api.treatments.update(t.id, { clinicalStatus: "done", performedAt: new Date().toISOString().slice(0, 10) }), "Marcado como concluído.")}>Concluir</Button>}
+                  {t.clinicalStatus === "in_progress" && <Button size="sm" variant="soft" onClick={() => run(() => api.treatments.update(t.id, { clinicalStatus: "done", performedAt: todayISO() }), "Marcado como concluído.")}>Concluir</Button>}
                   {t.paymentStatus === "pending" && <Button size="sm" onClick={() => run(() => api.treatments.update(t.id, { paymentStatus: "received" }), "Pagamento registrado.")}>Recebi</Button>}
                 </div>
               </li>

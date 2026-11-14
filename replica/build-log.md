@@ -60,3 +60,84 @@ lista de espera e horário vago listado. Sem erros no console.
 
 Dados antigos no navegador são migrados (versão 2) sem perder nada.
 Pendente: verificação em 390px das telas novas, prints para replica-diff.
+
+## Onda B (parcial) — 2026-11-14
+
+Itens 9 e 10 do prontuário, sem storage. Imagens/radiografias (11) e documentos
+(12) ficam para quando houver bucket privado. Migration nova:
+`web/supabase/migrations/20261114000001_prontuario_evolucao_anamnese.sql`
+(a migration anterior não foi alterada). Camada falsa em versão 3 (migração
+completa os campos novos sem perder dados) e equivalente em `lib/remote.ts`.
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| 10 Evolução clínica (S22a) | done | nota por consulta na ficha do paciente: criar, editar, excluir; ligada a um atendimento ou só a uma data; estados vazio/preenchido/erro no modal; só leitura quando o acesso venceu | assinatura/travamento da nota após prazo; anexos (precisam de storage) | RLS: a nota precisa respeitar o modo "consultório dividido". Resolvido com `exists` sobre `patients`, cuja RLS vale dentro da política; também impede nota apontando para paciente de outra clínica |
+| 9 Anamnese (S22c) | partial | modelos editáveis por clínica (perguntas sim/não ou texto, "sim vira alerta"), modelo padrão próprio com 13 perguntas, preenchimento na ficha, histórico de fichas, alertas da última ficha em destaque | **envio por link para o paciente preencher** (precisa de token público e rota sem login, com expiração e limite de uso); reordenar perguntas; assinatura | A ficha guarda cópia do texto das perguntas, para editar ou apagar o modelo não alterar respostas antigas |
+
+Não testado no navegador nem contra o Supabase real (a migration e as políticas
+novas só foram escritas; rodar `node scripts/rls-test.mjs` após aplicar).
+Pendente também: teste em 390px e passada só de teclado nas telas novas.
+
+## Correções da revisão de segurança — 2026-11-14
+
+Migration `20261114000002_correcoes_seguranca.sql`, ajustes em `lib/remote.ts`, `lib/finance.ts`,
+`lib/store.ts`, callback de auth, webhook do Stripe, exclusão de conta e `authorize-dialog`.
+Detalhes e pendências em `backend.md` (seção "Revisão 2026-11-14"). Lint, tsc e `node --check`
+limpos; **migration e `rls-test.mjs` ainda não rodados contra um Supabase**.
+
+## Identidade visual SmileOS — 2026-11-14
+
+Fonte: design system em `D:\SISTEMA DENTISTA\design-system` (tokens, logos, regras de marca). Os tokens antigos de `replica/design/` foram substituídos (arquivos mantidos só com uma nota de obsolescência).
+
+| item | status | pendências | o mais difícil |
+| --- | --- | --- | --- |
+| Logos em `web/public/brand/` e nome `SmileOS` em `lib/brand.ts` | done | — | O nome só aparecia via `APP_NAME`; não havia "Consultório" solto nas telas |
+| Tokens claro/escuro em `globals.css` (cores, espaço, raio, sombra, tipografia) | done | Escala `space-*` fica só como variável CSS (Tailwind usa a própria escala) | Migrar ~700 usos de classes antigas (`bg-surface`, `text-muted`, `bg-accent`...) para as novas por substituição em lote, mantendo o seletor de tema `data-theme` |
+| Fonte Plus Jakarta Sans 400–800 (`next/font/google`) | done | — | — |
+| Componentes (`ui.tsx`, `shell.tsx`): botões 44px, foco 3px, campos com borda forte, cartões, etiquetas | done | Vários botões/links feitos à mão nas telas ainda têm 32–36px de altura (alvo de toque < 44px) | Manter a API de props; `Button` ganhou `pill` |
+| Logotipo no shell e em `/entrar` (claro/escuro por tema), ícone no cabeçalho mobile | done | Conferir visualmente | Alternar logo claro/escuro respeitando `data-theme` e `prefers-color-scheme` sem JavaScript (classes em `globals.css`) |
+| Ícone do app, favicon e manifest (SVG + PNG 192/512 via sharp) | done | Ícone "maskable" não gerado | `favicon.ico` antigo removido; não há `.ico` novo |
+| Ícones | done | — | O app já usava Lucide (traço 2px por padrão); nada a trocar |
+| Contraste (leitura + cálculo WCAG dos pares principais, claro e escuro) | done | — | Todos os pares passam; `brand-violet` sobre `brand-ink` (3,0:1) não é usado |
+| Verificação | lint e `tsc` limpos; `build` ok | Conferência visual das telas **não testada** (sem servidor) | A primeira execução do build falhou ao baixar a fonte do Google (rede); a seguinte passou |
+
+## Onda B1 (documentos simples) — 2026-11-14
+
+Receita e atestado sem storage, sem assinatura digital e sem receita controlada digital. Migration nova:
+`web/supabase/migrations/20261114000003_documentos.sql` (as anteriores não foram editadas; só a RPC
+`update_my_profile` foi substituída por uma versão com mais campos). Camada falsa em versão 4 (migração só
+acrescenta listas vazias) e equivalente em `lib/remote.ts`. Clean-room: textos, rótulos, modelos e sugestões
+de unidade são próprios; a lista de medicamentos começa vazia.
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| Perfil profissional (CRO, UF, CPF, nascimento) | done | em Ajustes; RPC `update_my_profile` estendida sem reabrir a escalada de privilégio (só nome, CRO, UF, CPF, nascimento e tema); CPF guardado só com dígitos | CPF e nascimento são legíveis por outros membros da clínica porque `members_read` é ampla (ver riscos em `backend.md`) | trocar a assinatura da RPC exige remover a antiga (senão a chamada por nome fica ambígua) |
+| Medicamentos por clínica | done | `medications`, único por clínica + nome sem diferenciar maiúsculas; nome novo usado na receita é cadastrado na hora e volta no autocomplete (datalist) | editar/excluir medicamento pela tela | — |
+| Receita simples | done | `prescriptions` + `prescription_items`; criar, ver, editar, excluir; "controlado" só sinaliza e avisa que precisa de talonário oficial; receita e itens gravados numa transação (`save_prescription`) | receita de controle especial, assinatura digital | itens herdam a regra da receita via `exists` (a RLS de `prescriptions` vale dentro dele) |
+| Atestado | done | por dias ou por horas, CID opcional só com consentimento (CHECK no banco), texto livre | horário de início/término; busca de CID | — |
+| Modelos de receita | done | `prescription_templates` (itens em jsonb), usar ao criar receita, salvar a partir da receita | editar/excluir modelo pela tela | — |
+| Ficha do paciente: Documentos | done | lista mista por data, estados vazio/preenchido/erro (no modal); só leitura quando o acesso venceu | — | — |
+| Impressão A4 | done | `/receitas/[id]/imprimir` e `/atestados/[id]/imprimir`, sem o shell; cabeçalho com nome da clínica, profissional com CRO/UF, linha de assinatura à mão e aviso de minuta; avisa na tela se faltar nome, CRO ou UF | logo da clínica (não há upload), PDF no servidor | nome/CRO/UF ficam copiados no documento na emissão (não mudam se o perfil mudar) |
+| Banco, RLS e `rls-test.mjs` | partial | RLS no padrão existente, `can_see_patient` nas tabelas com paciente, gatilhos de mesma clínica; casos novos no `rls-test.mjs` | **migration não aplicada e teste não executado** | — |
+
+Verificação: `npm run lint`, `npx tsc --noEmit` e `node --check scripts/rls-test.mjs` limpos.
+Não testado no navegador (sem servidor) nem contra um Supabase. Pendentes: 390px e passada só de teclado.
+
+## Onda B1 — itens que ficaram de fora — 2026-11-14
+
+Migration nova `web/supabase/migrations/20261114000004_documentos_extras.sql` (não aplicada). Camada falsa em versão 5.
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| Logo na impressão A4 | done | `clinics.logo_data` (data URL png/jpeg/webp até 300 KB, CHECK no banco); upload em Ajustes reduz a imagem para 320 px no navegador; só o dono grava (política `clinics_update`); aparece no cabeçalho de receita, atestado e documento livre | `logo_path` antigo segue sem uso | — |
+| Editar e excluir medicamentos e modelos | done | modal "Medicamentos e modelos" na ficha; renomear modelo; excluir medicamento mantém os itens das receitas já emitidas (nome é copiado no item); RLS inalterada: dono ou autor excluem/renomeiam, qualquer dono/dentista edita medicamento | editar os itens de um modelo (hoje só renomear ou recriar) | update/delete negado pela RLS volta sem erro e sem linhas; a camada nuvem trata "0 linhas" como "sem permissão" |
+| Busca de CID | done | lista curta e original (25 códigos odontológicos comuns, descrições próprias) como sugestão no campo; consentimento obrigatório continua no formulário e no CHECK | tabela completa da CID | — |
+| Documentos personalizados | done | `custom_documents` (título 1–120, texto até 10000), mesma regra de autoria dos atestados, impressão A4 em `/documentos/[id]/imprimir` com aviso de minuta | modelos de documento reutilizáveis | — |
+| Arquivos do paciente | done | `patient_files` + bucket privado `patient-files` (PNG/JPG/WebP/PDF até 10 MB), caminho `<clínica>/<paciente>/<uuid>.<ext>`; leem e enviam dono, dentista e recepção (financeiro não); apagar: dono ou quem enviou; abre por link assinado de 60 s; na demonstração fica em localStorage (limite 1 MB) | apagar objetos do storage quando o paciente é excluído; antivírus; miniaturas | política de storage precisa da linha de `patient_files` para saber quem enviou: o app apaga o objeto antes da linha |
+| Teste 390 px | not tested | layout usa flex-wrap, `break-all` nos nomes e modais em tela cheia no celular, mas **não foi aberto no navegador** (o dev server foi encerrado por falta de memória e não deveria ser religado) | passada visual em 390 px e só de teclado | — |
+| Assinatura digital ICP-Brasil | skip | regulada | **decisão para o advogado** | — |
+| Receita de controle especial / talonário | skip | regulada; "controlado" só sinaliza | **decisão para o advogado** | — |
+| Banco, RLS e `rls-test.mjs` | partial | casos novos para logo, documentos livres, arquivos (tabela e storage, incluindo B, financeiro, modo dividido e acesso vencido) | **migrations 3 e 4 não aplicadas; teste não executado** | — |
+
+Também corrigido: o campo CPF de Ajustes usava `/D/g` em vez de `/\D/g` e aceitava letras.
+Riscos: logo e arquivos exigem decisão de retenção LGPD; excluir paciente apaga as linhas de `patient_files`, mas os objetos ficam no storage (limpar manualmente por enquanto).
