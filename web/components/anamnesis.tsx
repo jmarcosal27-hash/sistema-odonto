@@ -53,7 +53,7 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
           {records.map((r) => (
             <li key={r.id} className="py-2 text-sm">
               <details>
-                <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-md py-1 focus-visible:outline-2 focus-visible:outline-brand">
+                <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-md py-1">
                   <span><span className="font-semibold">{dateBR(r.filledOn)}</span><span className="text-ink-muted"> · {r.templateName}</span></span>
                   {alertsOf(r).length > 0 && <Badge tone="danger">{alertsOf(r).length} alerta(s)</Badge>}
                 </summary>

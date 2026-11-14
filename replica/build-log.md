@@ -84,3 +84,19 @@ Migration `20261114000002_correcoes_seguranca.sql`, ajustes em `lib/remote.ts`, 
 `lib/store.ts`, callback de auth, webhook do Stripe, exclusão de conta e `authorize-dialog`.
 Detalhes e pendências em `backend.md` (seção "Revisão 2026-11-14"). Lint, tsc e `node --check`
 limpos; **migration e `rls-test.mjs` ainda não rodados contra um Supabase**.
+
+## Identidade visual SmileOS — 2026-11-14
+
+Fonte: design system em `D:\SISTEMA DENTISTA\design-system` (tokens, logos, regras de marca). Os tokens antigos de `replica/design/` foram substituídos (arquivos mantidos só com uma nota de obsolescência).
+
+| item | status | pendências | o mais difícil |
+| --- | --- | --- | --- |
+| Logos em `web/public/brand/` e nome `SmileOS` em `lib/brand.ts` | done | — | O nome só aparecia via `APP_NAME`; não havia "Consultório" solto nas telas |
+| Tokens claro/escuro em `globals.css` (cores, espaço, raio, sombra, tipografia) | done | Escala `space-*` fica só como variável CSS (Tailwind usa a própria escala) | Migrar ~700 usos de classes antigas (`bg-surface`, `text-muted`, `bg-accent`...) para as novas por substituição em lote, mantendo o seletor de tema `data-theme` |
+| Fonte Plus Jakarta Sans 400–800 (`next/font/google`) | done | — | — |
+| Componentes (`ui.tsx`, `shell.tsx`): botões 44px, foco 3px, campos com borda forte, cartões, etiquetas | done | Vários botões/links feitos à mão nas telas ainda têm 32–36px de altura (alvo de toque < 44px) | Manter a API de props; `Button` ganhou `pill` |
+| Logotipo no shell e em `/entrar` (claro/escuro por tema), ícone no cabeçalho mobile | done | Conferir visualmente | Alternar logo claro/escuro respeitando `data-theme` e `prefers-color-scheme` sem JavaScript (classes em `globals.css`) |
+| Ícone do app, favicon e manifest (SVG + PNG 192/512 via sharp) | done | Ícone "maskable" não gerado | `favicon.ico` antigo removido; não há `.ico` novo |
+| Ícones | done | — | O app já usava Lucide (traço 2px por padrão); nada a trocar |
+| Contraste (leitura + cálculo WCAG dos pares principais, claro e escuro) | done | — | Todos os pares passam; `brand-violet` sobre `brand-ink` (3,0:1) não é usado |
+| Verificação | lint e `tsc` limpos; `build` ok | Conferência visual das telas **não testada** (sem servidor) | A primeira execução do build falhou ao baixar a fonte do Google (rede); a seguinte passou |

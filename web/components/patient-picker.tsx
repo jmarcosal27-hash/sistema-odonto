@@ -48,8 +48,8 @@ export function PatientPicker({ patients, value, onChange, onCreate, label = "Pa
           if (e.key === "Enter" && open && total) { e.preventDefault(); pick(hi); }
           if (e.key === "Escape") setOpen(false);
         }}
-        className={cx("h-10 w-full rounded-md border bg-surface-200 px-3 text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand",
-          invalid ? "border-danger border-2" : "border-border-strong")}
+        className={cx("h-11 w-full rounded-md border-[1.5px] bg-surface-100 px-4 text-base text-ink placeholder:text-ink-muted",
+          invalid ? "border-danger" : "border-border-strong")}
       />
       {open && total > 0 && (
         <ul id={`${id}-list`} role="listbox" className="absolute top-full z-20 mt-1 w-full max-h-64 overflow-auto rounded-md bg-surface-200 shadow-md border border-border py-1">

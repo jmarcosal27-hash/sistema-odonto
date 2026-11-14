@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { REMOTE, supabaseBrowser } from "@/lib/supabase/client";
-import { APP_NAME } from "@/lib/brand";
+import { Logo } from "@/components/logo";
 import { Button, Field, Input, Segmented, ErrorNote } from "@/components/ui";
 
 type Mode = "login" | "signup" | "reset";
@@ -68,10 +68,7 @@ export default function Entrar() {
 
   return (
     <Center>
-      <div className="flex items-center gap-2">
-        <span aria-hidden className="grid size-10 place-items-center rounded-full bg-brand text-on-brand font-bold">{APP_NAME[0]}</span>
-        <h1 className="text-xl font-bold">{APP_NAME}</h1>
-      </div>
+      <h1 className="m-0"><Logo width={200} /></h1>
       <Segmented label="Entrar ou criar conta" value={mode} onChange={(m) => { setMode(m); setError(null); setInfo(null); }}
         options={[{ value: "login", label: "Entrar" }, { value: "signup", label: "Criar conta" }, { value: "reset", label: "Esqueci a senha" }]} />
       <form className="w-full space-y-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
