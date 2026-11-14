@@ -177,6 +177,8 @@ export interface Profile {
   activeSpecialtyIds: string[];
   onboardingDone: boolean;
   clinicName?: string;
+  /** Logo da clínica como data URL (reduzida no navegador); impressa no cabeçalho dos documentos. */
+  logo?: string;
 }
 
 export interface Access {
@@ -275,6 +277,30 @@ export interface Certificate extends ProfessionalSnapshot {
   updatedAt: string;
 }
 
+/** Documento de texto livre (minuta) com título próprio. */
+export interface CustomDocument extends ProfessionalSnapshot {
+  id: string;
+  patientId: string;
+  title: string;
+  body: string;
+  issuedOn: string; // yyyy-mm-dd
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const FILE_MIMES = ["image/png", "image/jpeg", "image/webp", "application/pdf"] as const;
+
+/** Arquivo do paciente. Na nuvem o conteúdo fica no storage privado; na demonstração, em `dataUrl`. */
+export interface PatientFile {
+  id: string;
+  patientId: string;
+  name: string;
+  mime: (typeof FILE_MIMES)[number];
+  sizeBytes: number;
+  createdAt: string;
+  dataUrl?: string;
+}
+
 export interface Db {
   version: number;
   patients: Patient[];
@@ -300,4 +326,6 @@ export interface Db {
   prescriptions: Prescription[];
   prescriptionTemplates: PrescriptionTemplate[];
   certificates: Certificate[];
+  customDocuments: CustomDocument[];
+  patientFiles: PatientFile[];
 }

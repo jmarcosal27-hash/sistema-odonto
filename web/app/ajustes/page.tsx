@@ -7,6 +7,7 @@ import { Button, Card, Field, Input, PageSkeleton, Segmented, cx } from "@/compo
 import { useToast } from "@/components/toast";
 import type { Profile } from "@/lib/types";
 import { maskCpf } from "@/lib/format";
+import { logoFromFile } from "@/lib/files";
 
 const COLORS = ["#6d4fd8", "#0f766e", "#8a5a00", "#b42318", "#1f1b2e"];
 
@@ -54,7 +55,24 @@ export default function Page() {
             {COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={p.pdfColor === c} aria-label={c} onClick={() => set({ pdfColor: c })} style={{ background: c }} className={cx("size-9 rounded-full ring-offset-2", p.pdfColor === c && "ring-2 ring-ink")} />)}
           </div>
         </div>
-        <div className="flex justify-end"><Button disabled={!dirty} onClick={async () => { await api.account.updateProfile(draft); setDraft({}); toast("Ajustes salvos."); }}>Salvar</Button></div>
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-ink-muted">Logo nos documentos impressos (opcional)</span>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL pequeno */}
+            {p.logo ? <img src={p.logo} alt="Logo atual da clínica" className="h-14 w-auto max-w-32 rounded-md border border-border bg-white object-contain p-1" /> : <span className="text-sm text-ink-muted">Sem logo.</span>}
+            <label className="inline-flex h-10 cursor-pointer items-center rounded-pill bg-surface-300 px-4 text-sm font-semibold focus-within:outline focus-within:outline-2">
+              Escolher imagem
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={async (e) => {
+                const f = e.target.files?.[0]; e.target.value = "";
+                if (!f) return;
+                try { set({ logo: await logoFromFile(f) }); } catch (err) { toast(err instanceof Error ? err.message : "Não foi possível usar a imagem.", "error"); }
+              }} />
+            </label>
+            {p.logo && <Button type="button" size="sm" variant="ghost" onClick={() => set({ logo: undefined })}>Remover</Button>}
+          </div>
+          <p className="text-xs text-ink-muted">Só o dono da clínica troca o logo. Ele é reduzido para caber no documento.</p>
+        </div>
+        <div className="flex justify-end"><Button disabled={!dirty} onClick={async () => { try { await api.account.updateProfile(draft); setDraft({}); toast("Ajustes salvos."); } catch (e) { toast(e instanceof Error ? e.message : "Não foi possível salvar.", "error"); } }}>Salvar</Button></div>
       </Card>
 
       <Card className="flex flex-wrap items-center justify-between gap-3">

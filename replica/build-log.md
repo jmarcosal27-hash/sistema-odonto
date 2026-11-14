@@ -122,3 +122,22 @@ de unidade são próprios; a lista de medicamentos começa vazia.
 
 Verificação: `npm run lint`, `npx tsc --noEmit` e `node --check scripts/rls-test.mjs` limpos.
 Não testado no navegador (sem servidor) nem contra um Supabase. Pendentes: 390px e passada só de teclado.
+
+## Onda B1 — itens que ficaram de fora — 2026-11-14
+
+Migration nova `web/supabase/migrations/20261114000004_documentos_extras.sql` (não aplicada). Camada falsa em versão 5.
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| Logo na impressão A4 | done | `clinics.logo_data` (data URL png/jpeg/webp até 300 KB, CHECK no banco); upload em Ajustes reduz a imagem para 320 px no navegador; só o dono grava (política `clinics_update`); aparece no cabeçalho de receita, atestado e documento livre | `logo_path` antigo segue sem uso | — |
+| Editar e excluir medicamentos e modelos | done | modal "Medicamentos e modelos" na ficha; renomear modelo; excluir medicamento mantém os itens das receitas já emitidas (nome é copiado no item); RLS inalterada: dono ou autor excluem/renomeiam, qualquer dono/dentista edita medicamento | editar os itens de um modelo (hoje só renomear ou recriar) | update/delete negado pela RLS volta sem erro e sem linhas; a camada nuvem trata "0 linhas" como "sem permissão" |
+| Busca de CID | done | lista curta e original (25 códigos odontológicos comuns, descrições próprias) como sugestão no campo; consentimento obrigatório continua no formulário e no CHECK | tabela completa da CID | — |
+| Documentos personalizados | done | `custom_documents` (título 1–120, texto até 10000), mesma regra de autoria dos atestados, impressão A4 em `/documentos/[id]/imprimir` com aviso de minuta | modelos de documento reutilizáveis | — |
+| Arquivos do paciente | done | `patient_files` + bucket privado `patient-files` (PNG/JPG/WebP/PDF até 10 MB), caminho `<clínica>/<paciente>/<uuid>.<ext>`; leem e enviam dono, dentista e recepção (financeiro não); apagar: dono ou quem enviou; abre por link assinado de 60 s; na demonstração fica em localStorage (limite 1 MB) | apagar objetos do storage quando o paciente é excluído; antivírus; miniaturas | política de storage precisa da linha de `patient_files` para saber quem enviou: o app apaga o objeto antes da linha |
+| Teste 390 px | not tested | layout usa flex-wrap, `break-all` nos nomes e modais em tela cheia no celular, mas **não foi aberto no navegador** (o dev server foi encerrado por falta de memória e não deveria ser religado) | passada visual em 390 px e só de teclado | — |
+| Assinatura digital ICP-Brasil | skip | regulada | **decisão para o advogado** | — |
+| Receita de controle especial / talonário | skip | regulada; "controlado" só sinaliza | **decisão para o advogado** | — |
+| Banco, RLS e `rls-test.mjs` | partial | casos novos para logo, documentos livres, arquivos (tabela e storage, incluindo B, financeiro, modo dividido e acesso vencido) | **migrations 3 e 4 não aplicadas; teste não executado** | — |
+
+Também corrigido: o campo CPF de Ajustes usava `/D/g` em vez de `/\D/g` e aceitava letras.
+Riscos: logo e arquivos exigem decisão de retenção LGPD; excluir paciente apaga as linhas de `patient_files`, mas os objetos ficam no storage (limpar manualmente por enquanto).

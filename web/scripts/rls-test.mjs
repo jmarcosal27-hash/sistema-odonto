@@ -312,6 +312,161 @@ await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
 const { data: cMeds } = await c.from("medications").select("id").eq("clinic_id", clinicA);
 check((cMeds?.length ?? 0) >= 2, "membro da clínica lê o catálogo de medicamentos");
 
+// ===== Extras da B1 (migration 20261114000004): logo, documentos livres, arquivos =====
+const PNG = "data:image/png;base64,iVBORw0KGgo=";
+const { data: logoOk } = await a.from("clinics").update({ logo_data: PNG }).eq("id", clinicA).select("id");
+check(logoOk?.length === 1, "dono grava o logo da clínica");
+const { error: logoBad } = await a.from("clinics").update({ logo_data: "<script>alert(1)</script>" }).eq("id", clinicA);
+check(!!logoBad, "CHECK: logo só aceita data URL de imagem png/jpeg/webp");
+const { error: logoBig } = await a.from("clinics").update({ logo_data: "data:image/png;base64," + "A".repeat(300000) }).eq("id", clinicA);
+check(!!logoBig, "CHECK: logo grande demais é recusado");
+const { data: logoC } = await c.from("clinics").update({ logo_data: null }).eq("id", clinicA).select("id");
+check(!logoC || logoC.length === 0, "dentista NÃO troca o logo da clínica");
+const { data: logoB } = await b.from("clinics").select("logo_data").eq("id", clinicA);
+check(logoB?.length === 0, "B NÃO lê o logo da clínica A");
+
+// Medicamentos e modelos: editar e excluir
+const { data: medUpd } = await a.from("medications").update({ unit: "frasco" }).eq("id", meds[0].id).select("id");
+check(medUpd?.length === 1, "dono edita medicamento");
+const { data: medUpdC } = await c.from("medications").update({ unit: "caixa" }).eq("id", meds[0].id).select("id");
+check(medUpdC?.length === 1, "dentista edita medicamento da clínica");
+const { data: medUpdB } = await b.from("medications").update({ unit: "x" }).eq("id", meds[0].id).select("id");
+check(!medUpdB || medUpdB.length === 0, "B NÃO edita medicamento de A");
+const { data: medDelC } = await c.from("medications").delete().eq("id", meds[0].id).select("id");
+check(!medDelC || medDelC.length === 0, "dentista NÃO exclui medicamento criado por outro");
+const { data: tplUpdC } = await c.from("prescription_templates").update({ name: "Renomeado por C" }).eq("id", tplRx.id).select("id");
+check(!tplUpdC || tplUpdC.length === 0, "dentista NÃO renomeia modelo criado por outro");
+const { data: tplUpdB } = await b.from("prescription_templates").update({ name: "Renomeado por B" }).eq("id", tplRx.id).select("id");
+check(!tplUpdB || tplUpdB.length === 0, "B NÃO renomeia modelo de A");
+const { data: tplUpdA } = await a.from("prescription_templates").update({ name: "Modelo renomeado" }).eq("id", tplRx.id).select("id");
+check(tplUpdA?.length === 1, "dono renomeia modelo");
+const { data: cTpl } = await c.from("prescription_templates").insert({ clinic_id: clinicA, name: "Modelo do C", items: [item("Do C")] }).select("id").single();
+const { data: cTplRen } = await c.from("prescription_templates").update({ name: "Modelo do C 2" }).eq("id", cTpl.id).select("id");
+check(cTplRen?.length === 1, "autor renomeia o próprio modelo");
+const { data: aDelCTpl } = await a.from("prescription_templates").delete().eq("id", cTpl.id).select("id");
+check(aDelCTpl?.length === 1, "dono exclui modelo de outro autor");
+const { data: medDelA } = await a.from("medications").delete().eq("id", meds[0].id).select("id");
+check(medDelA?.length === 1, "dono exclui medicamento");
+const { data: itemsKept } = await a.from("prescription_items").select("id,medication_id,name").eq("prescription_id", rxId);
+check(itemsKept?.length >= 1 && itemsKept.every((i) => !!i.name), "excluir medicamento mantém os itens das receitas já emitidas");
+
+// Documentos personalizados
+const doc = { clinic_id: clinicA, patient_id: pat.id, title: "Declaração fictícia", body: "Texto livre de teste." };
+const { data: cd, error: cd1 } = await a.from("custom_documents").insert(doc).select("id,professional_id").single();
+check(!cd1 && cd, "dono cria documento personalizado");
+const { data: aUser } = await a.auth.getUser();
+check(cd?.professional_id === aUser.user.id, "o autor do documento é quem criou (auth.uid)");
+for (const [col, val] of [["title", "   "], ["body", "   "]]) {
+  const { error } = await a.from("custom_documents").insert({ ...doc, [col]: val });
+  check(!!error, `CHECK: documento com ${col} vazio é recusado`);
+}
+const { error: cdLong } = await a.from("custom_documents").insert({ ...doc, body: "x".repeat(10001) });
+check(!!cdLong, "CHECK: texto acima de 10000 caracteres é recusado");
+const { data: bCd } = await b.from("custom_documents").select("id").eq("clinic_id", clinicA);
+check(bCd?.length === 0, "B NÃO vê documentos personalizados de A");
+const { error: bCd1 } = await b.from("custom_documents").insert(doc);
+check(!!bCd1, "B NÃO cria documento na clínica A");
+const { error: bCd2 } = await b.from("custom_documents").insert({ ...doc, clinic_id: clinicB });
+check(!!bCd2, "B NÃO cria documento na própria clínica para paciente de A");
+const { data: bCd3 } = await b.from("custom_documents").update({ body: "alterado" }).eq("id", cd.id).select("id");
+check(!bCd3 || bCd3.length === 0, "B NÃO altera documento de A");
+const { data: bCd4 } = await b.from("custom_documents").delete().eq("id", cd.id).select("id");
+check(!bCd4 || bCd4.length === 0, "B NÃO exclui documento de A");
+const { error: cdMove } = await a.from("custom_documents").update({ clinic_id: clinicB }).eq("id", cd.id);
+check(!!cdMove, "documento NÃO muda de clínica");
+const { error: cdFake } = await c.from("custom_documents").insert({ ...doc, professional_id: aUser.user.id });
+check(!!cdFake, "dentista NÃO cria documento em nome de outro profissional");
+const { data: cCd } = await c.from("custom_documents").insert({ ...doc, title: "Do C" }).select("id").single();
+check(!!cCd, "dentista cria o próprio documento");
+const { data: cEditA } = await c.from("custom_documents").update({ body: "invasão" }).eq("id", cd.id).select("id");
+check(!cEditA || cEditA.length === 0, "dentista NÃO edita documento de outro profissional");
+const { data: cDelA } = await c.from("custom_documents").delete().eq("id", cd.id).select("id");
+check(!cDelA || cDelA.length === 0, "dentista NÃO exclui documento de outro profissional");
+const { data: cEditOwnDoc } = await c.from("custom_documents").update({ body: "meu texto" }).eq("id", cCd.id).select("id");
+check(cEditOwnDoc?.length === 1, "autor edita o próprio documento");
+const { data: aDelCd } = await a.from("custom_documents").delete().eq("id", cCd.id).select("id");
+check(aDelCd?.length === 1, "dono exclui documento de outro autor");
+
+// Arquivos do paciente (tabela + storage privado)
+const bucket = "patient-files";
+const uid = () => crypto.randomUUID();
+const pdf = () => new Blob(["%PDF-1.4 arquivo de teste"], { type: "application/pdf" });
+const pathA = `${clinicA}/${pat.id}/${uid()}.pdf`;
+const { error: upA } = await a.storage.from(bucket).upload(pathA, pdf(), { contentType: "application/pdf" });
+check(!upA, "dono envia arquivo para o paciente");
+const fileRow = { clinic_id: clinicA, patient_id: pat.id, name: "exame.pdf", mime: "application/pdf", size_bytes: 25, storage_path: pathA };
+const { data: pf, error: pf1 } = await a.from("patient_files").insert(fileRow).select("id").single();
+check(!pf1 && pf, "dono registra o arquivo na ficha");
+const { data: dl } = await a.storage.from(bucket).download(pathA);
+check(!!dl, "dono baixa o próprio arquivo");
+const { data: sig } = await a.storage.from(bucket).createSignedUrl(pathA, 60);
+check(!!sig?.signedUrl, "dono gera link temporário do arquivo");
+const { data: pubTry } = await createClient(URL_, ANON, { auth: { persistSession: false } }).storage.from(bucket).download(pathA);
+check(!pubTry, "sem login NÃO baixa arquivo (bucket privado)");
+const { data: bDl } = await b.storage.from(bucket).download(pathA);
+check(!bDl, "B NÃO baixa arquivo da clínica A");
+const { data: bList } = await b.storage.from(bucket).list(`${clinicA}/${pat.id}`);
+check(!bList || bList.length === 0, "B NÃO lista arquivos da clínica A");
+const { error: bUp1 } = await b.storage.from(bucket).upload(`${clinicA}/${pat.id}/${uid()}.pdf`, pdf(), { contentType: "application/pdf" });
+check(!!bUp1, "B NÃO envia arquivo para a clínica A");
+const { error: bUp2 } = await b.storage.from(bucket).upload(`${clinicB}/${pat.id}/${uid()}.pdf`, pdf(), { contentType: "application/pdf" });
+check(!!bUp2, "B NÃO envia arquivo na própria clínica para paciente de A");
+const { error: bUp3 } = await a.storage.from(bucket).upload(`${clinicA}/${pat.id}/nome-invalido.pdf`, pdf(), { contentType: "application/pdf" });
+check(!!bUp3, "caminho fora do padrão é recusado");
+const { error: bUp4 } = await a.storage.from(bucket).upload(`${clinicA}/${pat.id}/${uid()}.html`, new Blob(["<b>x</b>"], { type: "text/html" }), { contentType: "text/html" });
+check(!!bUp4, "tipo de arquivo não permitido é recusado");
+const { error: bUp5 } = await a.storage.from(bucket).upload(pathA, pdf(), { contentType: "application/pdf", upsert: true });
+check(!!bUp5, "arquivo existente NÃO é sobrescrito");
+const { data: bPf } = await b.from("patient_files").select("id").eq("clinic_id", clinicA);
+check(bPf?.length === 0, "B NÃO vê arquivos da clínica A na ficha");
+const { error: bPf1 } = await b.from("patient_files").insert({ ...fileRow, storage_path: `${clinicA}/${pat.id}/${uid()}.pdf` });
+check(!!bPf1, "B NÃO registra arquivo na clínica A");
+const { error: pfBadPath } = await a.from("patient_files").insert({ ...fileRow, storage_path: `${clinicB}/${patB.id}/${uid()}.pdf` });
+check(!!pfBadPath, "CHECK: caminho do arquivo precisa ser da própria clínica e do próprio paciente");
+const { error: pfBadMime } = await a.from("patient_files").insert({ ...fileRow, mime: "text/html", storage_path: `${clinicA}/${pat.id}/${uid()}.pdf` });
+check(!!pfBadMime, "CHECK: tipo de arquivo fora da lista é recusado");
+const { error: pfBig } = await a.from("patient_files").insert({ ...fileRow, size_bytes: 10485761, storage_path: `${clinicA}/${pat.id}/${uid()}.pdf` });
+check(!!pfBig, "CHECK: arquivo acima de 10 MB é recusado");
+const { data: pfUpd } = await a.from("patient_files").update({ name: "outro.pdf" }).eq("id", pf.id).select("id");
+check(!pfUpd || pfUpd.length === 0, "registro de arquivo não é editável");
+const { data: bPfDel } = await b.from("patient_files").delete().eq("id", pf.id).select("id");
+check(!bPfDel || bPfDel.length === 0, "B NÃO exclui registro de arquivo de A");
+const { data: bRm } = await b.storage.from(bucket).remove([pathA]);
+check(!bRm || bRm.length === 0, "B NÃO exclui objeto de A");
+// dentista C envia o próprio arquivo; não apaga o de A; dono apaga o de C
+const pathC = `${clinicA}/${pat.id}/${uid()}.pdf`;
+const { error: cUp } = await c.storage.from(bucket).upload(pathC, pdf(), { contentType: "application/pdf" });
+const { data: cPf } = await c.from("patient_files").insert({ ...fileRow, name: "do-c.pdf", storage_path: pathC }).select("id").single();
+check(!cUp && cPf, "dentista envia e registra o próprio arquivo");
+const { data: cRmA } = await c.storage.from(bucket).remove([pathA]);
+check(!cRmA || cRmA.length === 0, "dentista NÃO exclui objeto enviado por outro");
+const { data: cDelA2 } = await c.from("patient_files").delete().eq("id", pf.id).select("id");
+check(!cDelA2 || cDelA2.length === 0, "dentista NÃO exclui registro de arquivo de outro");
+// financeiro não lê arquivos clínicos
+const f = await userClient(`f-${stamp}@teste.local`);
+await a.from("clinic_members").insert({ clinic_id: clinicA, invited_email: `f-${stamp}@teste.local`, role: "finance", status: "invited" });
+await f.rpc("claim_invites");
+const { data: fPf } = await f.from("patient_files").select("id").eq("clinic_id", clinicA);
+check(fPf?.length === 0, "financeiro NÃO vê arquivos do paciente");
+const { data: fDl } = await f.storage.from(bucket).download(pathA);
+check(!fDl, "financeiro NÃO baixa arquivos do paciente");
+const { error: fUp } = await f.storage.from(bucket).upload(`${clinicA}/${pat.id}/${uid()}.pdf`, pdf(), { contentType: "application/pdf" });
+check(!!fUp, "financeiro NÃO envia arquivos do paciente");
+// modo dividido: C não enxerga arquivos de paciente de outro dentista
+await a.from("clinics").update({ practice_mode: "split" }).eq("id", clinicA);
+const { data: splitDl } = await c.storage.from(bucket).download(pathA);
+check(!splitDl, "split: C NÃO baixa arquivo de paciente de outro dentista");
+const { data: splitPf } = await c.from("patient_files").select("id").eq("patient_id", pat.id);
+check(splitPf?.length === 0, "split: C NÃO vê arquivos de paciente de outro dentista");
+const { error: splitUp } = await c.storage.from(bucket).upload(`${clinicA}/${pat.id}/${uid()}.pdf`, pdf(), { contentType: "application/pdf" });
+check(!!splitUp, "split: C NÃO envia arquivo para paciente de outro dentista");
+await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
+// excluir: dono apaga o objeto e depois a linha (ordem usada pelo app)
+const { data: aRmC } = await a.storage.from(bucket).remove([pathC]);
+check(aRmC?.length === 1, "dono exclui o objeto enviado por outro");
+const { data: aDelC2 } = await a.from("patient_files").delete().eq("id", cPf.id).select("id");
+check(aDelC2?.length === 1, "dono exclui o registro enviado por outro");
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
@@ -350,8 +505,27 @@ check(!!xd5, "acesso vencido: A NÃO cria medicamento");
 const { error: xd6 } = await a.from("prescription_templates").insert({ clinic_id: clinicA, name: "Após vencer", items: [item("x")] });
 check(!!xd6, "acesso vencido: A NÃO cria modelo de receita");
 
+// Extras da B1 com acesso vencido
+const { error: xe1 } = await a.from("custom_documents").insert(doc);
+check(!!xe1, "acesso vencido: A NÃO cria documento personalizado");
+const { data: expCd } = await a.from("custom_documents").select("id").eq("clinic_id", clinicA);
+check((expCd?.length ?? 0) >= 1, "acesso vencido: A ainda LÊ os documentos personalizados");
+const { data: xe2 } = await a.from("custom_documents").delete().eq("id", cd.id).select("id");
+check(!xe2 || xe2.length === 0, "acesso vencido: A NÃO exclui documento personalizado");
+const { error: xe3 } = await a.storage.from(bucket).upload(`${clinicA}/${pat.id}/${uid()}.pdf`, pdf(), { contentType: "application/pdf" });
+check(!!xe3, "acesso vencido: A NÃO envia arquivo");
+const { data: xe4 } = await a.storage.from(bucket).download(pathA);
+check(!!xe4, "acesso vencido: A ainda BAIXA arquivos");
+const { data: xe5 } = await a.storage.from(bucket).remove([pathA]);
+check(!xe5 || xe5.length === 0, "acesso vencido: A NÃO exclui arquivo");
+const { data: xe6 } = await a.from("medications").update({ unit: "x" }).eq("clinic_id", clinicA).select("id");
+check(!xe6 || xe6.length === 0, "acesso vencido: A NÃO edita medicamento");
+const { data: xe7 } = await a.from("prescription_templates").update({ name: "Após vencer 2" }).eq("id", tplRx.id).select("id");
+check(!xe7 || xe7.length === 0, "acesso vencido: A NÃO renomeia modelo");
+
 // Limpeza
 await admin.from("clinics").delete().in("id", [clinicA, clinicB]);
-for (const u of [a, b, c]) { const { data: { user } } = await u.auth.getUser(); await admin.auth.admin.deleteUser(user.id); }
+await admin.storage.from(bucket).remove([pathA, pathC]).catch(() => {});
+for (const u of [a, b, c, f]) { const { data: { user } } = await u.auth.getUser(); await admin.auth.admin.deleteUser(user.id); }
 console.log(failures ? `\n${failures} falha(s)` : "\nTudo certo.");
 process.exit(failures ? 1 : 0);

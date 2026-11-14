@@ -13,6 +13,7 @@ import { useToast } from "@/components/toast";
 import { ClinicalNotes } from "@/components/clinical-notes";
 import { Anamnesis } from "@/components/anamnesis";
 import { Documents } from "@/components/documents";
+import { PatientFiles } from "@/components/patient-files";
 
 const SEX = { female: "Feminino", male: "Masculino", other: "Outro" };
 
@@ -146,6 +147,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           <Anamnesis db={db} patientId={p.id} />
           <ClinicalNotes db={db} patientId={p.id} />
           <Documents db={db} patientId={p.id} />
+          <PatientFiles db={db} patientId={p.id} />
 
           <Card>
             <h3 className="font-semibold">Linha do tempo</h3>

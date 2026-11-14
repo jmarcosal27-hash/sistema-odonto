@@ -8,7 +8,7 @@ import { DOCUMENT_NOTICE } from "./documents";
 
 interface Professional { professionalName?: string; professionalCro?: string; professionalCroUf?: string }
 
-/** Moldura A4 comum de receita e atestado: cabeçalho da clínica, paciente, assinatura à mão e aviso de minuta. */
+/** Moldura A4 comum de receita, atestado e documento livre: cabeçalho da clínica, paciente, assinatura à mão e aviso de minuta. */
 export function DocPrint({ db, title, issuedOn, patient, doc, children }: {
   db: Db; title: string; issuedOn: string; patient?: Patient; doc: Professional; children: ReactNode;
 }) {
@@ -23,9 +23,13 @@ export function DocPrint({ db, title, issuedOn, patient, doc, children }: {
       </div>
       <article className="mx-auto flex min-h-[27cm] max-w-3xl flex-col p-8 print:p-0">
         <header className="flex items-start justify-between gap-4 border-b-4 pb-4" style={{ borderColor: color }}>
-          <div>
-            <h1 className="text-xl font-bold" style={{ color }}>{db.profile.clinicName || APP_NAME}</h1>
-            {db.profile.contact && <p className="text-sm text-ink-muted">{db.profile.contact}</p>}
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL pequeno, sem otimização possível */}
+            {db.profile.logo && <img src={db.profile.logo} alt="" className="h-14 w-auto max-w-32 object-contain" />}
+            <div>
+              <h1 className="text-xl font-bold" style={{ color }}>{db.profile.clinicName || APP_NAME}</h1>
+              {db.profile.contact && <p className="text-sm text-ink-muted">{db.profile.contact}</p>}
+            </div>
           </div>
           <div className="text-right text-sm">
             <p className="font-semibold">{title}</p>

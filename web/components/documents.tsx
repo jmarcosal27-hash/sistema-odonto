@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Printer, Trash2 } from "lucide-react";
+import { Pencil, Pill, Plus, Printer, Trash2 } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
 import { dateBR, todayISO, uid } from "@/lib/format";
-import type { Certificate, Db, MedicationRoute, Prescription, PrescriptionItem } from "@/lib/types";
+import type { Certificate, CustomDocument, Db, MedicationRoute, Prescription, PrescriptionItem } from "@/lib/types";
+import { CID_OPTIONS, cidLabel } from "@/lib/cid";
 import { Badge, Button, Card, ErrorNote, Field, Input, Modal, Segmented, Select, Textarea, Toggle } from "./ui";
 import { useAction } from "./toast";
+import { CustomDocumentForm, MedicationsManager } from "./documents-extra";
 
 export const DOCUMENT_NOTICE = "Minuta gerada pelo SmileOS. O texto e a conformidade com as normas do CFO, da vigilância sanitária e da LGPD são de responsabilidade do profissional e da clínica; revise antes de entregar.";
 export const CONTROLLED_NOTICE = "Medicamento controlado: o SmileOS não gera receita de controle especial. Use só como rascunho e transcreva para o talonário oficial.";
@@ -17,16 +19,23 @@ const UNIT_SUGGESTIONS = ["caixa", "frasco", "comprimido", "cápsula", "tubo", "
 export const certificateLabel = (c: Pick<Certificate, "kind" | "amount">) =>
   c.kind === "days" ? `${c.amount} ${c.amount === 1 ? "dia" : "dias"}` : `${c.amount} ${c.amount === 1 ? "hora" : "horas"}`;
 
-type Entry = { type: "rx"; doc: Prescription } | { type: "cert"; doc: Certificate };
+type Entry = { type: "rx"; doc: Prescription } | { type: "cert"; doc: Certificate } | { type: "doc"; doc: CustomDocument };
+const META = {
+  rx: { label: "receita", badge: "Receita", tone: "info", path: "receitas", removed: "Receita excluída." },
+  cert: { label: "atestado", badge: "Atestado", tone: "accent", path: "atestados", removed: "Atestado excluído." },
+  doc: { label: "documento", badge: "Documento", tone: "neutral", path: "documentos", removed: "Documento excluído." },
+} as const;
 
 /** Documentos do paciente: receitas e atestados (minutas para imprimir e assinar à mão). */
 export function Documents({ db, patientId }: { db: Db; patientId: string }) {
   const run = useAction();
-  const [editing, setEditing] = useState<Entry | "rx" | "cert" | null>(null);
+  const [editing, setEditing] = useState<Entry | "rx" | "cert" | "doc" | null>(null);
+  const [manage, setManage] = useState(false);
   const readOnly = isReadOnly(db);
   const entries: Entry[] = [
     ...db.prescriptions.filter((d) => d.patientId === patientId).map((doc): Entry => ({ type: "rx", doc })),
     ...db.certificates.filter((d) => d.patientId === patientId).map((doc): Entry => ({ type: "cert", doc })),
+    ...db.customDocuments.filter((d) => d.patientId === patientId).map((doc): Entry => ({ type: "doc", doc })),
   ].sort((a, b) => b.doc.issuedOn.localeCompare(a.doc.issuedOn) || b.doc.createdAt.localeCompare(a.doc.createdAt));
 
   return (
@@ -36,21 +45,23 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
         <span className="flex gap-1">
           <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing("rx")}><Plus className="size-4" />Nova receita</Button>
           <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing("cert")}><Plus className="size-4" />Novo atestado</Button>
+          <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing("doc")}><Plus className="size-4" />Novo documento</Button>
+          <Button size="sm" variant="ghost" onClick={() => setManage(true)}><Pill className="size-4" />Medicamentos e modelos</Button>
         </span>
       </div>
       <p className="mt-1 text-xs text-ink-muted">{DOCUMENT_NOTICE}</p>
       {!entries.length ? (
-        <p className="text-sm text-ink-muted mt-3">Nenhum documento ainda. Crie uma receita ou um atestado para imprimir e assinar.</p>
+        <p className="text-sm text-ink-muted mt-3">Nenhum documento ainda. Crie uma receita, um atestado ou um documento de texto livre para imprimir e assinar.</p>
       ) : (
         <ul className="mt-2 divide-y divide-border">
           {entries.map((e) => {
-            const label = e.type === "rx" ? "receita" : "atestado";
-            const href = e.type === "rx" ? `/receitas/${e.doc.id}/imprimir` : `/atestados/${e.doc.id}/imprimir`;
+            const { label, badge, tone, path, removed } = META[e.type];
+            const href = `/${path}/${e.doc.id}/imprimir`;
             return (
               <li key={e.doc.id} className="py-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex flex-wrap items-center gap-2">
-                    <Badge tone={e.type === "rx" ? "info" : "accent"}>{e.type === "rx" ? "Receita" : "Atestado"}</Badge>
+                    <Badge tone={tone}>{badge}</Badge>
                     <span className="font-semibold">{dateBR(e.doc.issuedOn)}</span>
                     {e.type === "rx" && e.doc.items.some((i) => i.controlled) && <Badge tone="warning">Controlado</Badge>}
                   </span>
@@ -61,14 +72,16 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
                     <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir ${label} de ${dateBR(e.doc.issuedOn)}`}
                       onClick={() => {
                         if (!window.confirm(`Excluir esta ${label}? Não dá para desfazer.`)) return;
-                        void run(() => (e.type === "rx" ? api.prescriptions.remove(e.doc.id) : api.certificates.remove(e.doc.id)), e.type === "rx" ? "Receita excluída." : "Atestado excluído.");
+                        void run(() => (e.type === "rx" ? api.prescriptions.remove(e.doc.id) : e.type === "cert" ? api.certificates.remove(e.doc.id) : api.customDocuments.remove(e.doc.id)), removed);
                       }}><Trash2 className="size-3.5" />Excluir</Button>
                   </span>
                 </div>
                 <p className="mt-1 break-words text-ink-muted">
                   {e.type === "rx"
                     ? e.doc.items.map((i) => i.name).join(", ")
-                    : `Afastamento de ${certificateLabel(e.doc)} a partir de ${dateBR(e.doc.startsOn)}`}
+                    : e.type === "cert"
+                      ? `Afastamento de ${certificateLabel(e.doc)} a partir de ${dateBR(e.doc.startsOn)}`
+                      : e.doc.title}
                 </p>
               </li>
             );
@@ -78,6 +91,10 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
       {(editing === "rx" || (typeof editing === "object" && editing?.type === "rx")) && (
         <PrescriptionForm db={db} patientId={patientId} rx={typeof editing === "object" && editing ? (editing.doc as Prescription) : undefined} onClose={() => setEditing(null)} />
       )}
+      {(editing === "doc" || (typeof editing === "object" && editing?.type === "doc")) && (
+        <CustomDocumentForm patientId={patientId} doc={typeof editing === "object" && editing ? (editing.doc as CustomDocument) : undefined} onClose={() => setEditing(null)} />
+      )}
+      {manage && <MedicationsManager db={db} readOnly={readOnly} onClose={() => setManage(false)} />}
       {(editing === "cert" || (typeof editing === "object" && editing?.type === "cert")) && (
         <CertificateForm patientId={patientId} cert={typeof editing === "object" && editing ? (editing.doc as Certificate) : undefined} onClose={() => setEditing(null)} />
       )}
@@ -249,8 +266,10 @@ function CertificateForm({ patientId, cert, onClose }: { patientId: string; cert
           </Field>
         </div>
         <Field label="CID (opcional)" hint={CID_NOTICE} error={tried && cidBad ? "Marque o consentimento do paciente ou apague o CID." : undefined}>
-          {(id, d) => <Input id={id} aria-describedby={d} maxLength={20} value={cid} onChange={(e) => setCid(e.target.value)} placeholder="Código, se o paciente autorizar" />}
+          {(id, d) => <Input id={id} aria-describedby={d} list="cid-list" maxLength={20} value={cid} onChange={(e) => setCid(e.target.value.toUpperCase())} placeholder="Digite o código ou parte do nome" autoComplete="off" />}
         </Field>
+        <datalist id="cid-list">{CID_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}</datalist>
+        {!!cidLabel(cid) && <p className="-mt-2 text-sm text-ink-muted">{cid.trim()}: {cidLabel(cid)}</p>}
         {!!cid.trim() && <Toggle label="O paciente autorizou o CID no atestado" checked={consent} onChange={setConsent} />}
         <Field label="Finalidade ou observação (opcional)">
           {(id) => <Textarea id={id} rows={3} maxLength={1000} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Ex.: apresentação ao empregador ou à escola" />}

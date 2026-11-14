@@ -11,12 +11,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
-  AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Certificate, ClinicalNote, Medication, Prescription, PrescriptionItem, PrescriptionTemplate,
+  AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Certificate, ClinicalNote, CustomDocument, Medication, PatientFile, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Budget, Db, Expense, Installment, MessageTemplate, Patient, PatientEvent, PaymentMethod,
   PlanItem, Procedure, Profile, RecallState, RecallStatus, Treatment, TreatmentPlan, WaitlistEntry,
 } from "./types";
 import { supabaseBrowser } from "./supabase/client";
 import { todayISO } from "./format";
+import { EXT, MAX_FILE_BYTES, checkFile } from "./files";
 
 export interface Session { userId: string; email: string; clinicId: string; role: "owner" | "dentist" | "receptionist" | "finance"; memberId: string }
 export type RemoteState = { status: "loading" } | { status: "no-clinic"; email: string } | { status: "ready"; db: Db; session: Session } | { status: "error"; message: string };
@@ -39,6 +40,7 @@ async function q<T>(p: PromiseLike<{ data: T; error: { message: string; code?: s
 }
 
 const PAGE = 1000;
+const NO_ROWS = "Sem permissão para isso, ou o item já não existe. Só o dono ou quem criou pode alterar ou excluir.";
 
 /** Lê todas as linhas da clínica numa tabela, página por página, com ordem estável. */
 async function loadAll(sb: SupabaseClient, table: string, clinicId: string, order: [string, boolean][] = [["id", true]]): Promise<Row[]> {
@@ -64,7 +66,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const c = m.clinic_id as string;
   const by = (t: string, order?: [string, boolean][]) => loadAll(sb, t, c, order);
 
-  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs] =
+  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files] =
     await Promise.all([
       q(sb.from("clinics").select("*").eq("id", c).single()), by("access_grants", [["expires_at", false], ["id", true]]),
       by("patients"), by("patient_events"), by("custom_procedures"), by("procedure_settings", [["procedure_id", true]]),
@@ -76,6 +78,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       by("medications", [["name", true], ["id", true]]), by("prescriptions", [["issued_on", false], ["id", true]]),
       by("prescription_items", [["position", true], ["id", true]]), by("prescription_templates", [["name", true], ["id", true]]),
       by("certificates", [["issued_on", false], ["id", true]]),
+      by("custom_documents", [["issued_on", false], ["id", true]]), by("patient_files", [["created_at", false], ["id", true]]),
     ]);
   const cl = clinic as Row;
   const g = (grants as Row[])[0];
@@ -102,7 +105,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const snap = (r: Row) => ({ professionalName: s(r.professional_name), professionalCro: s(r.professional_cro), professionalCroUf: s(r.professional_cro_uf) });
 
   const db: Db = {
-    version: 4,
+    version: 5,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -174,8 +177,16 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       kind: r.kind as Certificate["kind"], amount: r.amount as number, cid: s(r.cid), cidConsent: r.cid_consent as boolean,
       purpose: s(r.purpose), createdAt: r.created_at as string, updatedAt: r.updated_at as string,
     })),
+    customDocuments: (customDocs as Row[]).map((r): CustomDocument => ({
+      id: r.id as string, patientId: r.patient_id as string, ...snap(r), title: r.title as string, body: r.body as string,
+      issuedOn: r.issued_on as string, createdAt: r.created_at as string, updatedAt: r.updated_at as string,
+    })),
+    patientFiles: (files as Row[]).map((r): PatientFile => ({
+      id: r.id as string, patientId: r.patient_id as string, name: r.name as string, mime: r.mime as PatientFile["mime"],
+      sizeBytes: r.size_bytes as number, createdAt: r.created_at as string,
+    })),
     profile: {
-      professionalName: s(m.professional_name), cro: s(m.cro), croUf: s(m.cro_uf), cpf: s(m.cpf), birthDate: s(m.birth_date), workMode: cl.work_mode as Profile["workMode"], contact: s(cl.contact),
+      logo: s(cl.logo_data), professionalName: s(m.professional_name), cro: s(m.cro), croUf: s(m.cro_uf), cpf: s(m.cpf), birthDate: s(m.birth_date), workMode: cl.work_mode as Profile["workMode"], contact: s(cl.contact),
       pdfColor: s(cl.pdf_color), theme: m.theme as Profile["theme"], activeSpecialtyIds: cl.active_specialty_ids as string[],
       onboardingDone: cl.onboarding_done as boolean, clinicName: cl.name as string,
     },
@@ -403,14 +414,36 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
       remove: (id: string) => run(async () => { await q(ctx().sb.from("prescriptions").delete().eq("id", id)); }),
     },
 
+    medications: {
+      update: (id: string, m: { name: string; route: Medication["route"]; controlled: boolean; unit?: string; defaultPosology?: string }) => run(async () => {
+        const name = m.name.trim();
+        if (!name) throw new Error("Informe o nome do medicamento.");
+        const rows = await q(ctx().sb.from("medications").update({ name, route: m.route, controlled: m.controlled, unit: m.unit?.trim() || null, default_posology: m.defaultPosology?.trim() || null }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      remove: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("medications").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+    },
+
     prescriptionTemplates: {
+      rename: (id: string, name: string) => run(async () => {
+        const n = name.trim();
+        if (n.length < 2) throw new Error("Dê um nome ao modelo.");
+        const rows = await q(ctx().sb.from("prescription_templates").update({ name: n }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
       save: (t: { name: string; items: PrescriptionTemplate["items"] }) => run(async () => {
         const { sb, session } = ctx();
         const name = t.name.trim();
         if (name.length < 2) throw new Error("Dê um nome ao modelo.");
         await q(sb.from("prescription_templates").insert({ clinic_id: session.clinicId, name, items: t.items }));
       }),
-      remove: (id: string) => run(async () => { await q(ctx().sb.from("prescription_templates").delete().eq("id", id)); }),
+      remove: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("prescription_templates").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
     },
 
     certificates: {
@@ -424,6 +457,56 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
           professional_name: db.profile.professionalName ?? null, professional_cro: db.profile.cro ?? null, professional_cro_uf: db.profile.croUf ?? null }));
       }),
       remove: (id: string) => run(async () => { await q(ctx().sb.from("certificates").delete().eq("id", id)); }),
+    },
+
+    customDocuments: {
+      save: (d: { id?: string; patientId: string; issuedOn: string; title: string; body: string }) => run(async () => {
+        const { sb, session, db } = ctx();
+        const title = d.title.trim(), body = d.body.trim();
+        if (!title) throw new Error("Dê um título ao documento.");
+        if (!body) throw new Error("Escreva o texto do documento.");
+        if (d.id) {
+          const rows = await q(sb.from("custom_documents").update({ title, body, issued_on: d.issuedOn }).eq("id", d.id).select("id"));
+          if (!rows?.length) throw new Error(NO_ROWS);
+        } else await q(sb.from("custom_documents").insert({ clinic_id: session.clinicId, patient_id: d.patientId, title, body, issued_on: d.issuedOn,
+          professional_name: db.profile.professionalName ?? null, professional_cro: db.profile.cro ?? null, professional_cro_uf: db.profile.croUf ?? null }));
+      }),
+      remove: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("custom_documents").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+    },
+
+    // Bucket privado "patient-files"; caminho <clinica>/<paciente>/<uuid>.<ext>. Se a linha falhar, o objeto é desfeito.
+    patientFiles: {
+      add: (patientId: string, file: File) => run(async () => {
+        const { sb, session } = ctx();
+        const mime = checkFile(file, MAX_FILE_BYTES);
+        const path = `${session.clinicId}/${patientId}/${crypto.randomUUID()}.${EXT[mime]}`;
+        const up = await sb.storage.from("patient-files").upload(path, file, { contentType: mime, upsert: false });
+        if (up.error) throw friendly(up.error);
+        const ins = await sb.from("patient_files").insert({ clinic_id: session.clinicId, patient_id: patientId, name: file.name.slice(0, 200), mime, size_bytes: file.size, storage_path: path });
+        if (ins.error) { await sb.storage.from("patient-files").remove([path]); throw friendly(ins.error); }
+      }),
+      // Apaga o objeto ANTES da linha: a política do storage consulta a linha para saber quem enviou.
+      remove: (id: string) => run(async () => {
+        const { sb } = ctx();
+        const row = (await q(sb.from("patient_files").select("storage_path").eq("id", id).limit(1)) as Row[])[0];
+        if (!row) throw new Error(NO_ROWS);
+        const rm = await sb.storage.from("patient-files").remove([row.storage_path as string]);
+        if (rm.error) throw friendly(rm.error);
+        if (!rm.data?.length) throw new Error(NO_ROWS);
+        const rows = await q(sb.from("patient_files").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      url: async (id: string) => {
+        const { sb } = ctx();
+        const row = (await q(sb.from("patient_files").select("storage_path").eq("id", id).limit(1)) as Row[])[0];
+        if (!row) throw new Error("Arquivo não encontrado.");
+        const { data, error } = await sb.storage.from("patient-files").createSignedUrl(row.storage_path as string, 60);
+        if (error || !data) throw new Error("Não foi possível abrir o arquivo.");
+        return data.signedUrl;
+      },
     },
 
     catalog: {
@@ -462,6 +545,7 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         if ("activeSpecialtyIds" in patch) clinic.active_specialty_ids = patch.activeSpecialtyIds;
         if ("onboardingDone" in patch) clinic.onboarding_done = patch.onboardingDone;
         if ("clinicName" in patch) clinic.name = patch.clinicName;
+        if ("logo" in patch) clinic.logo_data = patch.logo ?? null;
         // Linha de equipe só muda por RPC (nome, CRO, UF, CPF, nascimento e tema); papel e status ficam fora do alcance do membro.
         if (Object.keys(member).length) {
           const cur = ctx().db.profile;
