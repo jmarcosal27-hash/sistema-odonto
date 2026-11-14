@@ -1,0 +1,91 @@
+/* Gerado a partir de tokens.json. Componentes usam var(--color-*) /
+   classes Tailwind mapeadas (ver tailwind.config.*) -- nunca hex cru. */
+
+:root {
+  --color-bg: #F3F6F7;
+  --color-surface: #FFFFFF;
+  --color-surface-sidebar: #E4EAF0;
+  --color-surface-success-subtle: #CDEEE0;
+  --color-surface-info-subtle: #D7E6FB;
+  --color-surface-warning-subtle: #FBE2C7;
+  --color-surface-accent-subtle: #E3DBF8;
+  --color-border: #E1E6E8;
+  --color-border-input: #7C878C;
+  --color-text: #16262B;
+  --color-text-muted: #5B6468;
+  --color-accent: #3D63D6;
+  --color-on-accent: #FFFFFF;
+  --color-danger: #B3404A;
+  --color-success: #1F7A52;
+  --color-warning: #8F5F16;
+
+  --font-sans: Manrope, 'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-xs-size: 12px;  --text-xs-line: 16px;  --text-xs-weight: 500;
+  --text-sm-size: 14px;  --text-sm-line: 20px;  --text-sm-weight: 400;
+  --text-base-size: 15px; --text-base-line: 22px; --text-base-weight: 400;
+  --text-lg-size: 20px;  --text-lg-line: 26px;  --text-lg-weight: 600;
+  --text-xl-size: 30px;  --text-xl-line: 36px;  --text-xl-weight: 700;
+
+  --space-0: 0px;  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(16,24,40,.04);
+  --shadow-pop: 0 16px 40px rgba(16,24,40,.20);
+
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-ease: cubic-bezier(.2,.8,.2,1);
+}
+
+/* Modo escuro: placeholder. O original tem um toggle claro/escuro (Ajustes >
+   Aparência) mas eu só vi o tema claro durante o recon -- valores abaixo são
+   uma inversão razoável a validar visualmente antes de shippar, não medidos. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #10171A;
+    --color-surface: #182226;
+    --color-surface-sidebar: #0D1316;
+    --color-surface-success-subtle: #113327;
+    --color-surface-info-subtle: #122A40;
+    --color-surface-warning-subtle: #3A2C12;
+    --color-surface-accent-subtle: #241E3A;
+    --color-border: #2A3539;
+    --color-border-input: #4C5A5F;
+    --color-text: #E7EEF0;
+    --color-text-muted: #9AA7AB;
+    --color-accent: #6E8CF0;
+    --color-on-accent: #0E1620;
+    --color-danger: #E08088;
+    --color-success: #4FC38A;
+    --color-warning: #D9A43F;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #10171A;
+  --color-surface: #182226;
+  --color-surface-sidebar: #0D1316;
+  --color-surface-success-subtle: #113327;
+  --color-surface-info-subtle: #122A40;
+  --color-surface-warning-subtle: #3A2C12;
+  --color-surface-accent-subtle: #241E3A;
+  --color-border: #2A3539;
+  --color-border-input: #4C5A5F;
+  --color-text: #E7EEF0;
+  --color-text-muted: #9AA7AB;
+  --color-accent: #6E8CF0;
+  --color-on-accent: #0E1620;
+  --color-danger: #E08088;
+  --color-success: #4FC38A;
+  --color-warning: #D9A43F;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
