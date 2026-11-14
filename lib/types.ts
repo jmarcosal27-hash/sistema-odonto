@@ -25,6 +25,7 @@ export interface Patient {
   referralSource?: string;
   notes?: string;
   recallEnabled: boolean;
+  archived?: boolean;
   lastVisitAt?: string; // ISO
   createdAt: string;
 }
@@ -48,15 +49,21 @@ export interface Procedure {
   custom?: boolean;
 }
 
+export type Region = "upper" | "lower" | "both";
+
 export interface PlanItem {
   id: string;
   tooth?: number; // FDI
+  region?: Region; // item de arcada, sem dente específico
   conditions: ToothCondition[];
   procedureId?: string;
   procedureName?: string;
   phase: Phase;
-  priceCents?: number;
+  priceCents?: number; // valor unitário
+  quantity?: number; // padrão 1
 }
+
+export type PaymentMethod = "pix" | "credit" | "debit" | "cash" | "transfer" | "boleto" | "other";
 
 export interface TreatmentPlan {
   id: string;
@@ -64,6 +71,9 @@ export interface TreatmentPlan {
   kind: "adult" | "child";
   validityDays: number;
   items: PlanItem[];
+  discountCents?: number;
+  paymentMethods?: PaymentMethod[];
+  notes?: string;
   status: "draft" | "budgeted" | "authorized";
   createdAt: string;
 }
@@ -72,6 +82,8 @@ export interface Budget {
   id: string;
   planId: string;
   patientId: string;
+  subtotalCents?: number;
+  discountCents?: number;
   totalCents: number;
   status: "presented" | "authorized" | "declined";
   authorizedItemIds: string[];
@@ -86,10 +98,24 @@ export interface Treatment {
   planItemId?: string;
   procedureName: string;
   performedAt: string; // yyyy-mm-dd
+  procedureId?: string;
   priceCents: number;
-  paymentStatus: "pending" | "received";
+  /** "budget": o pagamento é controlado pelas parcelas do orçamento. */
+  paymentStatus: "pending" | "received" | "budget";
   clinicalStatus: "in_progress" | "done";
   createdAt: string;
+}
+
+export interface Installment {
+  id: string;
+  budgetId: string;
+  patientId: string;
+  number: number; // 1..n
+  of: number;
+  dueDate: string; // yyyy-mm-dd
+  amountCents: number;
+  method?: PaymentMethod;
+  paidAt?: string; // yyyy-mm-dd
 }
 
 export interface Expense {
@@ -97,8 +123,28 @@ export interface Expense {
   category: string;
   description?: string;
   amountCents: number;
-  spentAt: string; // yyyy-mm-dd
+  spentAt: string; // yyyy-mm-dd (vencimento)
   recurring: boolean;
+  paid?: boolean; // undefined = pago (dados antigos)
+}
+
+export type RecallStatus = "pending" | "contacted" | "scheduled" | "dismissed";
+
+export interface RecallState {
+  status: RecallStatus;
+  dueAt: string; // a qual retorno este estado se refere
+  updatedAt: string;
+}
+
+export type WaitlistStatus = "waiting" | "contacted" | "placed" | "removed";
+
+export interface WaitlistEntry {
+  id: string;
+  patientId: string;
+  period: "morning" | "afternoon" | "any";
+  notes?: string;
+  status: WaitlistStatus;
+  createdAt: string;
 }
 
 export type AppointmentKind = "consultation" | "return" | "personal";
@@ -150,4 +196,8 @@ export interface Db {
   templates: MessageTemplate[];
   profile: Profile;
   access: Access;
+  installments: Installment[];
+  waitlist: WaitlistEntry[];
+  recall: Record<string, RecallState>; // por paciente
+  recallMonths: Record<string, number>; // por procedimento; padrão 6
 }

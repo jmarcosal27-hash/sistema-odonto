@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Db, Phase, PlanItem, ToothCondition } from "@/lib/types";
+import type { Db, Phase, PlanItem, Region, ToothCondition } from "@/lib/types";
 import { CONDITIONS, FREQUENT_PROCEDURE_NAMES, PHASES, SPECIALTIES } from "@/lib/catalog";
 import { allProcedures, api } from "@/lib/store";
 import { money, parseMoney, uid } from "@/lib/format";
@@ -18,6 +18,8 @@ export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onCon
   const [chosen, setChosen] = useState<{ id?: string; name: string } | null>(null);
   const [price, setPrice] = useState("");
   const [phase, setPhase] = useState<Phase>("rehab");
+  const [qty, setQty] = useState("1");
+  const [region, setRegion] = useState<Region | "">("");
   const [creating, setCreating] = useState(false);
   const [newSpec, setNewSpec] = useState(db.profile.activeSpecialtyIds[0] ?? "geral");
   const run = useAction();
@@ -29,7 +31,7 @@ export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onCon
     return procs.filter((p) => p.name.toLowerCase().includes(n) || SPECIALTIES.find((s) => s.id === p.specialtyId)?.name.toLowerCase().includes(n)).slice(0, 30);
   }, [q, procs]);
 
-  const reset = () => { setQ(""); setChosen(null); setPrice(""); setCreating(false); };
+  const reset = () => { setQ(""); setChosen(null); setPrice(""); setCreating(false); setQty("1"); setRegion(""); };
   const close = () => { reset(); onClose(); };
 
   const choose = (id: string | undefined, name: string) => {
@@ -42,7 +44,8 @@ export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onCon
 
   const add = () => {
     if (!chosen) return;
-    onAdd({ id: uid(), tooth, conditions, procedureId: chosen.id, procedureName: chosen.name, phase, priceCents: parseMoney(price) });
+    const quantity = Math.max(1, Math.min(99, Number(qty) || 1));
+    onAdd({ id: uid(), tooth, region: tooth ? undefined : region || undefined, conditions, procedureId: chosen.id, procedureName: chosen.name, phase, priceCents: parseMoney(price), quantity });
     reset();
   };
 
@@ -106,10 +109,16 @@ export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onCon
               <p className="font-semibold">{chosen.name}</p>
               <button type="button" onClick={() => setChosen(null)} className="text-sm font-semibold text-accent">Trocar</button>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Valor (R$)" hint="Em branco = definir depois">{(id, d) => <Input id={id} aria-describedby={d} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />}</Field>
+            <div className="grid gap-3 sm:grid-cols-[1fr_90px_1fr]">
+              <Field label="Valor unitário (R$)" hint="Em branco = definir depois">{(id, d) => <Input id={id} aria-describedby={d} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />}</Field>
+              <Field label="Qtd.">{(id) => <Input id={id} type="number" min={1} max={99} value={qty} onChange={(e) => setQty(e.target.value)} />}</Field>
               <Field label="Etapa">{(id) => <Select id={id} value={phase} onChange={(e) => setPhase(e.target.value as Phase)}>{PHASES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</Select>}</Field>
             </div>
+            {!tooth && (
+              <Field label="Região">{(id) => <Select id={id} value={region} onChange={(e) => setRegion(e.target.value as Region | "")}>
+                <option value="">Geral (boca toda / sem região)</option><option value="upper">Arcada superior</option><option value="lower">Arcada inferior</option><option value="both">Ambas as arcadas</option>
+              </Select>}</Field>
+            )}
           </div>
         )}
       </div>

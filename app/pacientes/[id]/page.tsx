@@ -2,13 +2,14 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plus } from "lucide-react";
-import { useDb, api, patientStatus } from "@/lib/store";
+import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plus, Archive, Hourglass } from "lucide-react";
+import { useDb, api, patientStatus, PAYMENT_METHODS } from "@/lib/store";
 import { age, dateBR, dateShort, money, todayISO, whatsappLink } from "@/lib/format";
 import { Avatar, Badge, Button, Card, Empty, Kpi, PageSkeleton, Toggle } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
 import { AppointmentForm } from "@/components/appointment-form";
 import { TreatmentForm } from "@/components/treatment-form";
+import { useToast } from "@/components/toast";
 
 const SEX = { female: "Feminino", male: "Masculino", other: "Outro" };
 
@@ -18,6 +19,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [edit, setEdit] = useState(false);
   const [schedule, setSchedule] = useState(false);
   const [treat, setTreat] = useState(false);
+  const toast = useToast();
   if (!db) return <PageSkeleton />;
   const p = db.patients.find((x) => x.id === id);
   if (!p) return <Card><Empty title="Paciente não encontrado" body="Ele pode ter sido removido ou o link está errado." action={<Link href="/pacientes" className="font-semibold text-accent">Voltar para pacientes</Link>} /></Card>;
@@ -26,8 +28,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const treatments = db.treatments.filter((t) => t.patientId === id).sort((a, b) => b.performedAt.localeCompare(a.performedAt));
   const upcoming = db.appointments.filter((a) => a.patientId === id && a.date >= todayISO() && a.status !== "cancelled").sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
   const events = db.events.filter((e) => e.patientId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const paid = treatments.filter((t) => t.paymentStatus === "received").reduce((s, t) => s + t.priceCents, 0);
-  const due = treatments.filter((t) => t.paymentStatus === "pending").reduce((s, t) => s + t.priceCents, 0);
+  const installments = db.installments.filter((i) => i.patientId === id).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const paid = treatments.filter((t) => t.paymentStatus === "received").reduce((s, t) => s + t.priceCents, 0) + installments.filter((i) => i.paidAt).reduce((s, i) => s + i.amountCents, 0);
+  const due = treatments.filter((t) => t.paymentStatus === "pending").reduce((s, t) => s + t.priceCents, 0) + installments.filter((i) => !i.paidAt).reduce((s, i) => s + i.amountCents, 0);
+  const inWaitlist = db.waitlist.some((w) => w.patientId === id && (w.status === "waiting" || w.status === "contacted"));
   const waiting = budgets.filter((b) => b.status === "presented").reduce((s, b) => s + b.totalCents, 0);
   const a = age(p.birthDate);
   const status = patientStatus(db, p);
@@ -47,13 +51,14 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex-1 min-w-48">
           <h2 className="text-lg font-bold break-words">{p.fullName}</h2>
           <p className="text-sm text-muted">{[a !== undefined && `${a} anos`, p.sex && SEX[p.sex], p.phone].filter(Boolean).join(" · ") || "Sem dados de contato"}</p>
-          <div className="mt-1">{{ in_treatment: <Badge tone="accent">Em tratamento</Badge>, open_budget: <Badge tone="warning">Orçamento em aberto</Badge>, seen: <Badge tone="success">Já atendido</Badge>, new: <Badge>Ainda não veio</Badge> }[status]}</div>
+          <div className="mt-1 flex flex-wrap gap-1">{p.archived && <Badge>Arquivado</Badge>}{inWaitlist && <Badge tone="info">Na lista de espera</Badge>}{{ in_treatment: <Badge tone="accent">Em tratamento</Badge>, open_budget: <Badge tone="warning">Orçamento em aberto</Badge>, seen: <Badge tone="success">Já atendido</Badge>, new: <Badge>Ainda não veio</Badge> }[status]}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           {actions.map(({ label, icon: Icon, href }) => (
             <a key={label} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-pill bg-surface-sidebar px-4 text-sm font-semibold"><Icon className="size-4" />{label}</a>
           ))}
           <Button variant="soft" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar</Button>
+          {!inWaitlist && !p.archived && <Button variant="soft" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}
           <Link href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-pill bg-accent px-4 text-sm font-semibold text-on-accent"><Stethoscope className="size-4" />Novo plano</Link>
         </div>
       </Card>
@@ -110,13 +115,30 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                   <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                     <span className="min-w-0"><span className="font-medium">{t.procedureName}</span><span className="text-muted"> · {dateBR(t.performedAt)}</span></span>
                     <span className="flex items-center gap-2"><span className="tabular-nums">{money(t.priceCents)}</span>
-                      {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : <button type="button" onClick={() => api.treatments.update(t.id, { paymentStatus: "received" })} className="text-xs font-semibold text-accent">Marcar recebido</button>}
+                      {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge>No orçamento</Badge> : <button type="button" onClick={() => api.treatments.update(t.id, { paymentStatus: "received" })} className="text-xs font-semibold text-accent">Marcar recebido</button>}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
           </Card>
+
+          {installments.length > 0 && (
+            <Card>
+              <h3 className="font-semibold">Parcelas</h3>
+              <ul className="mt-2 divide-y divide-border">
+                {installments.map((i) => (
+                  <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span>{i.number}/{i.of} · vence {dateBR(i.dueDate)}{i.method ? ` · ${PAYMENT_METHODS.find((m) => m.id === i.method)?.label}` : ""}</span>
+                    <span className="flex items-center gap-2"><span className="tabular-nums font-semibold">{money(i.amountCents)}</span>
+                      {i.paidAt ? <Badge tone="success">Paga</Badge> : i.dueDate < todayISO() ? <Badge tone="danger">Vencida</Badge> : <Badge tone="warning">Em aberto</Badge>}
+                      {!i.paidAt && <button type="button" onClick={() => api.installments.pay(i.id).then(() => toast("Parcela recebida."), (e) => toast(e.message, "error"))} className="text-xs font-semibold text-accent">Receber</button>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           <Card>
             <h3 className="font-semibold">Linha do tempo</h3>
@@ -140,9 +162,15 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             </dl>
           </Card>
           <Card>
-            <Toggle checked={p.recallEnabled} onChange={(v) => api.patients.update(p.id, { recallEnabled: v })} label="Lembrar de chamar de volta" hint="Aparece em Agenda › Reativar após 30 dias sem visita." />
+            <Toggle checked={p.recallEnabled} onChange={(v) => api.patients.update(p.id, { recallEnabled: v })} label="Lembrar de chamar de volta" hint="Aparece em Agenda › Retornos quando chegar a hora de voltar." />
           </Card>
         </aside>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="ghost" size="sm" onClick={() => {
+          if (p.archived || window.confirm("Arquivar este paciente? Ele some das listas, mas o histórico fica guardado e dá para desarquivar.")) api.patients.archive(p.id, !p.archived).then(() => toast(p.archived ? "Paciente reativado." : "Paciente arquivado."));
+        }}><Archive className="size-4" />{p.archived ? "Desarquivar" : "Arquivar paciente"}</Button>
       </div>
 
       {edit && <PatientForm open initial={p} onClose={() => setEdit(false)} />}

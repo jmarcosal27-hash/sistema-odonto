@@ -25,7 +25,8 @@ const FAQ: { group: string; items: [string, string][] }[] = [
     items: [
       ["Qual a diferença entre atendido e recebido?", "Atendido é o que você já fez na cadeira. Recebido é o dinheiro que entrou. Um atendimento pode estar feito e ainda a receber — o Financeiro mostra os dois."],
       ["Atendi sem orçamento, e agora?", "Em Atendimentos, use Registrar atendimento: paciente, procedimento, valor e se já recebeu. Leva segundos."],
-      ["Como lembro pacientes que pararam de vir?", "Em Agenda › Reativar aparecem os pacientes sem visita há mais de 30 dias. Um toque abre o WhatsApp com sua mensagem pronta."],
+      ["Como lembro pacientes que pararam de vir?", "Em Agenda › Retornos aparecem os pacientes perto da data de voltar (6 meses por padrão, ou o prazo que você definir por procedimento). Um toque abre o WhatsApp com sua mensagem pronta, e você acompanha quem já foi contatado e quem agendou."],
+      ["Para que serve a lista de espera?", "Para quem quer ser atendido antes. Quando uma consulta é cancelada, o horário aparece em Agenda › Lista de espera para você encaixar alguém."],
     ],
   },
   {

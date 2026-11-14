@@ -16,7 +16,10 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
 }) {
   const db = useDb();
   const toast = useToast();
-  const [a, setA] = useState<Partial<Appointment>>(() => editing ?? { kind: "consultation", date: todayISO(), durationMinutes: 30, status: "to_confirm", ...preset });
+  const [a, setA] = useState<Partial<Appointment>>(() => editing ?? {
+    kind: "consultation", date: todayISO(), durationMinutes: 30, status: "to_confirm",
+    ...Object.fromEntries(Object.entries(preset ?? {}).filter(([, v]) => v !== undefined)),
+  });
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newPatient, setNewPatient] = useState<string | null>(null);
@@ -30,7 +33,10 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
     if (missing || !a.date) return;
     try {
       await api.appointments.save({ ...(a as Appointment), patientId: personal ? undefined : a.patientId });
-      toast(editing ? "Compromisso atualizado." : "Compromisso marcado.");
+      const waiting = db.waitlist.filter((w) => w.status === "waiting" || w.status === "contacted").length;
+      if (a.status === "cancelled" && editing?.status !== "cancelled" && a.time && waiting)
+        toast(`Horário liberado. ${waiting} paciente(s) na lista de espera — veja em Agenda › Lista de espera.`);
+      else toast(editing ? "Compromisso atualizado." : "Compromisso marcado.");
       onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível salvar."); }
   };

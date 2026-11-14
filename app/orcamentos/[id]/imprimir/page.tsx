@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { useDb } from "@/lib/store";
+import { useDb, itemTotal, regionLabel, PAYMENT_METHODS } from "@/lib/store";
 import { PHASES } from "@/lib/catalog";
 import { dateBR, money, addDays } from "@/lib/format";
 import { APP_NAME } from "@/lib/brand";
@@ -17,6 +17,7 @@ export default function PrintBudget({ params }: { params: Promise<{ id: string }
   const patient = b && db.patients.find((p) => p.id === b.patientId);
   if (!b || !plan) return <p className="p-8">Orçamento não encontrado.</p>;
   const color = db.profile.pdfColor ?? "var(--color-accent)";
+  const installments = db.installments.filter((n) => n.budgetId === b.id).sort((x, y) => x.number - y.number);
   const validUntil = addDays(b.presentedAt.slice(0, 10), plan.validityDays);
 
   return (
@@ -51,9 +52,9 @@ export default function PrintBudget({ params }: { params: Promise<{ id: string }
                 <tbody>
                   {items.map((i) => (
                     <tr key={i.id} className="border-b border-border">
-                      <td className="py-1.5">{i.procedureName}</td>
-                      <td className="py-1.5 w-28 text-muted">{i.tooth ? `Dente ${i.tooth}` : "—"}</td>
-                      <td className="py-1.5 w-32 text-right tabular-nums">{i.priceCents !== undefined ? money(i.priceCents) : "a combinar"}</td>
+                      <td className="py-1.5">{i.procedureName}{(i.quantity ?? 1) > 1 ? ` ×${i.quantity}` : ""}</td>
+                      <td className="py-1.5 w-28 text-muted">{i.tooth ? `Dente ${i.tooth}` : i.region ? regionLabel(i.region) : "—"}</td>
+                      <td className="py-1.5 w-32 text-right tabular-nums">{i.priceCents !== undefined ? money(itemTotal(i)) : "a combinar"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -61,8 +62,16 @@ export default function PrintBudget({ params }: { params: Promise<{ id: string }
             </section>
           );
         })}
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex flex-wrap items-start justify-between gap-6">
+          <div className="text-sm space-y-2 max-w-sm">
+            {!!plan.paymentMethods?.length && <p><span className="font-semibold">Formas de pagamento:</span> {PAYMENT_METHODS.filter((m) => plan.paymentMethods!.includes(m.id)).map((m) => m.label).join(", ")}</p>}
+            {plan.notes && <p><span className="font-semibold">Observações:</span> {plan.notes}</p>}
+            {installments.length > 1 && (
+              <div><p className="font-semibold">Parcelas</p><ul>{installments.map((n) => <li key={n.id} className="tabular-nums">{n.number}/{n.of} · {dateBR(n.dueDate)} · {money(n.amountCents)}{n.paidAt ? " · pago" : ""}</li>)}</ul></div>
+            )}
+          </div>
           <div className="rounded-md px-6 py-3 text-right" style={{ background: "var(--color-surface-sidebar)" }}>
+            {!!b.discountCents && <p className="text-xs">Subtotal {money(b.subtotalCents ?? b.totalCents + b.discountCents)} · desconto {money(b.discountCents)}</p>}
             <p className="text-xs">Total</p>
             <p className="text-2xl font-bold tabular-nums">{money(b.totalCents)}</p>
           </div>

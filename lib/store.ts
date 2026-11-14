@@ -6,14 +6,15 @@
 
 import { useSyncExternalStore } from "react";
 import type {
-  Appointment, Db, Expense, Patient, PatientEvent, PlanItem, Procedure,
-  Profile, Treatment, TreatmentPlan, MessageTemplate,
+  Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
+  Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry,
 } from "./types";
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
 import { buildSeed } from "./seed";
 
 const KEY = "consultorio-db-v1";
+const VERSION = 2;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -22,24 +23,36 @@ export function emptyDb(): Db {
   const expires = new Date(now);
   expires.setFullYear(now.getFullYear() + 1);
   return {
-    version: 1,
+    version: VERSION,
     patients: [], events: [], customProcedures: [], prices: {}, plans: [],
     budgets: [], treatments: [], expenses: [], appointments: [],
+    installments: [], waitlist: [], recall: {}, recallMonths: {},
     templates: [
       { kind: "confirmation", body: "Olá, {nome}! Passando para confirmar seu horário em {data} às {hora}. Pode responder com SIM para confirmar? 😊" },
-      { kind: "recall", body: "Oi, {nome}! Faz um tempinho desde a sua última visita. Que tal agendar uma revisão? Tenho horários nesta semana." },
+      { kind: "recall", body: "Oi, {nome}! Já está na hora da sua revisão. Quer que eu reserve um horário para você nesta semana?" },
     ],
     profile: { workMode: "solo", theme: "system", activeSpecialtyIds: DEFAULT_ACTIVE_SPECIALTIES, onboardingDone: false },
     access: { plan: "Anual", startsAt: now.toISOString(), expiresAt: expires.toISOString(), email: "voce@exemplo.com" },
   };
 }
 
+/** Completa dados salvos por versões anteriores do app. */
+function migrate(db: Db): Db {
+  if (db.version >= VERSION) return db;
+  db.installments ??= [];
+  db.waitlist ??= [];
+  db.recall ??= {};
+  db.recallMonths ??= {};
+  db.version = VERSION;
+  return db;
+}
+
 function load(): Db {
   if (cache) return cache;
   try {
     const raw = localStorage.getItem(KEY);
-    cache = raw ? (JSON.parse(raw) as Db) : buildSeed(emptyDb());
-    if (!raw) persist();
+    cache = raw ? migrate(JSON.parse(raw) as Db) : buildSeed(emptyDb());
+    persist();
   } catch {
     cache = buildSeed(emptyDb());
   }
@@ -85,7 +98,29 @@ export function allProcedures(db: Db): Procedure[] {
   return [...BASE_PROCEDURES, ...db.customProcedures];
 }
 
-export const planTotal = (items: PlanItem[]) => items.reduce((s, i) => s + (i.priceCents ?? 0), 0);
+export const itemTotal = (i: PlanItem) => (i.priceCents ?? 0) * (i.quantity ?? 1);
+export const planTotal = (items: PlanItem[]) => items.reduce((s, i) => s + itemTotal(i), 0);
+
+/** Divide `total` em `n` parcelas inteiras; a diferença de arredondamento vai na última. */
+export function splitInstallments(total: number, n: number) {
+  const base = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => (i === n - 1 ? total - base * (n - 1) : base));
+}
+
+function addMonths(iso: string, m: number) {
+  const [y, mo, d] = iso.split("-").map(Number);
+  const dt = new Date(y, mo - 1 + m, 1);
+  const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+  dt.setDate(Math.min(d, last));
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function touchVisit(db: Db, patientId: string | undefined, date: string) {
+  const p = patientId && db.patients.find((x) => x.id === patientId);
+  if (p && (!p.lastVisitAt || p.lastVisitAt.slice(0, 10) < date)) p.lastVisitAt = date;
+}
+
+export interface PaymentPlan { installments: number; firstDue: string; method?: PaymentMethod; paidNow?: boolean }
 
 export const api = {
   patients: {
@@ -105,6 +140,13 @@ export const api = {
         const p = db.patients.find((x) => x.id === id);
         if (!p) throw new Error("Paciente não encontrado.");
         Object.assign(p, patch);
+      });
+    },
+    async archive(id: string, archived: boolean) {
+      commit((db) => {
+        guard(db);
+        const p = db.patients.find((x) => x.id === id);
+        if (p) p.archived = archived || undefined;
       });
     },
     async importRows(rows: Partial<Patient>[]) {
@@ -145,9 +187,11 @@ export const api = {
         const plan = db.plans.find((p) => p.id === planId);
         if (!plan) throw new Error("Plano não encontrado.");
         if (!plan.items.length) throw new Error("Adicione pelo menos um procedimento antes de gerar o orçamento.");
+        const subtotal = planTotal(plan.items);
+        const discount = Math.min(plan.discountCents ?? 0, subtotal);
         plan.status = "budgeted";
         db.budgets.push({
-          id, planId, patientId: plan.patientId, totalCents: planTotal(plan.items),
+          id, planId, patientId: plan.patientId, subtotalCents: subtotal, discountCents: discount, totalCents: subtotal - discount,
           status: "presented", authorizedItemIds: [], presentedAt: new Date().toISOString(),
         });
         event(db, plan.patientId, "budget_presented", "Orçamento apresentado");
@@ -157,7 +201,17 @@ export const api = {
   },
 
   budgets: {
-    async authorize(budgetId: string, itemIds?: string[]) {
+    /** Valor aprovado: itens escolhidos menos o desconto, proporcional à parte aprovada. */
+    approvedTotal(db: Db, budgetId: string, itemIds: string[]) {
+      const b = db.budgets.find((x) => x.id === budgetId);
+      const plan = b && db.plans.find((p) => p.id === b.planId);
+      if (!b || !plan) return 0;
+      const subtotal = planTotal(plan.items);
+      const chosen = planTotal(plan.items.filter((i) => itemIds.includes(i.id)));
+      const discount = b.discountCents ?? 0;
+      return subtotal ? chosen - Math.round((discount * chosen) / subtotal) : 0;
+    },
+    async authorize(budgetId: string, itemIds: string[] | undefined, payment: PaymentPlan) {
       commit((db) => {
         guard(db);
         const b = db.budgets.find((x) => x.id === budgetId);
@@ -165,18 +219,25 @@ export const api = {
         if (!b || !plan) throw new Error("Orçamento não encontrado.");
         const chosen = plan.items.filter((i) => !itemIds || itemIds.includes(i.id));
         if (!chosen.length) throw new Error("Escolha pelo menos um item para aprovar.");
+        const n = Math.max(1, Math.min(24, Math.round(payment.installments)));
+        const total = api.budgets.approvedTotal(db, budgetId, chosen.map((i) => i.id));
         b.status = "authorized";
         b.authorizedItemIds = chosen.map((i) => i.id);
         b.authorizedAt = new Date().toISOString();
         plan.status = "authorized";
         chosen.forEach((item) => db.treatments.push({
-          id: uid(), patientId: b.patientId, budgetId: b.id, planItemId: item.id,
-          procedureName: (item.procedureName ?? "Procedimento") + (item.tooth ? ` · dente ${item.tooth}` : ""),
-          performedAt: todayISO(), priceCents: item.priceCents ?? 0,
-          paymentStatus: "pending", clinicalStatus: "in_progress", createdAt: new Date().toISOString(),
+          id: uid(), patientId: b.patientId, budgetId: b.id, planItemId: item.id, procedureId: item.procedureId,
+          procedureName: (item.procedureName ?? "Procedimento") + (item.tooth ? ` · dente ${item.tooth}` : item.region ? ` · ${regionLabel(item.region)}` : "") + ((item.quantity ?? 1) > 1 ? ` (×${item.quantity})` : ""),
+          performedAt: todayISO(), priceCents: itemTotal(item),
+          paymentStatus: "budget", clinicalStatus: "in_progress", createdAt: new Date().toISOString(),
+        }));
+        splitInstallments(total, n).forEach((amount, i) => db.installments.push({
+          id: uid(), budgetId: b.id, patientId: b.patientId, number: i + 1, of: n,
+          dueDate: addMonths(payment.firstDue, i), amountCents: amount, method: payment.method,
+          paidAt: payment.paidNow && i === 0 ? todayISO() : undefined,
         }));
         event(db, b.patientId, "budget_authorized",
-          chosen.length === plan.items.length ? "Orçamento aprovado" : `Orçamento aprovado em parte (${chosen.length} de ${plan.items.length} itens)`);
+          (chosen.length === plan.items.length ? "Orçamento aprovado" : `Orçamento aprovado em parte (${chosen.length} de ${plan.items.length} itens)`) + (n > 1 ? ` em ${n}x` : ""));
       });
     },
     async decline(budgetId: string) {
@@ -188,14 +249,30 @@ export const api = {
     },
   },
 
+  installments: {
+    async pay(id: string, method?: PaymentMethod, date = todayISO()) {
+      commit((db) => {
+        guard(db);
+        const i = db.installments.find((x) => x.id === id);
+        if (!i) throw new Error("Parcela não encontrada.");
+        i.paidAt = date;
+        if (method) i.method = method;
+        event(db, i.patientId, "payment_received", `Parcela ${i.number}/${i.of} recebida`);
+      });
+    },
+    async unpay(id: string) {
+      commit((db) => { guard(db); const i = db.installments.find((x) => x.id === id); if (i) delete i.paidAt; });
+    },
+  },
+
   treatments: {
     async log(input: Omit<Treatment, "id" | "createdAt"> & { nextAppointmentDate?: string }) {
       const { nextAppointmentDate, ...t } = input;
       commit((db) => {
         guard(db);
         db.treatments.push({ ...t, id: uid(), createdAt: new Date().toISOString() });
-        const p = db.patients.find((x) => x.id === t.patientId);
-        if (p && (!p.lastVisitAt || p.lastVisitAt < t.performedAt)) p.lastVisitAt = t.performedAt;
+        touchVisit(db, t.patientId, t.performedAt);
+        delete db.recall[t.patientId];
         event(db, t.patientId, "treatment_done", `${t.procedureName} realizado`);
         if (t.paymentStatus === "received") event(db, t.patientId, "payment_received", "Pagamento registrado");
         if (nextAppointmentDate) {
@@ -211,10 +288,7 @@ export const api = {
         if (!t) throw new Error("Atendimento não encontrado.");
         const wasPending = t.paymentStatus === "pending";
         Object.assign(t, patch);
-        if (patch.clinicalStatus === "done") {
-          const p = db.patients.find((x) => x.id === t.patientId);
-          if (p && (!p.lastVisitAt || p.lastVisitAt < todayISO())) p.lastVisitAt = todayISO();
-        }
+        if (patch.clinicalStatus === "done") { touchVisit(db, t.patientId, todayISO()); delete db.recall[t.patientId]; }
         if (wasPending && patch.paymentStatus === "received") event(db, t.patientId, "payment_received", `Recebido: ${t.procedureName}`);
       });
     },
@@ -224,7 +298,7 @@ export const api = {
     async save(a: Omit<Appointment, "id"> & { id?: string }) {
       commit((db) => {
         guard(db);
-        if (a.time) {
+        if (a.time && a.status !== "cancelled") {
           const start = toMin(a.time), end = start + a.durationMinutes;
           const clash = db.appointments.find((x) => x.id !== a.id && x.date === a.date && x.time && x.status !== "cancelled"
             && toMin(x.time) < end && start < toMin(x.time) + x.durationMinutes);
@@ -236,10 +310,13 @@ export const api = {
           db.appointments.push({ ...a, id: uid() });
           if (a.patientId) event(db, a.patientId, "appointment_scheduled", "Compromisso marcado");
         }
-        if (a.status === "done" && a.patientId) {
-          const p = db.patients.find((x) => x.id === a.patientId);
-          if (p && (!p.lastVisitAt || p.lastVisitAt < a.date)) p.lastVisitAt = a.date;
+        if (a.patientId && a.status !== "cancelled" && a.date >= todayISO()) {
+          const r = db.recall[a.patientId];
+          if (!r || r.status !== "dismissed") db.recall[a.patientId] = { status: "scheduled", dueAt: r?.dueAt ?? a.date, updatedAt: new Date().toISOString() };
+          const w = db.waitlist.find((x) => x.patientId === a.patientId && (x.status === "waiting" || x.status === "contacted"));
+          if (w) w.status = "placed";
         }
+        if (a.status === "done") touchVisit(db, a.patientId, a.date);
       });
     },
     async setStatus(id: string, status: Appointment["status"]) {
@@ -248,16 +325,34 @@ export const api = {
         const a = db.appointments.find((x) => x.id === id);
         if (!a) return;
         a.status = status;
-        if (status === "done" && a.patientId) {
-          const p = db.patients.find((x) => x.id === a.patientId);
-          if (p && (!p.lastVisitAt || p.lastVisitAt < a.date)) p.lastVisitAt = a.date;
-        }
+        if (status === "done") touchVisit(db, a.patientId, a.date);
       });
+    },
+  },
+
+  waitlist: {
+    async add(e: Omit<WaitlistEntry, "id" | "createdAt" | "status">) {
+      commit((db) => {
+        guard(db);
+        if (db.waitlist.some((x) => x.patientId === e.patientId && (x.status === "waiting" || x.status === "contacted")))
+          throw new Error("Esse paciente já está na lista de espera.");
+        db.waitlist.push({ ...e, id: uid(), status: "waiting", createdAt: new Date().toISOString() });
+      });
+    },
+    async setStatus(id: string, status: WaitlistEntry["status"]) {
+      commit((db) => { guard(db); const w = db.waitlist.find((x) => x.id === id); if (w) w.status = status; });
+    },
+  },
+
+  recall: {
+    async setStatus(patientId: string, status: RecallStatus, dueAt: string) {
+      commit((db) => { guard(db); db.recall[patientId] = { status, dueAt, updatedAt: new Date().toISOString() }; });
     },
   },
 
   expenses: {
     async create(e: Omit<Expense, "id">) { commit((db) => { guard(db); db.expenses.push({ ...e, id: uid() }); }); },
+    async setPaid(id: string, paid: boolean) { commit((db) => { guard(db); const e = db.expenses.find((x) => x.id === id); if (e) e.paid = paid; }); },
     async remove(id: string) { commit((db) => { guard(db); db.expenses = db.expenses.filter((x) => x.id !== id); }); },
   },
 
@@ -272,6 +367,13 @@ export const api = {
         guard(db);
         if (cents === undefined) delete db.prices[procedureId];
         else db.prices[procedureId] = cents;
+      });
+    },
+    async setRecallMonths(procedureId: string, months: number | undefined) {
+      commit((db) => {
+        guard(db);
+        if (months === undefined) delete db.recallMonths[procedureId];
+        else db.recallMonths[procedureId] = months;
       });
     },
     async adjustAllPrices(percent: number) {
@@ -298,6 +400,8 @@ export const api = {
 
 function toMin(t: string) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 
+export const regionLabel = (r: PlanItem["region"]) => (r === "upper" ? "arcada superior" : r === "lower" ? "arcada inferior" : "ambas as arcadas");
+
 export function patientStatus(db: Db, p: Patient): "in_treatment" | "open_budget" | "seen" | "new" {
   if (db.treatments.some((t) => t.patientId === p.id && t.clinicalStatus === "in_progress")) return "in_treatment";
   if (db.budgets.some((b) => b.patientId === p.id && b.status === "presented")) return "open_budget";
@@ -305,15 +409,39 @@ export function patientStatus(db: Db, p: Patient): "in_treatment" | "open_budget
   return "new";
 }
 
-export function recallBucket(p: Patient): "30" | "365" | null {
-  if (!p.recallEnabled || !p.lastVisitAt) return null;
-  const days = Math.floor((Date.now() - new Date(p.lastVisitAt).getTime()) / 86400000);
-  if (days >= 365) return "365";
-  if (days >= 30) return "30";
-  return null;
+export const activePatients = (db: Db) => db.patients.filter((p) => !p.archived);
+
+export const DEFAULT_RECALL_MONTHS = 6;
+
+/** Quando o paciente deveria voltar e em que pé está o contato. null = não está na lista de retornos. */
+export function recallInfo(db: Db, p: Patient): { dueAt: string; status: RecallStatus; lastVisit: string } | null {
+  if (!p.recallEnabled || p.archived || !p.lastVisitAt) return null;
+  const lastVisit = p.lastVisitAt.slice(0, 10);
+  const done = db.treatments.filter((t) => t.patientId === p.id && t.clinicalStatus === "done").sort((a, b) => b.performedAt.localeCompare(a.performedAt))[0];
+  const months = (done?.procedureId && db.recallMonths[done.procedureId]) || DEFAULT_RECALL_MONTHS;
+  const dueAt = addMonths(lastVisit, months);
+  const hasFuture = db.appointments.some((a) => a.patientId === p.id && a.date >= todayISO() && a.status !== "cancelled");
+  const saved = db.recall[p.id];
+  const status: RecallStatus = hasFuture ? "scheduled" : saved && saved.dueAt === dueAt ? saved.status : "pending";
+  if (status === "pending" && dueAt > addDays(todayISO(), 15)) return null; // ainda não é hora
+  return { dueAt, status, lastVisit };
 }
+
+/** Aprovado há 7+ dias, ainda em andamento, sem consulta marcada. */
+export function stalledTreatments(db: Db) {
+  const limit = addDays(todayISO(), -7);
+  return db.budgets
+    .filter((b) => b.status === "authorized" && b.authorizedAt && b.authorizedAt.slice(0, 10) <= limit)
+    .filter((b) => db.treatments.some((t) => t.budgetId === b.id && t.clinicalStatus === "in_progress"))
+    .filter((b) => !db.appointments.some((a) => a.patientId === b.patientId && a.date >= todayISO() && a.status !== "cancelled"));
+}
+
+export const isOverdue = (i: Installment) => !i.paidAt && i.dueDate < todayISO();
 
 export const isBirthdayMonth = (p: Patient) =>
   !!p.birthDate && Number(p.birthDate.slice(5, 7)) === new Date().getMonth() + 1;
 
-export const nextWeek = () => addDays(todayISO(), 7);
+export const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
+  { id: "pix", label: "Pix" }, { id: "credit", label: "Cartão de crédito" }, { id: "debit", label: "Cartão de débito" },
+  { id: "cash", label: "Dinheiro" }, { id: "transfer", label: "Transferência" }, { id: "boleto", label: "Boleto" }, { id: "other", label: "Outro" },
+];

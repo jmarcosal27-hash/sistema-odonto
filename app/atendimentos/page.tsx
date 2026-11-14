@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { useDb, api } from "@/lib/store";
+import { useDb, api, stalledTreatments } from "@/lib/store";
 import { dateBR, money } from "@/lib/format";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Select } from "@/components/ui";
 import { TreatmentForm } from "@/components/treatment-form";
@@ -39,6 +39,7 @@ export default function Page() {
   if (!db) return <PageSkeleton />;
   const received = rows.filter((r) => r.t.paymentStatus === "received").reduce((s, r) => s + r.t.priceCents, 0);
   const pending = rows.filter((r) => r.t.paymentStatus === "pending").reduce((s, r) => s + r.t.priceCents, 0);
+  const stalled = stalledTreatments(db).length;
   const inProgress = db.treatments.filter((t) => t.clinicalStatus === "in_progress").length;
   const years = Array.from(new Set([now.getFullYear(), ...db.treatments.map((t) => Number(t.performedAt.slice(0, 4)))])).sort((a, b) => b - a);
 
@@ -52,9 +53,14 @@ export default function Page() {
         <Button onClick={() => setForm(true)}><Plus className="size-4" />Registrar atendimento</Button>
       </div>
 
+      {stalled > 0 && (
+        <Link href="/atendimentos/parados" className="flex items-center justify-between gap-3 rounded-lg bg-surface-warning-subtle px-4 py-3 text-sm font-medium">
+          {stalled} tratamento(s) aprovado(s) parado(s) há mais de 7 dias, sem consulta marcada<span className="font-semibold">Ver →</span>
+        </Link>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Kpi tone="success" label="Recebido" value={money(received)} sub="nos atendimentos filtrados" />
-        <Kpi tone="warning" label="A receber" value={money(pending)} sub="feito ou em andamento, sem pagamento" />
+        <Kpi tone="warning" label="A receber (avulsos)" value={money(pending)} sub={<>parcelas de orçamento em <Link href="/financeiro?aba=receivable" className="font-semibold text-accent">Financeiro</Link></>} />
         <Kpi label="Em andamento" value={inProgress} sub="tratamentos não concluídos" />
       </div>
 
@@ -83,7 +89,7 @@ export default function Page() {
                 <div className="flex items-center gap-2">
                   <span className="font-semibold tabular-nums">{money(t.priceCents)}</span>
                   {t.clinicalStatus === "done" ? <Badge tone="info">Concluído</Badge> : <Badge tone="accent">Em andamento</Badge>}
-                  {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : <Badge tone="warning">A receber</Badge>}
+                  {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">No orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
                 </div>
                 <div className="flex gap-2 md:justify-end">
                   {t.clinicalStatus === "in_progress" && <Button size="sm" variant="soft" onClick={() => run(() => api.treatments.update(t.id, { clinicalStatus: "done", performedAt: new Date().toISOString().slice(0, 10) }), "Marcado como concluído.")}>Concluir</Button>}

@@ -25,6 +25,7 @@ export default function Page() {
   const [q, setQ] = useState("");
   const [sex, setSex] = useState("");
   const [sort, setSort] = useState<"recent" | "az">("recent");
+  const [archived, setArchived] = useState(false);
   const [form, setForm] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
@@ -32,14 +33,15 @@ export default function Page() {
     if (!db) return [];
     const n = q.trim().toLowerCase(), digits = q.replace(/\D/g, "");
     return db.patients
+      .filter((p) => !!p.archived === archived)
       .filter((p) => bucket === "all" || (bucket === "birthday" ? isBirthdayMonth(p) : patientStatus(db, p) === bucket))
       .filter((p) => !sex || p.sex === sex)
       .filter((p) => !n || p.fullName.toLowerCase().includes(n) || (digits.length > 2 && ((p.phone ?? "").replace(/\D/g, "").includes(digits) || (p.cpf ?? "").replace(/\D/g, "").includes(digits))))
       .sort((a, b) => (sort === "az" ? a.fullName.localeCompare(b.fullName, "pt-BR") : b.createdAt.localeCompare(a.createdAt)));
-  }, [db, bucket, q, sex, sort]);
+  }, [db, bucket, q, sex, sort, archived]);
 
   if (!db) return <PageSkeleton />;
-  const count = (b: Bucket) => db.patients.filter((p) => (b === "all" ? true : b === "birthday" ? isBirthdayMonth(p) : patientStatus(db, p) === b)).length;
+  const count = (b: Bucket) => db.patients.filter((p) => !p.archived).filter((p) => (b === "all" ? true : b === "birthday" ? isBirthdayMonth(p) : patientStatus(db, p) === b)).length;
   const thisMonth = db.patients.filter((p) => p.createdAt.slice(0, 7) === todayISO().slice(0, 7)).length;
   const buckets: [Bucket, string, string][] = [
     ["all", "Todos", `+${thisMonth} este mês`], ["in_treatment", "Em tratamento", ""], ["open_budget", "Com orçamento aberto", ""],
@@ -81,6 +83,7 @@ export default function Page() {
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={() => file.current?.click()}><Upload className="size-4" />Importar planilha (CSV)</Button>
         <input ref={file} type="file" accept=".csv,text/csv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ""; }} />
+        <Button variant={archived ? "soft" : "ghost"} size="sm" aria-pressed={archived} onClick={() => setArchived(!archived)}>{archived ? "Ver ativos" : `Arquivados (${db.patients.filter((p) => p.archived).length})`}</Button>
         <Button variant="ghost" size="sm" onClick={exportCsv} disabled={!db.patients.length}><Download className="size-4" />Exportar</Button>
       </div>
 
@@ -103,7 +106,7 @@ export default function Page() {
           <Button onClick={() => setForm(true)}><Plus className="size-4" />Novo paciente</Button>
         </div>
         {!list.length ? (
-          <Empty title={db.patients.length ? "Ninguém com esse filtro" : "Sua lista de pacientes está vazia"}
+          <Empty title={archived ? "Nenhum paciente arquivado" : db.patients.length ? "Ninguém com esse filtro" : "Sua lista de pacientes está vazia"}
             body={db.patients.length ? "Mude a busca ou o filtro." : "Cadastre o primeiro paciente ou importe uma planilha que você já usa."}
             action={!db.patients.length && <Button onClick={() => setForm(true)}>Cadastrar paciente</Button>} />
         ) : (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Percent } from "lucide-react";
-import { useDb, api, allProcedures } from "@/lib/store";
+import { useDb, api, allProcedures, DEFAULT_RECALL_MONTHS } from "@/lib/store";
 import { SPECIALTIES } from "@/lib/catalog";
 import { money, parseMoney } from "@/lib/format";
 import { Badge, Button, Card, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle, cx } from "@/components/ui";
@@ -84,6 +84,12 @@ export default function Page() {
                     {list.map((p) => (
                       <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
                         <span className="text-sm">{p.name}{p.custom && <span className="ml-2 text-xs text-muted">(seu)</span>}</span>
+                        <span className="flex items-center gap-3">
+                        <Select aria-label={`Retorno após ${p.name}`} title="Quando o paciente deve voltar depois deste procedimento" className="h-8 w-36 text-xs"
+                          value={db.recallMonths[p.id] ?? ""} onChange={(e) => api.catalog.setRecallMonths(p.id, e.target.value ? Number(e.target.value) : undefined)}>
+                          <option value="">Retorno: {DEFAULT_RECALL_MONTHS} meses</option>
+                          {[1, 3, 6, 12, 24].map((m) => <option key={m} value={m}>Retorno: {m} {m === 1 ? "mês" : "meses"}</option>)}
+                        </Select>
                         {editing === p.id ? (
                           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); savePrice(p.id); }}>
                             <Input autoFocus aria-label={`Preço de ${p.name}`} inputMode="decimal" className="w-28 h-8" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="0,00" />
@@ -96,6 +102,7 @@ export default function Page() {
                             {db.prices[p.id] !== undefined ? money(db.prices[p.id]) : "+ Definir preço"}
                           </button>
                         )}
+                        </span>
                       </li>
                     ))}
                   </ul>
