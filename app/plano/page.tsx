@@ -73,8 +73,7 @@ function PlanEditor() {
     if (!patientId || !items.length) return;
     setSaving(true);
     const budgetId = await run(async () => {
-      const planId = await api.plans.save({ patientId, kind, validityDays: 30, items, discountCents, paymentMethods: methods, notes: notes || undefined });
-      return api.plans.saveAsBudget(planId);
+      return api.budgetsFromPlan.createBudget({ patientId, kind, validityDays: 30, items, discountCents, paymentMethods: methods, notes: notes || undefined });
     }, "Orçamento gerado.");
     setSaving(false);
     if (budgetId) { setItems([]); setMarks({}); setDiscount(""); setNotes(""); router.push(`/orcamentos?abrir=${budgetId}`); }

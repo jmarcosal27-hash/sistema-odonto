@@ -173,6 +173,7 @@ export interface Profile {
   theme: "system" | "light" | "dark";
   activeSpecialtyIds: string[];
   onboardingDone: boolean;
+  clinicName?: string;
 }
 
 export interface Access {

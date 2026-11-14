@@ -12,6 +12,8 @@ import type {
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
 import { buildSeed } from "./seed";
+import { REMOTE, supabaseBrowser } from "./supabase/client";
+import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
 const VERSION = 2;
@@ -80,8 +82,29 @@ function subscribe(l: () => void) {
 
 /** null durante SSR / hidratação -> telas mostram skeleton. */
 export function useDb(): Db | null {
-  return useSyncExternalStore(subscribe, load, () => null);
+  return useSyncExternalStore(REMOTE ? subscribeRemote : subscribe, REMOTE ? remoteDb : load, () => null);
 }
+
+// ===== modo nuvem =====
+let remote: RemoteState = { status: "loading" };
+let started = false;
+const notify = () => listeners.forEach((l) => l());
+async function refreshRemote() {
+  try { remote = await loadRemote(); } catch (e) { remote = { status: "error", message: e instanceof Error ? e.message : "Falha ao carregar." }; }
+  notify();
+}
+function subscribeRemote(l: () => void) {
+  listeners.add(l);
+  if (!started) { started = true; void refreshRemote(); }
+  return () => { listeners.delete(l); };
+}
+const remoteDb = () => (remote.status === "ready" ? remote.db : null);
+const remoteState = () => remote;
+/** Estado da sessão na nuvem (null no modo demonstração). */
+export function useRemoteState(): RemoteState | null {
+  return useSyncExternalStore(REMOTE ? subscribeRemote : subscribe, REMOTE ? remoteState : () => null, () => (REMOTE ? { status: "loading" } as RemoteState : null));
+}
+export const reloadRemote = refreshRemote;
 
 export function isReadOnly(db: Db) {
   return new Date(db.access.expiresAt).getTime() < Date.now();
@@ -122,7 +145,7 @@ function touchVisit(db: Db, patientId: string | undefined, date: string) {
 
 export interface PaymentPlan { installments: number; firstDue: string; method?: PaymentMethod; paidNow?: boolean }
 
-export const api = {
+const localApi = {
   patients: {
     async create(input: Omit<Patient, "id" | "createdAt" | "recallEnabled"> & { recallEnabled?: boolean }) {
       const id = uid();
@@ -197,6 +220,14 @@ export const api = {
         event(db, plan.patientId, "budget_presented", "Orçamento apresentado");
       });
       return id;
+    },
+  },
+
+  // atalhos usados pelas telas (o modo nuvem faz numa transação só)
+  budgetsFromPlan: {
+    async createBudget(plan: Omit<TreatmentPlan, "id" | "createdAt" | "status">) {
+      const planId = await localApi.plans.save(plan);
+      return localApi.plans.saveAsBudget(planId);
     },
   },
 
@@ -445,3 +476,29 @@ export const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
   { id: "pix", label: "Pix" }, { id: "credit", label: "Cartão de crédito" }, { id: "debit", label: "Cartão de débito" },
   { id: "cash", label: "Dinheiro" }, { id: "transfer", label: "Transferência" }, { id: "boleto", label: "Boleto" }, { id: "other", label: "Outro" },
 ];
+
+const remoteApi = REMOTE ? makeRemoteApi(() => {
+  if (remote.status !== "ready") throw new Error("Ainda carregando os dados da clínica.");
+  return { sb: supabaseBrowser(), session: remote.session, db: remote.db };
+}, refreshRemote) : null;
+
+/** Mesma forma nos dois modos: as telas não sabem se é demonstração ou nuvem. */
+export const api: typeof localApi = remoteApi ? {
+  patients: remoteApi.patients as unknown as typeof localApi.patients,
+  plans: localApi.plans, // não usado no modo nuvem
+  budgetsFromPlan: { createBudget: (plan) => remoteApi.plans.saveAsBudget(JSON.stringify(plan)) },
+  budgets: { approvedTotal: localApi.budgets.approvedTotal, authorize: remoteApi.budgets.authorize, decline: remoteApi.budgets.decline },
+  installments: remoteApi.installments,
+  treatments: remoteApi.treatments,
+  appointments: remoteApi.appointments,
+  waitlist: remoteApi.waitlist,
+  recall: remoteApi.recall,
+  expenses: remoteApi.expenses,
+  catalog: remoteApi.catalog,
+  account: {
+    updateProfile: remoteApi.account.updateProfile,
+    updateTemplate: remoteApi.account.updateTemplate,
+    async reset() { throw new Error("No modo nuvem os dados não podem ser apagados daqui. Use Ajustes › Excluir conta."); },
+    exportJson: () => JSON.stringify(remote.status === "ready" ? remote.db : {}, null, 2),
+  },
+} : localApi;

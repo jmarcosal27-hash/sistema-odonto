@@ -11,7 +11,9 @@ import { cx } from "./ui";
 import { ToastProvider } from "./toast";
 import { HelpModal } from "./help-modal";
 import { Onboarding } from "./onboarding";
-import { useDb, api, isReadOnly } from "@/lib/store";
+import { useDb, api, isReadOnly, useRemoteState } from "@/lib/store";
+import { REMOTE, supabaseBrowser } from "@/lib/supabase/client";
+import { CreateClinic } from "./create-clinic";
 import { APP_NAME } from "@/lib/brand";
 
 const NAV = [
@@ -44,6 +46,7 @@ function isActive(path: string, href: string) {
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const db = useDb();
+  const remote = useRemoteState();
   const [drawer, setDrawer] = useState(false);
   const [help, setHelp] = useState(false);
   const [onboard, setOnboard] = useState(false);
@@ -56,7 +59,9 @@ export function Shell({ children }: { children: ReactNode }) {
     else root.setAttribute("data-theme", theme);
   }, [theme]);
 
-  if (path.endsWith("/imprimir")) return <ToastProvider>{children}</ToastProvider>;
+  if (path.endsWith("/imprimir") || path.startsWith("/entrar") || path.startsWith("/auth") || path === "/privacidade" || path === "/termos") return <ToastProvider>{children}</ToastProvider>;
+  if (remote?.status === "no-clinic") return <ToastProvider><CreateClinic email={remote.email} /></ToastProvider>;
+  if (remote?.status === "error") return <ToastProvider><main className="grid min-h-dvh place-items-center p-6 text-center"><div className="space-y-3"><p className="font-semibold">{remote.message}</p><a href="/entrar" className="font-semibold text-accent">Entrar de novo</a></div></main></ToastProvider>;
   const title = TITLES.find(([p]) => path.startsWith(p))?.[1] ?? "Início";
   const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
@@ -89,7 +94,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Link href="/ajustes" className="flex items-center gap-3 rounded-md px-3 h-10 text-sm hover:bg-surface/60">
           <Settings aria-hidden className="size-[18px]" />Ajustes
         </Link>
-        <button type="button" onClick={() => alertLogout()} className="flex w-full items-center gap-3 rounded-md px-3 h-10 text-sm text-muted hover:bg-surface/60">
+        <button type="button" onClick={() => logout()} className="flex w-full items-center gap-3 rounded-md px-3 h-10 text-sm text-muted hover:bg-surface/60">
           <LogOut aria-hidden className="size-[18px]" />Sair
         </button>
       </div>
@@ -150,7 +155,7 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
   return <button type="button" aria-label={label} title={label} onClick={onClick} className="rounded-pill p-2 hover:bg-surface-sidebar">{children}</button>;
 }
 
-function alertLogout() {
-  // Sem auth real ainda (replica-backend). Volta para o início.
-  window.location.href = "/";
+async function logout() {
+  if (REMOTE) await supabaseBrowser().auth.signOut({ scope: "local" });
+  window.location.href = REMOTE ? "/entrar" : "/";
 }
