@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import { supabaseBrowser } from "./supabase/client";
 import { todayISO } from "./format";
+import { hasUnanswered } from "./catalog";
 import { EXT, MAX_FILE_BYTES, checkFile } from "./files";
 
 export interface Session { userId: string; email: string; clinicId: string; role: "owner" | "dentist" | "receptionist" | "finance"; memberId: string }
@@ -105,7 +106,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const snap = (r: Row) => ({ professionalName: s(r.professional_name), professionalCro: s(r.professional_cro), professionalCroUf: s(r.professional_cro_uf) });
 
   const db: Db = {
-    version: 5,
+    version: 6,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -160,6 +161,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
     anamnesisRecords: (anaRecords as Row[]).map((r): AnamnesisRecord => ({
       id: r.id as string, patientId: r.patient_id as string, templateId: s(r.template_id), templateName: r.template_name as string,
       answers: r.answers as AnamnesisAnswer[], filledOn: r.filled_on as string, createdAt: r.created_at as string,
+      status: r.status as AnamnesisRecord["status"], revisionOf: s(r.revision_of), completedAt: s(r.completed_at), completedBy: s(r.completed_by),
     })),
     medications: (meds as Row[]).map((r): Medication => ({
       id: r.id as string, name: r.name as string, route: r.route as Medication["route"], controlled: r.controlled as boolean,
@@ -389,11 +391,19 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         else await q(sb.from("anamnesis_templates").insert({ clinic_id: session.clinicId, name, questions }));
       }),
       removeTemplate: (id: string) => run(async () => { await q(ctx().sb.from("anamnesis_templates").delete().eq("id", id)); }),
-      saveRecord: (r: { patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string }) => run(async () => {
+      /** Cria ou atualiza um rascunho; `complete` conclui (o banco trava a ficha e só dono/dentista concluem). */
+      saveRecord: (r: { id?: string; patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string; revisionOf?: string; complete?: boolean }) => run(async () => {
         const { sb, session } = ctx();
         if (!r.answers.length) throw new Error("A ficha está vazia.");
-        await q(sb.from("anamnesis_records").insert({ clinic_id: session.clinicId, patient_id: r.patientId, template_id: r.templateId ?? null,
-          template_name: r.templateName, answers: r.answers, filled_on: r.filledOn }));
+        if (r.complete && hasUnanswered(r.answers)) throw new Error("Responda todas as perguntas de sim ou não antes de concluir.");
+        const status = r.complete ? "completed" : "draft";
+        const body = { template_id: r.templateId ?? null, template_name: r.templateName, answers: r.answers, filled_on: r.filledOn, status };
+        if (r.id) {
+          const rows = await q(sb.from("anamnesis_records").update(body).eq("id", r.id).select("id"));
+          if (!(rows as Row[]).length) throw new Error(NO_ROWS);
+        } else {
+          await q(sb.from("anamnesis_records").insert({ ...body, clinic_id: session.clinicId, patient_id: r.patientId, revision_of: r.revisionOf ?? null }));
+        }
       }),
       removeRecord: (id: string) => run(async () => { await q(ctx().sb.from("anamnesis_records").delete().eq("id", id)); }),
     },

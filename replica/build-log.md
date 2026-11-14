@@ -141,3 +141,22 @@ Migration nova `web/supabase/migrations/20261114000004_documentos_extras.sql` (n
 
 Também corrigido: o campo CPF de Ajustes usava `/D/g` em vez de `/\D/g` e aceitava letras.
 Riscos: logo e arquivos exigem decisão de retenção LGPD; excluir paciente apaga as linhas de `patient_files`, mas os objetos ficam no storage (limpar manualmente por enquanto).
+
+## Anamnese: rascunho, conclusão e revisões — 2026-11-15
+
+Origem: item 1 de `INTEGRACAO-SMILEOS.md`. Migration nova `web/supabase/migrations/20261115000001_anamnese_revisoes.sql` (não aplicada). Camada falsa em versão 6 (fichas antigas viram concluídas).
+
+| ID | status | notas | o que falta | mais difícil que o esperado |
+| --- | --- | --- | --- | --- |
+| Resposta explícita | done | sim, não, não sei, não se aplica, conversa reservada em `answer`; `yes` (booleano) segue lido para fichas antigas e gravado só para sim/não; sem resposta = campo ausente, nunca "não" | — | — |
+| Rascunho | done | ficha com `status = draft` salva no banco/store; "Continuar" reabre com as respostas e a cópia das perguntas | — | — |
+| Conclusão | done | só dono e dentista; o gatilho grava `completed_at`/`completed_by` no servidor (valores enviados são ignorados) e recusa pergunta de sim/não sem resposta | — | — |
+| Trava no banco | done | gatilho `anamnesis_guard`: concluída não aceita update nem delete diretos; exceções: cascata (apagar paciente/clínica/modelo/usuário) e service role | decisão de retenção LGPD (apagar paciente apaga fichas concluídas) | cascata e `ON DELETE SET NULL` disparam o gatilho: tratado com `pg_trigger_depth() > 1` |
+| Revisão | done | nova linha com `revision_of` apontando a concluída (mesmo paciente); no máximo uma revisão por ficha (índice único); a original fica preservada e marcada "Substituída"; alertas vêm da ficha vigente | — | — |
+| Papéis | done | dono/dentista: leem, preenchem, concluem, revisam; recepção: lê e edita/exclui rascunhos, não conclui; financeiro: sem acesso (antes lia). Policies de `anamnesis_records` recriadas na migration nova | confirmar com a clínica se recepção deve ler | — |
+| Modelos | done | alterar ou excluir modelo não muda fichas (cópia das perguntas na ficha); revisão e rascunho usam a cópia da ficha, não o modelo atual | — | — |
+| Banco, RLS e `rls-test.mjs` | partial | casos novos: rascunho, conclusão, trava de update/delete, resposta inválida, revisão (única, só de concluída, imutável), recepção, financeiro, B, split, dentista conclui, acesso vencido | **migration não aplicada e teste não executado** | — |
+| Linha do tempo (eventos de anamnese) | skip | não pedido; auditoria de segurança não é a linha do tempo do produto | — | — |
+
+Verificação: `npm run lint`, `npx tsc --noEmit` e `node --check scripts/rls-test.mjs` limpos. Não testado no navegador nem contra o Supabase.
+Perguntas para o advogado: (1) guardar apenas `completed_by` e data basta como "conferência", ou é preciso registro de assinatura/consentimento do paciente? (2) retenção: ficha concluída some junto com o paciente (cascata); há prazo mínimo de guarda do prontuário a respeitar? (3) recepção pode ler e preencher anamnese (dado de saúde) ou só dentista e dono? (4) "Conversa reservada" é aceitável como resposta registrada?

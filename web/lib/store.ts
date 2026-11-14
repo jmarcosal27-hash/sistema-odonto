@@ -10,7 +10,7 @@ import type {
   Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
   Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry,
 } from "./types";
-import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES } from "./catalog";
+import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES, hasUnanswered } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
 import { buildSeed } from "./seed";
 import { MAX_DEMO_FILE_BYTES, checkFile, readAsDataUrl } from "./files";
@@ -18,7 +18,7 @@ import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 5;
+const VERSION = 6;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -58,6 +58,8 @@ function migrate(db: Db): Db {
   db.certificates ??= [];
   db.customDocuments ??= [];
   db.patientFiles ??= [];
+  // v6: fichas de anamnese antigas passam a concluídas (imutáveis); correção vira revisão
+  db.anamnesisRecords.forEach((r) => { if (!r.status) { r.status = "completed"; r.completedAt ??= r.createdAt; } });
   db.version = VERSION;
   return db;
 }
@@ -452,14 +454,35 @@ const localApi = {
         db.anamnesisRecords.forEach((r) => { if (r.templateId === id) delete r.templateId; });
       });
     },
-    async saveRecord(r: { patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string }) {
+    /** Cria ou atualiza um RASCUNHO; `complete` conclui (trava a ficha). `revisionOf` liga a ficha concluída que ela corrige. */
+    async saveRecord(r: { id?: string; patientId: string; templateId?: string; templateName: string; answers: AnamnesisAnswer[]; filledOn: string; revisionOf?: string; complete?: boolean }) {
       commit((db) => {
         guard(db);
         if (!r.answers.length) throw new Error("A ficha está vazia.");
-        db.anamnesisRecords.push({ ...r, id: uid(), createdAt: new Date().toISOString() });
+        if (r.complete && hasUnanswered(r.answers)) throw new Error("Responda todas as perguntas de sim ou não antes de concluir.");
+        const now = new Date().toISOString();
+        const { id, complete, ...data } = r;
+        const existing = id ? db.anamnesisRecords.find((x) => x.id === id) : undefined;
+        if (existing) {
+          if (existing.status === "completed") throw new Error("Ficha concluída não pode ser alterada. Crie uma revisão.");
+          Object.assign(existing, data, complete ? { status: "completed", completedAt: now } : {});
+          return;
+        }
+        if (data.revisionOf) {
+          const base = db.anamnesisRecords.find((x) => x.id === data.revisionOf);
+          if (!base || base.status !== "completed" || base.patientId !== data.patientId) throw new Error("A revisão precisa apontar para uma ficha concluída do mesmo paciente.");
+          if (db.anamnesisRecords.some((x) => x.revisionOf === base.id)) throw new Error("Esta ficha já tem uma revisão.");
+        }
+        db.anamnesisRecords.push({ ...data, id: uid(), createdAt: now, status: complete ? "completed" : "draft", completedAt: complete ? now : undefined });
       });
     },
-    async removeRecord(id: string) { commit((db) => { guard(db); db.anamnesisRecords = db.anamnesisRecords.filter((x) => x.id !== id); }); },
+    async removeRecord(id: string) {
+      commit((db) => {
+        guard(db);
+        if (db.anamnesisRecords.find((x) => x.id === id)?.status === "completed") throw new Error("Ficha concluída não pode ser excluída. Crie uma revisão.");
+        db.anamnesisRecords = db.anamnesisRecords.filter((x) => x.id !== id);
+      });
+    },
   },
 
   prescriptions: {

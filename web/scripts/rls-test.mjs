@@ -468,6 +468,83 @@ check(aRmC?.length === 1, "dono exclui o objeto enviado por outro");
 const { data: aDelC2 } = await a.from("patient_files").delete().eq("id", cPf.id).select("id");
 check(aDelC2?.length === 1, "dono exclui o registro enviado por outro");
 
+// ===== Anamnese: rascunho, conclusão e revisões (migration 20261115000001) =====
+const ans = (answer) => [{ questionId: "q1", text: "Pergunta?", kind: "yesno", answer, yes: answer === "yes" ? true : answer === "no" ? false : undefined }];
+const rec = { clinic_id: clinicA, patient_id: pat.id, template_name: "Modelo teste" };
+const { data: dr, error: dr1 } = await a.from("anamnesis_records").insert({ ...rec, answers: ans(undefined) }).select("id,status,completed_at").single();
+check(!dr1 && dr?.status === "draft" && dr.completed_at === null, "anamnese nasce como rascunho");
+const { data: drUp } = await a.from("anamnesis_records").update({ answers: ans("unknown") }).eq("id", dr.id).select("id");
+check(drUp?.length === 1, "rascunho pode ser editado");
+const { error: cx1 } = await a.from("anamnesis_records").update({ answers: ans(undefined), status: "completed" }).eq("id", dr.id);
+check(!!cx1, "concluir com pergunta sem resposta é recusado (ausência nunca vira \"não\")");
+const { error: cx2 } = await a.from("anamnesis_records").update({ answers: ans("talvez") }).eq("id", dr.id);
+check(!!cx2, "resposta fora do conjunto permitido é recusada");
+const { data: done, error: cx3 } = await a.from("anamnesis_records").update({ answers: ans("private"), status: "completed", completed_at: "2000-01-01T00:00:00Z", completed_by: cUser.id }).eq("id", dr.id).select("completed_at,completed_by").single();
+check(!cx3 && done?.completed_by === aUser.user.id && new Date(done.completed_at).getFullYear() >= 2026, "conclusão grava conferente e data no servidor (não aceita os valores enviados)");
+const { error: cx4 } = await a.from("anamnesis_records").update({ answers: ans("yes") }).eq("id", dr.id);
+check(!!cx4, "ficha concluída NÃO é editada");
+const { error: cx5 } = await a.from("anamnesis_records").update({ status: "draft" }).eq("id", dr.id);
+check(!!cx5, "ficha concluída NÃO volta a rascunho");
+const { error: cx6 } = await a.from("anamnesis_records").delete().eq("id", dr.id);
+check(!!cx6, "ficha concluída NÃO é excluída");
+const { data: stillThere } = await a.from("anamnesis_records").select("id,answers").eq("id", dr.id).single();
+check(stillThere?.answers?.[0]?.answer === "private", "ficha concluída segue intacta");
+const { error: cx7 } = await a.from("anamnesis_records").insert({ ...rec, answers: ans("no"), status: "completed", completed_at: "2000-01-01T00:00:00Z" });
+check(!cx7, "dono cria ficha já concluída");
+
+// revisão: nova linha ligada à anterior; a anterior fica preservada
+const { data: draftRev, error: rv1 } = await a.from("anamnesis_records").insert({ ...rec, answers: ans("no"), revision_of: dr.id }).select("id").single();
+check(!rv1 && draftRev, "dono cria revisão (rascunho) de ficha concluída");
+const { error: rv2 } = await a.from("anamnesis_records").insert({ ...rec, answers: ans("no"), revision_of: dr.id });
+check(!!rv2, "ficha concluída tem no máximo uma revisão");
+const { error: rv3 } = await a.from("anamnesis_records").insert({ ...rec, answers: ans("no"), revision_of: draftRev.id });
+check(!!rv3, "revisão NÃO aponta para rascunho");
+const { error: rv4 } = await a.from("anamnesis_records").update({ revision_of: null }).eq("id", draftRev.id);
+check(!!rv4, "revisão NÃO troca a ficha de origem");
+const { error: rv5 } = await a.from("anamnesis_records").update({ patient_id: cPat.id }).eq("id", draftRev.id);
+check(!!rv5, "rascunho NÃO muda de paciente");
+
+// papéis: recepção preenche rascunho mas não conclui; financeiro não lê nem escreve
+const rcp = await userClient(`r-${stamp}@teste.local`);
+await a.from("clinic_members").insert({ clinic_id: clinicA, invited_email: `r-${stamp}@teste.local`, role: "receptionist", status: "invited" });
+await rcp.rpc("claim_invites");
+const { data: rRead } = await rcp.from("anamnesis_records").select("id").eq("patient_id", pat.id);
+check((rRead?.length ?? 0) >= 2, "recepção LÊ anamneses");
+const { data: rDraft, error: rd1 } = await rcp.from("anamnesis_records").insert({ ...rec, answers: ans(undefined) }).select("id").single();
+check(!rd1 && rDraft, "recepção cria rascunho");
+const { error: rd2 } = await rcp.from("anamnesis_records").update({ answers: ans("yes"), status: "completed" }).eq("id", rDraft.id);
+check(!!rd2, "recepção NÃO conclui a ficha");
+const { error: rd3 } = await rcp.from("anamnesis_records").insert({ ...rec, answers: ans("no"), status: "completed" });
+check(!!rd3, "recepção NÃO cria ficha já concluída");
+const { error: rd4 } = await rcp.from("anamnesis_records").delete().eq("id", rDraft.id);
+check(!rd4, "recepção exclui o próprio rascunho");
+const { error: rd5 } = await rcp.from("anamnesis_records").delete().eq("id", dr.id);
+check(!!rd5, "recepção NÃO exclui ficha concluída");
+const { data: fAna } = await f.from("anamnesis_records").select("id").eq("clinic_id", clinicA);
+check(fAna?.length === 0, "financeiro NÃO vê anamneses");
+const { error: fa1 } = await f.from("anamnesis_records").insert({ ...rec, answers: ans(undefined) });
+check(!!fa1, "financeiro NÃO cria anamnese");
+const { error: ba1 } = await b.from("anamnesis_records").update({ status: "completed", answers: ans("no") }).eq("id", draftRev.id);
+const { data: ba2 } = await admin.from("anamnesis_records").select("status").eq("id", draftRev.id).single();
+check(ba2?.status === "draft", "B NÃO conclui rascunho da clínica A" + (ba1 ? "" : " (0 linhas)"));
+const { error: ba3 } = await b.from("anamnesis_records").insert({ ...rec, answers: ans("no"), revision_of: dr.id });
+check(!!ba3, "B NÃO cria revisão de ficha da clínica A");
+
+// modo dividido: dentista C não mexe nas anamneses de paciente de outro dentista
+await a.from("clinics").update({ practice_mode: "split" }).eq("id", clinicA);
+const { data: anSp1 } = await c.from("anamnesis_records").select("id").eq("patient_id", pat.id);
+check(anSp1?.length === 0, "split: C NÃO vê anamnese de paciente de outro dentista");
+const { error: anSp2 } = await c.from("anamnesis_records").insert({ ...rec, answers: ans(undefined) });
+check(!!anSp2, "split: C NÃO cria anamnese para paciente de outro dentista");
+const { error: anSp3 } = await c.from("anamnesis_records").insert({ ...rec, answers: ans("no"), revision_of: dr.id });
+check(!!anSp3, "split: C NÃO cria revisão de ficha de outro dentista");
+await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
+
+// dentista conclui (não só o dono)
+const { data: cDraft } = await c.from("anamnesis_records").insert({ ...rec, answers: ans("na") }).select("id").single();
+const { data: cDone } = await c.from("anamnesis_records").update({ status: "completed" }).eq("id", cDraft.id).select("completed_by").single();
+check(cDone?.completed_by === cUser.id, "dentista conclui a ficha");
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
@@ -477,7 +554,11 @@ check(!!e9, "acesso vencido: A NÃO consegue cadastrar");
 const { data: expNotes } = await a.from("clinical_notes").select("id").eq("clinic_id", clinicA);
 check(expNotes?.length === 1, "acesso vencido: A ainda LÊ as notas de evolução");
 const { data: expRec } = await a.from("anamnesis_records").select("id").eq("clinic_id", clinicA);
-check(expRec?.length === 1, "acesso vencido: A ainda LÊ as anamneses");
+check((expRec?.length ?? 0) >= 1, "acesso vencido: A ainda LÊ as anamneses");
+const { data: expDraftUp } = await a.from("anamnesis_records").update({ status: "completed" }).eq("id", draftRev.id).select("id");
+check(!expDraftUp || expDraftUp.length === 0, "acesso vencido: A NÃO conclui rascunho de anamnese");
+const { data: expDraftDel } = await a.from("anamnesis_records").delete().eq("id", draftRev.id).select("id");
+check(!expDraftDel || expDraftDel.length === 0, "acesso vencido: A NÃO exclui rascunho de anamnese");
 const { error: x1 } = await a.from("clinical_notes").insert({ clinic_id: clinicA, patient_id: pat.id, body: "Nova após vencer" });
 check(!!x1, "acesso vencido: A NÃO cria nota de evolução");
 const { data: x2 } = await a.from("clinical_notes").update({ body: "Editada após vencer" }).eq("id", note.id).select("id");
@@ -527,6 +608,6 @@ check(!xe7 || xe7.length === 0, "acesso vencido: A NÃO renomeia modelo");
 // Limpeza
 await admin.from("clinics").delete().in("id", [clinicA, clinicB]);
 await admin.storage.from(bucket).remove([pathA, pathC]).catch(() => {});
-for (const u of [a, b, c, f]) { const { data: { user } } = await u.auth.getUser(); await admin.auth.admin.deleteUser(user.id); }
+for (const u of [a, b, c, f, rcp]) { const { data: { user } } = await u.auth.getUser(); await admin.auth.admin.deleteUser(user.id); }
 console.log(failures ? `\n${failures} falha(s)` : "\nTudo certo.");
 process.exit(failures ? 1 : 0);

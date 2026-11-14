@@ -210,7 +210,11 @@ export interface AnamnesisQuestion {
 export interface AnamnesisTemplate { id: string; name: string; questions: AnamnesisQuestion[]; createdAt: string }
 
 /** Resposta guardada com cópia do texto da pergunta (o modelo pode mudar depois). */
-export interface AnamnesisAnswer { questionId: string; text: string; kind: AnamnesisQuestion["kind"]; alert?: boolean; yes?: boolean; detail?: string }
+/** Resposta explícita. Sem resposta = campo ausente (nunca vira "não"). */
+export type AnamnesisChoice = "yes" | "no" | "unknown" | "na" | "private";
+
+/** `yes` é o formato antigo (sim/não); fichas novas gravam `answer` e mantêm `yes` só para sim e não. */
+export interface AnamnesisAnswer { questionId: string; text: string; kind: AnamnesisQuestion["kind"]; alert?: boolean; answer?: AnamnesisChoice; yes?: boolean; detail?: string }
 
 export interface AnamnesisRecord {
   id: string;
@@ -220,6 +224,12 @@ export interface AnamnesisRecord {
   answers: AnamnesisAnswer[];
   filledOn: string; // yyyy-mm-dd
   createdAt: string;
+  /** Rascunho edita livremente; concluída é imutável (correção = nova revisão). */
+  status: "draft" | "completed";
+  /** Ficha concluída que esta revisão corrige. */
+  revisionOf?: string;
+  completedAt?: string;
+  completedBy?: string;
 }
 
 export type MedicationRoute = "internal" | "external";
