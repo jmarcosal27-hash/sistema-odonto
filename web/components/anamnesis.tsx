@@ -1,27 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, FilePenLine, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
-import { DEFAULT_ANAMNESIS } from "@/lib/catalog";
+import { ANAMNESIS_CHOICES, DEFAULT_ANAMNESIS, choiceOf, hasUnanswered } from "@/lib/catalog";
 import { dateBR, todayISO, uid } from "@/lib/format";
-import type { AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Db } from "@/lib/types";
+import type { AnamnesisAnswer, AnamnesisChoice, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Db } from "@/lib/types";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Textarea } from "./ui";
 import { useAction } from "./toast";
 
-const alertsOf = (r: AnamnesisRecord) => r.answers.filter((a) => a.alert && a.yes);
+const alertsOf = (r: AnamnesisRecord) => r.answers.filter((a) => a.alert && choiceOf(a) === "yes");
+const choiceLabel = (c: AnamnesisChoice | undefined) => ANAMNESIS_CHOICES.find((x) => x.value === c)?.label ?? "Não respondida";
 
-/** Anamnese na ficha do paciente: fichas preenchidas + gestão dos modelos da clínica. */
+type FormTarget = { kind: "new" } | { kind: "draft"; record: AnamnesisRecord } | { kind: "revision"; record: AnamnesisRecord };
+
+/** Anamnese na ficha do paciente: rascunhos, fichas concluídas (imutáveis, com revisões) e gestão dos modelos da clínica. */
 export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
   const run = useAction();
-  const [fill, setFill] = useState(false);
+  const [form, setForm] = useState<FormTarget | null>(null);
   const [manage, setManage] = useState(false);
   const records = db.anamnesisRecords
     .filter((r) => r.patientId === patientId)
     .sort((a, b) => b.filledOn.localeCompare(a.filledOn) || b.createdAt.localeCompare(a.createdAt));
   const templates = db.anamnesisTemplates;
   const readOnly = isReadOnly(db);
-  const alerts = records[0] ? alertsOf(records[0]) : [];
+  const hasRevision = new Set(records.flatMap((r) => (r.revisionOf ? [r.revisionOf] : [])));
+  const completedRevisionOf = new Set(records.flatMap((r) => (r.status === "completed" && r.revisionOf ? [r.revisionOf] : [])));
+  // a ficha vigente é a concluída mais recente que nenhuma revisão concluída substituiu
+  const current = records.find((r) => r.status === "completed" && !completedRevisionOf.has(r.id));
+  const alerts = current ? alertsOf(current) : [];
 
   return (
     <Card>
@@ -29,13 +36,13 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
         <h3 className="font-semibold">Anamnese</h3>
         <span className="flex gap-1">
           <Button size="sm" variant="ghost" onClick={() => setManage(true)}><ClipboardList className="size-4" />Modelos</Button>
-          <Button size="sm" variant="ghost" disabled={readOnly || !templates.length} onClick={() => setFill(true)}><Plus className="size-4" />Preencher</Button>
+          <Button size="sm" variant="ghost" disabled={readOnly || !templates.length} onClick={() => setForm({ kind: "new" })}><Plus className="size-4" />Preencher</Button>
         </span>
       </div>
 
       {alerts.length > 0 && (
         <div role="note" className="mt-2 rounded-md bg-warning-soft px-3 py-2 text-sm">
-          <p className="font-semibold text-danger">Atenção na última anamnese</p>
+          <p className="font-semibold text-danger">Atenção na anamnese vigente</p>
           <ul className="mt-1 list-disc pl-5">{alerts.map((a) => <li key={a.questionId}>{a.text}{a.detail ? ` — ${a.detail}` : ""}</li>)}</ul>
         </div>
       )}
@@ -50,101 +57,148 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
         ) : <p className="text-sm text-ink-muted mt-2">Nenhuma anamnese preenchida para este paciente.</p>
       ) : (
         <ul className="mt-2 divide-y divide-border">
-          {records.map((r) => (
-            <li key={r.id} className="py-2 text-sm">
-              <details>
-                <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-md py-1">
-                  <span><span className="font-semibold">{dateBR(r.filledOn)}</span><span className="text-ink-muted"> · {r.templateName}</span></span>
-                  {alertsOf(r).length > 0 && <Badge tone="danger">{alertsOf(r).length} alerta(s)</Badge>}
-                </summary>
-                <dl className="mt-2 space-y-2">
-                  {r.answers.map((a) => (
-                    <div key={a.questionId}>
-                      <dt className="text-xs text-ink-muted">{a.text}</dt>
-                      <dd className="break-words whitespace-pre-wrap">
-                        {a.kind === "yesno" ? <>{a.yes ? <strong className={a.alert ? "text-danger" : undefined}>Sim</strong> : "Não"}{a.detail ? ` — ${a.detail}` : ""}</> : a.detail || "—"}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <Button size="sm" variant="ghost" className="mt-2" disabled={readOnly}
-                  onClick={() => { if (window.confirm("Excluir esta ficha de anamnese? Não dá para desfazer.")) void run(() => api.anamnesis.removeRecord(r.id), "Ficha excluída."); }}>
-                  <Trash2 className="size-3.5" />Excluir ficha
-                </Button>
-              </details>
-            </li>
-          ))}
+          {records.map((r) => {
+            const draft = r.status === "draft";
+            const superseded = completedRevisionOf.has(r.id);
+            return (
+              <li key={r.id} className="py-2 text-sm">
+                <details>
+                  <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-md py-1">
+                    <span><span className="font-semibold">{dateBR(r.filledOn)}</span><span className="text-ink-muted"> · {r.templateName}</span></span>
+                    <span className="flex flex-wrap gap-1">
+                      {draft && <Badge tone="warning">Rascunho</Badge>}
+                      {r.revisionOf && <Badge tone="info">Revisão</Badge>}
+                      {superseded && <Badge tone="neutral">Substituída</Badge>}
+                      {!draft && !superseded && alertsOf(r).length > 0 && <Badge tone="danger">{alertsOf(r).length} alerta(s)</Badge>}
+                    </span>
+                  </summary>
+                  <dl className="mt-2 space-y-2">
+                    {r.answers.map((a) => (
+                      <div key={a.questionId}>
+                        <dt className="text-xs text-ink-muted">{a.text}</dt>
+                        <dd className="break-words whitespace-pre-wrap">
+                          {a.kind === "yesno"
+                            ? <>{choiceOf(a) === "yes" ? <strong className={a.alert ? "text-danger" : undefined}>Sim</strong> : choiceLabel(choiceOf(a))}{a.detail ? ` — ${a.detail}` : ""}</>
+                            : a.detail || "—"}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {!draft && r.completedAt && <p className="mt-2 text-xs text-ink-muted">Concluída em {dateBR(r.completedAt.slice(0, 10))}. Não pode ser alterada: para corrigir, crie uma revisão.</p>}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {draft ? (
+                      <>
+                        <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setForm({ kind: "draft", record: r })}><FilePenLine className="size-3.5" />Continuar</Button>
+                        <Button size="sm" variant="ghost" disabled={readOnly}
+                          onClick={() => { if (window.confirm("Excluir este rascunho? Não dá para desfazer.")) void run(() => api.anamnesis.removeRecord(r.id), "Rascunho excluído."); }}>
+                          <Trash2 className="size-3.5" />Excluir rascunho
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="ghost" disabled={readOnly || hasRevision.has(r.id)} onClick={() => setForm({ kind: "revision", record: r })}>
+                        <FilePenLine className="size-3.5" />{hasRevision.has(r.id) ? "Revisão em andamento ou concluída" : "Criar revisão"}
+                      </Button>
+                    )}
+                  </div>
+                </details>
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      {fill && <FillForm templates={templates} patientId={patientId} onClose={() => setFill(false)} />}
+      {form && <FillForm key={form.kind === "new" ? "new" : form.record.id + form.kind} templates={templates} patientId={patientId} target={form} onClose={() => setForm(null)} />}
       {manage && <Templates db={db} onClose={() => setManage(false)} />}
     </Card>
   );
 }
 
-function FillForm({ templates, patientId, onClose }: { templates: AnamnesisTemplate[]; patientId: string; onClose: () => void }) {
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
-  const [date, setDate] = useState(todayISO());
-  const [yes, setYes] = useState<Record<string, boolean | undefined>>({});
-  const [detail, setDetail] = useState<Record<string, string>>({});
+const fromQuestions = (qs: AnamnesisQuestion[]): AnamnesisAnswer[] => qs.map((q) => ({ questionId: q.id, text: q.text, kind: q.kind, alert: q.alert || undefined }));
+
+function FillForm({ templates, patientId, target, onClose }: { templates: AnamnesisTemplate[]; patientId: string; target: FormTarget; onClose: () => void }) {
+  const record = target.kind === "new" ? undefined : target.record;
+  const [templateId, setTemplateId] = useState(record?.templateId ?? templates[0]?.id ?? "");
+  const [date, setDate] = useState(target.kind === "draft" ? target.record.filledOn : todayISO());
+  const [choice, setChoice] = useState<Record<string, AnamnesisChoice | undefined>>(() => Object.fromEntries((record?.answers ?? []).map((a) => [a.questionId, choiceOf(a)])));
+  const [detail, setDetail] = useState<Record<string, string>>(() => Object.fromEntries((record?.answers ?? []).map((a) => [a.questionId, a.detail ?? ""])));
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<"draft" | "complete" | null>(null);
   const tpl = templates.find((t) => t.id === templateId);
+  // rascunho e revisão usam a cópia das perguntas guardada na ficha; modelo só vale para ficha nova
+  const base: AnamnesisAnswer[] = record ? record.answers : tpl ? fromQuestions(tpl.questions) : [];
+  const incomplete = hasUnanswered(base.map((a) => ({ ...a, answer: choice[a.questionId] })));
 
-  const pick = (id: string) => { setTemplateId(id); setYes({}); setDetail({}); };
-  const missing = tpl?.questions.some((q) => q.kind === "yesno" && yes[q.id] === undefined);
+  const pick = (id: string) => { setTemplateId(id); setChoice({}); setDetail({}); };
 
-  const save = async () => {
+  const save = async (complete: boolean) => {
     setTried(true);
-    if (!tpl || missing) return;
-    const answers: AnamnesisAnswer[] = tpl.questions.map((q) => ({
-      questionId: q.id, text: q.text, kind: q.kind, alert: q.alert || undefined,
-      yes: q.kind === "yesno" ? yes[q.id] : undefined, detail: detail[q.id]?.trim() || undefined,
-    }));
-    setSaving(true); setError(null);
+    if (!base.length || (complete && incomplete)) return;
+    const answers: AnamnesisAnswer[] = base.map((a) => {
+      const c = choice[a.questionId];
+      const text = detail[a.questionId]?.trim();
+      return {
+        questionId: a.questionId, text: a.text, kind: a.kind, alert: a.alert,
+        answer: a.kind === "yesno" ? c : undefined,
+        yes: c === "yes" ? true : c === "no" ? false : undefined, // formato antigo, só para sim e não
+        detail: text && (a.kind === "text" || c === "yes") ? text : undefined,
+      };
+    });
+    setSaving(complete ? "complete" : "draft"); setError(null);
     try {
-      await api.anamnesis.saveRecord({ patientId, templateId: tpl.id, templateName: tpl.name, answers, filledOn: date });
+      await api.anamnesis.saveRecord({
+        id: target.kind === "draft" ? target.record.id : undefined, patientId, templateId: record?.templateId ?? tpl?.id,
+        templateName: record?.templateName ?? tpl?.name ?? "", answers, filledOn: date,
+        revisionOf: target.kind === "revision" ? target.record.id : undefined, complete,
+      });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível salvar.");
-      setSaving(false);
+      setSaving(null);
     }
   };
 
+  const title = target.kind === "revision" ? "Revisar anamnese" : target.kind === "draft" ? "Continuar rascunho" : "Preencher anamnese";
   return (
-    <Modal open wide onClose={onClose} title="Preencher anamnese" subtitle="Responda todas as perguntas de sim ou não."
-      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button loading={saving} onClick={save}>Salvar ficha</Button></>}>
-      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+    <Modal open wide onClose={onClose} title={title}
+      subtitle={target.kind === "revision" ? "A ficha original continua guardada. Esta será uma nova ficha, ligada a ela." : "Salve como rascunho para continuar depois. Ao concluir, a ficha não pode mais ser alterada."}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="soft" loading={saving === "draft"} disabled={saving === "complete"} onClick={() => void save(false)}>Salvar rascunho</Button>
+        <Button loading={saving === "complete"} disabled={saving === "draft"} onClick={() => void save(true)}>Concluir ficha</Button>
+      </>}>
+      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(false); }}>
         <ErrorNote message={error} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Modelo">
-            {(id) => <Select id={id} value={templateId} onChange={(e) => pick(e.target.value)}>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>}
-          </Field>
+          {!record ? (
+            <Field label="Modelo">
+              {(id) => <Select id={id} value={templateId} onChange={(e) => pick(e.target.value)}>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>}
+            </Field>
+          ) : <p className="self-end text-sm text-ink-muted">{record.templateName}</p>}
           <Field label="Data">{(id) => <Input id={id} type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />}</Field>
         </div>
-        {tried && missing && <ErrorNote message="Responda sim ou não em todas as perguntas marcadas." />}
-        {tpl?.questions.map((q) => q.kind === "yesno" ? (
-          <fieldset key={q.id} className="space-y-2 rounded-md border border-border p-3">
+        {tried && incomplete && <ErrorNote message="Para concluir, responda todas as perguntas de sim ou não. Dá para salvar como rascunho sem responder." />}
+        {base.map((q) => q.kind === "yesno" ? (
+          <fieldset key={q.questionId} className="space-y-2 rounded-md border border-border p-3">
             <legend className="px-1 text-sm font-medium">{q.text}</legend>
-            <div className="flex gap-4" role="radiogroup" aria-label={q.text}>
-              {([["Sim", true], ["Não", false]] as const).map(([label, v]) => (
-                <label key={label} className="inline-flex min-h-10 items-center gap-2 text-sm">
-                  <input type="radio" name={`q-${q.id}`} checked={yes[q.id] === v} onChange={() => setYes((s) => ({ ...s, [q.id]: v }))} className="size-4 accent-brand" />{label}
+            <div className="flex flex-wrap gap-x-4" role="radiogroup" aria-label={q.text}>
+              {ANAMNESIS_CHOICES.map(({ value, label }) => (
+                <label key={value} className="inline-flex min-h-10 items-center gap-2 text-sm">
+                  <input type="radio" name={`q-${q.questionId}`} checked={choice[q.questionId] === value} onChange={() => setChoice((s) => ({ ...s, [q.questionId]: value }))} className="size-4 accent-brand" />{label}
                 </label>
               ))}
             </div>
-            {yes[q.id] === true && <Input aria-label={`Detalhes: ${q.text}`} value={detail[q.id] ?? ""} maxLength={500} onChange={(e) => setDetail((s) => ({ ...s, [q.id]: e.target.value }))} placeholder="Quais? Detalhes (opcional)" />}
+            {choice[q.questionId] === "yes" && <Input aria-label={`Detalhes: ${q.text}`} value={detail[q.questionId] ?? ""} maxLength={500} onChange={(e) => setDetail((s) => ({ ...s, [q.questionId]: e.target.value }))} placeholder="Quais? Detalhes (opcional)" />}
           </fieldset>
         ) : (
-          <Field key={q.id} label={q.text}>{(id) => <Textarea id={id} rows={3} maxLength={2000} value={detail[q.id] ?? ""} onChange={(e) => setDetail((s) => ({ ...s, [q.id]: e.target.value }))} />}</Field>
+          <Field key={q.questionId} label={q.text}>{(id) => <Textarea id={id} rows={3} maxLength={2000} value={detail[q.questionId] ?? ""} onChange={(e) => setDetail((s) => ({ ...s, [q.questionId]: e.target.value }))} />}</Field>
         ))}
         <button type="submit" hidden />
       </form>
     </Modal>
   );
 }
+
 
 /** Lista, cria, edita e exclui modelos. Alternar entre lista e editor dentro do mesmo modal. */
 function Templates({ db, onClose }: { db: Db; onClose: () => void }) {

@@ -1,4 +1,4 @@
-import type { Procedure, Specialty, ToothCondition, Phase } from "./types";
+import type { AnamnesisAnswer, AnamnesisChoice, Procedure, Specialty, ToothCondition, Phase } from "./types";
 
 // Catálogo base montado a partir da nomenclatura odontológica de uso comum.
 // Escrito do zero: grupos e ordem são nossos, não a curadoria do original.
@@ -161,3 +161,16 @@ export const DEFAULT_ANAMNESIS: { name: string; questions: { text: string; kind:
     { text: "Outras informações importantes de saúde", kind: "text" },
   ],
 };
+
+export const ANAMNESIS_CHOICES: { value: AnamnesisChoice; label: string }[] = [
+  { value: "yes", label: "Sim" }, { value: "no", label: "Não" }, { value: "unknown", label: "Não sei" },
+  { value: "na", label: "Não se aplica" }, { value: "private", label: "Conversa reservada" },
+];
+
+/** Resposta de uma pergunta de sim/não. Fichas antigas só têm `yes` (booleano); sem nenhum dos dois = não respondida. */
+export function choiceOf(a: AnamnesisAnswer): AnamnesisChoice | undefined {
+  return a.answer ?? (a.yes === true ? "yes" : a.yes === false ? "no" : undefined);
+}
+
+/** Há pergunta de sim/não sem resposta? Rascunho aceita; concluir não. */
+export const hasUnanswered = (answers: AnamnesisAnswer[]) => answers.some((a) => a.kind === "yesno" && !choiceOf(a));
