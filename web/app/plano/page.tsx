@@ -73,6 +73,7 @@ function PlanEditor() {
   const total = subtotal - discountCents;
   const undefinedCount = items.filter((i) => i.priceCents === undefined).length;
 
+  const planned = new Set(items.flatMap((i) => (i.tooth ? [i.tooth] : [])));
   const openTooth = (n?: number) => { setTooth(n); setDialog(true); };
   const updateItem = (id: string, patch: Partial<PlanItem>) => setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
@@ -119,12 +120,13 @@ function PlanEditor() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="font-semibold">Odontograma</h2>
-            <p className="text-xs text-ink-muted">Clique num dente ou navegue com as setas do teclado.</p>
+            <p className="text-xs text-ink-muted">Selecione um dente (ou use as setas do teclado) e marque a condição.</p>
           </div>
           <Segmented size="sm" label="Região" value={region} onChange={setRegion}
-            options={[{ value: "all", label: "Boca toda" }, { value: "ur", label: "Sup. direita" }, { value: "ul", label: "Sup. esquerda" }, { value: "ll", label: "Inf. esquerda" }, { value: "lr", label: "Inf. direita" }]} />
+            options={[{ value: "all", label: "Arcada inteira" }, { value: "ur", label: "Sup. direita" }, { value: "ul", label: "Sup. esquerda" }, { value: "ll", label: "Inf. esquerda" }, { value: "lr", label: "Inf. direita" }]} />
         </div>
-        <Odontogram upper={upper} lower={lower} marks={marks} selected={dialog ? tooth : undefined} onSelect={openTooth} />
+        <Odontogram upper={upper} lower={lower} marks={marks} planned={planned}
+          onConditions={(n, c) => setMarks((m) => ({ ...m, [n]: c }))} onSelect={openTooth} />
       </Card>
       )}
 

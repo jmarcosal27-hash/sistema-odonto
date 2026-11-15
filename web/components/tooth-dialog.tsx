@@ -7,6 +7,7 @@ import { allProcedures, api } from "@/lib/store";
 import { money, parseMoney, uid } from "@/lib/format";
 import { Modal, Button, Field, Input, Select, cx } from "./ui";
 import { useAction } from "./toast";
+import { toggleCondition } from "@/lib/teeth";
 
 export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onConditions }: {
   db: Db; tooth?: number; open: boolean; onClose: () => void;
@@ -49,7 +50,7 @@ export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onCon
     reset();
   };
 
-  const toggle = (c: ToothCondition) => onConditions(conditions.includes(c) ? conditions.filter((x) => x !== c) : [...conditions, c]);
+  const toggle = (c: ToothCondition) => onConditions(toggleCondition(conditions, c));
 
   return (
     <Modal open={open} onClose={close} title={tooth ? `Dente ${tooth}` : "Procedimento geral"} subtitle={tooth ? "Marque o que encontrou e, se quiser, já escolha o tratamento." : "Para itens que não são de um dente específico (limpeza, consulta, exames)."}

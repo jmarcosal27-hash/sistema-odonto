@@ -56,6 +56,7 @@ export interface HofShape {
   id: string;
   kind: "point" | "arrow" | "line";
   points: [number, number][];
+  color?: string; // #rrggbb; sem cor usa o padrão do faceograma
 }
 
 export type HofUnit = "U" | "mL" | "seringa";

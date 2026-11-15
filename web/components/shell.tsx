@@ -22,7 +22,7 @@ const NAV = [
     { href: "/plano", label: "Plano de tratamento", icon: Stethoscope },
     { href: "/orcamentos", label: "Orçamentos", icon: FileText },
     { href: "/vendas", label: "Vendas", icon: Handshake },
-    { href: "/protese", label: "Prótese", icon: FlaskConical },
+    { href: "/protese", label: "Controle de prótese", icon: FlaskConical },
     { href: "/atendimentos", label: "Atendimentos", icon: ClipboardCheck },
   ],
   [
@@ -36,7 +36,7 @@ const NAV = [
 ];
 
 const TITLES: [string, string][] = [
-  ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Prótese"], ["/atendimentos", "Atendimentos"],
+  ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Controle de prótese"], ["/atendimentos", "Atendimentos"],
   ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"],
   ["/tabela", "Tabela de preços"], ["/ajustes/conta", "Sua assinatura"], ["/ajustes", "Ajustes"],
 ];
