@@ -13,11 +13,11 @@ const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%
 
 function Metric({ label, value, hint, help, tone }: { label: string; value: string | number; hint?: string; help: string; tone?: "danger" | "success" }) {
   return (
-    <div className="rounded-lg bg-surface-200 p-4 shadow-sm min-w-0">
-      <p className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+    <div className="rounded-lg border border-border bg-surface-200 px-4 pb-4 pt-3.5 min-w-0">
+      <p className="flex items-center justify-between gap-2 text-[13px] font-medium text-ink-muted">
         {label}<span title={help} aria-label={help} role="img"><CircleHelp className="size-3.5" /></span>
       </p>
-      <p className={`mt-1 text-[22px] font-bold leading-7 truncate ${tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : ""}`}>{value}</p>
+      <p className={`mt-1 text-2xl font-semibold leading-8 tracking-[-0.02em] truncate ${tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : ""}`}>{value}</p>
       {hint && <p className="text-xs text-ink-muted">{hint}</p>}
     </div>
   );

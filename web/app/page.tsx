@@ -36,14 +36,14 @@ function DayTimeline({ list, name }: { list: Appointment[]; name: (a: Appointmen
               style={{ left: pos(s), width: `max(6px, calc(${pos(e)} - ${pos(s)}))` }} />
           );
         })}
-        {nowMin >= DAY_START && nowMin <= DAY_END && <span aria-hidden className="absolute -top-1 -bottom-1 w-0.5 bg-danger" style={{ left: pos(nowMin) }} />}
+        {nowMin >= DAY_START && nowMin <= DAY_END && <span aria-hidden className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-brand" style={{ left: pos(nowMin) }} />}
       </div>
       <div className="mt-1 flex justify-between text-[11px] text-ink-muted tabular-nums" aria-hidden>{["7h", "10h", "13h", "16h", "20h"].map((h) => <span key={h}>{h}</span>)}</div>
       <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-muted">
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-ink/20" />já passou</li>
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border-[1.5px] border-dashed border-brand" />falta confirmar</li>
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-brand" />confirmada</li>
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-0.5 bg-danger" />agora</li>
+        <li className="flex items-center gap-1.5"><span className="h-2.5 w-0.5 rounded-full bg-brand" />agora</li>
       </ul>
     </div>
   );
@@ -98,7 +98,7 @@ export default function Home() {
           {todays.length ? (
             <table className="w-full text-sm" aria-labelledby="hoje">
               <thead>
-                <tr className="border-b border-rule text-left text-[11px] uppercase tracking-[0.08em] text-ink-muted">
+                <tr className="border-b border-border text-left text-xs text-ink-muted">
                   <th scope="col" className="pb-2 pr-3 font-semibold">Hora</th>
                   <th scope="col" className="pb-2 pr-3 font-semibold">Paciente</th>
                   <th scope="col" className="hidden pb-2 pr-3 font-semibold sm:table-cell">Dentista</th>
@@ -110,7 +110,7 @@ export default function Home() {
                   const now = a.status === "in_service" || a.status === "waiting";
                   return (
                     <tr key={a.id} className={cx("border-b border-border last:border-0", now && "bg-brand-soft")}>
-                      <td className={cx("py-2.5 pr-3 font-bold align-top", now && "pl-2 shadow-[inset_2px_0_0_var(--brand)]")}>{a.time ?? "—"}</td>
+                      <td className={cx("py-2.5 pr-3 font-semibold align-top", now && "pl-2 text-brand")}>{a.time ?? "—"}</td>
                       <td className="py-2.5 pr-3 align-top">
                         {a.patientId ? <Link href={`/pacientes/${a.patientId}`} className="font-semibold break-words hover:text-brand">{name(a)}</Link> : <span className="font-semibold">{name(a)}</span>}
                         {a.procedures?.length ? <span className="block text-xs text-ink-muted">{a.procedures.map((p) => p.name).join(" · ")}</span> : null}
@@ -161,11 +161,11 @@ export default function Home() {
           </Card>
           <Card>
             <SheetTitle action={<Link href="/indicadores">Indicadores</Link>}><span className="inline-block first-letter:uppercase">{fromISODate(today).toLocaleDateString("pt-BR", { month: "long" })} em números</span></SheetTitle>
-            <dl className="mt-3 grid grid-cols-2 border-t border-rule [&>div]:border-b [&>div]:border-border [&>div]:py-3 [&>div:nth-child(odd)]:border-r [&>div:nth-child(odd)]:pr-3 [&>div:nth-child(even)]:pl-3">
-              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Entrou</dt><dd className="mt-0.5 text-[22px] leading-7 font-bold text-success tabular-nums">{money(s.received)}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Saiu</dt><dd className="mt-0.5 text-[22px] leading-7 font-bold text-danger tabular-nums">{money(s.spent)}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Sobrou</dt><dd className={cx("mt-0.5 text-[22px] leading-7 font-bold tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">A receber</dt><dd className="mt-0.5 text-[22px] leading-7 font-bold tabular-nums">{money(s.receivable)}</dd></div>
+            <dl className="mt-3 grid grid-cols-2 border-t border-border [&>div]:border-b [&>div]:border-border [&>div]:py-3 [&>div:nth-child(odd)]:border-r [&>div:nth-child(odd)]:pr-3 [&>div:nth-child(even)]:pl-3">
+              <div><dt className="text-[13px] font-medium text-ink-muted">Entrou</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] text-success tabular-nums">{money(s.received)}</dd></div>
+              <div><dt className="text-[13px] font-medium text-ink-muted">Saiu</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tabular-nums">{money(s.spent)}</dd></div>
+              <div><dt className="text-[13px] font-medium text-ink-muted">Sobrou</dt><dd className={cx("mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
+              <div><dt className="text-[13px] font-medium text-ink-muted">A receber</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums">{money(s.receivable)}</dd></div>
             </dl>
           </Card>
         </div>

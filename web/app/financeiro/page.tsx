@@ -66,9 +66,9 @@ function Finance() {
 
       {tab === "overview" && <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Kpi tone={s.balance < 0 ? "warning" : "success"} label="Sobrou no mês" value={money(s.balance)} sub="recebido menos despesas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
+          <Kpi label="Sobrou no mês" value={money(s.balance)} sub="recebido menos despesas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
           <Kpi label="Recebido" value={money(s.received)} valueClass="text-success" sub="avulsos + parcelas pagas" />
-          <Kpi label="Despesas" value={money(s.spent)} valueClass="text-danger" sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
+          <Kpi label="Despesas" value={money(s.spent)} sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
           <Kpi tone="warning" label="A receber" value={money(s.receivable)} sub={late.length ? `${late.length} parcela(s) vencida(s)` : "nada vencido"} />
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -84,13 +84,13 @@ function Finance() {
                     <div key={x.m} className="flex flex-1 flex-col items-center gap-1 h-full justify-end">
                       <div className="flex w-full items-end justify-center gap-0.5 h-full">
                         <div className="w-1/3 rounded-t-sm bg-success" style={{ height: `${(x.received / max) * 100}%` }} title={`Recebido ${money(x.received)}`} />
-                        <div className="w-1/3 rounded-t-sm bg-danger" style={{ height: `${(x.spent / max) * 100}%` }} title={`Despesas ${money(x.spent)}`} />
+                        <div className="w-1/3 rounded-t-sm bg-border-strong" style={{ height: `${(x.spent / max) * 100}%` }} title={`Despesas ${money(x.spent)}`} />
                       </div>
                       <span className={`text-[11px] ${x.m === ym ? "font-bold text-ink" : "text-ink-muted"}`}>{label(x.m)}</span>
                     </div>
                   ))}
                 </div>
-                <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-danger" />Despesas</span></figcaption>
+                <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-border-strong" />Despesas</span></figcaption>
               </figure>
             )}
           </Card>
@@ -101,7 +101,7 @@ function Finance() {
                 {byCat.map(([c, v]) => (
                   <li key={c}>
                     <div className="flex justify-between text-sm"><span>{c}</span><span className="tabular-nums font-semibold">{money(v)}</span></div>
-                    <div className="mt-1 h-2 rounded-pill bg-surface-300"><div className="h-2 rounded-pill bg-danger" style={{ width: `${(v / s.spent) * 100}%` }} /></div>
+                    <div className="mt-1 h-2 rounded-pill bg-surface-300"><div className="h-2 rounded-pill bg-ink-muted" style={{ width: `${(v / s.spent) * 100}%` }} /></div>
                   </li>
                 ))}
               </ul>
@@ -162,7 +162,7 @@ function Finance() {
                 return (
                   <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="flex-1 min-w-40"><p className="font-medium">{e.category}{e.recurring && <span className="ml-2 text-xs text-ink-muted">(fixa)</span>}</p><p className="text-xs text-ink-muted truncate">{e.description ? `${e.description} · ` : ""}{paid ? "" : "vence "}{dateBR(e.spentAt)}</p></div>
-                    <span className="tabular-nums font-semibold text-danger">{money(e.amountCents)}</span>
+                    <span className="tabular-nums font-semibold">− {money(e.amountCents)}</span>
                     {paid ? <Badge tone="success">Paga</Badge> : isLate ? <Badge tone="danger">Atrasada</Badge> : <Badge tone="warning">A pagar</Badge>}
                     <Button size="sm" variant={paid ? "ghost" : "secondary"} onClick={() => run(() => api.expenses.setPaid(e.id, !paid))}>{paid ? "Marcar a pagar" : "Paguei"}</Button>
                     <button type="button" aria-label={`Apagar despesa ${e.category}`} onClick={() => window.confirm("Apagar esta despesa?") && run(() => api.expenses.remove(e.id), "Despesa apagada.")} className="rounded-pill p-2 text-ink-muted hover:text-danger"><Trash2 className="size-4" /></button>

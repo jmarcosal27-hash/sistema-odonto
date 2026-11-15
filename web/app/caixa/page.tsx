@@ -81,7 +81,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Saldo inicial" value={money(totals.opening)} sub="caixa até o dia anterior" />
         <Kpi tone="success" label="Entradas" value={money(sum("in"))} valueClass="text-success" sub={filtered ? "com os filtros" : undefined} />
-        <Kpi tone="warning" label="Saídas" value={money(sum("out"))} valueClass="text-danger" sub={filtered ? "com os filtros" : undefined} />
+        <Kpi label="Saídas" value={money(sum("out"))} sub={filtered ? "com os filtros" : undefined} />
         <Kpi label="Saldo final" value={money(totals.closing)} valueClass={totals.closing < 0 ? "text-danger" : undefined} sub="caixa todo no período" />
       </div>
 
@@ -114,7 +114,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
                     )}
                   </div>
                   <div className="text-right md:order-3">
-                    <p className={`font-semibold tabular-nums ${e.reversed ? "text-ink-muted line-through" : e.kind === "in" ? "text-success" : "text-danger"}`}>{e.kind === "in" ? "+" : "−"} {money(e.amountCents)}</p>
+                    <p className={`font-semibold tabular-nums ${e.reversed ? "text-ink-muted line-through" : e.kind === "in" ? "text-success" : "text-ink"}`}>{e.kind === "in" ? "+" : "−"} {money(e.amountCents)}</p>
                     {!filtered && <p className="text-xs text-ink-muted tabular-nums">saldo {money(balance.get(e.key) ?? 0)}</p>}
                   </div>
                   <div className="md:order-4 flex items-start justify-end">
@@ -216,7 +216,7 @@ function Closing({ db, readOnly }: { db: Db; readOnly: boolean }) {
           <h2 className="font-semibold">Movimento do dia por forma</h2>
           {!byMethod.length ? <p className="mt-2 text-sm text-ink-muted">Sem movimento neste dia.</p> : (
             <dl className="mt-2 space-y-1 text-sm">
-              {byMethod.map(({ m, inn, out }) => <div key={m.id} className="flex justify-between gap-3"><dt>{m.label}</dt><dd className="tabular-nums"><span className="text-success">+ {money(inn)}</span> <span className="text-danger">− {money(out)}</span></dd></div>)}
+              {byMethod.map(({ m, inn, out }) => <div key={m.id} className="flex justify-between gap-3"><dt>{m.label}</dt><dd className="tabular-nums"><span className="text-success">+ {money(inn)}</span> <span className="text-ink-muted">− {money(out)}</span></dd></div>)}
             </dl>
           )}
         </Card>

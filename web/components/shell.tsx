@@ -20,17 +20,25 @@ import { Logo, LogoIcon } from "./logo";
 type NavItem = { href: string; label: string; icon: typeof LayoutGrid; sub?: boolean };
 const NAV: NavItem[] = [
   { href: "/", label: "Início", icon: LayoutGrid },
-  { href: "/indicadores", label: "Inteligência", icon: TrendingUp },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/pacientes", label: "Pacientes", icon: Users },
   { href: "/plano", label: "Plano de tratamento", icon: Stethoscope, sub: true },
   { href: "/orcamentos", label: "Orçamentos", icon: FileText, sub: true },
   { href: "/atendimentos", label: "Atendimentos", icon: ClipboardCheck, sub: true },
-  { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/vendas", label: "Vendas", icon: Handshake },
   { href: "/financeiro", label: "Financeiro", icon: BarChart3 },
   { href: "/caixa", label: "Caixa", icon: Wallet },
   { href: "/convenios", label: "Convênios", icon: IdCard },
   { href: "/protese", label: "Controle de prótese", icon: FlaskConical },
+  { href: "/indicadores", label: "Indicadores", icon: TrendingUp },
+];
+
+// Barra inferior do celular: o que a recepção e o dentista abrem o dia inteiro.
+const TABS: NavItem[] = [
+  { href: "/", label: "Início", icon: LayoutGrid },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/pacientes", label: "Pacientes", icon: Users },
+  { href: "/caixa", label: "Caixa", icon: Wallet },
 ];
 
 const TITLES: [string, string][] = [
@@ -50,9 +58,11 @@ export function Shell({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
   const [help, setHelp] = useState(false);
   const [onboard, setOnboard] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const theme = db?.profile.theme ?? "system";
 
   useEffect(() => { setDrawer(false); }, [path]);
+  useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "system") root.removeAttribute("data-theme");
@@ -63,7 +73,8 @@ export function Shell({ children }: { children: ReactNode }) {
   if (remote?.status === "no-clinic") return <ToastProvider><CreateClinic email={remote.email} /></ToastProvider>;
   if (remote?.status === "error") return <ToastProvider><main className="grid min-h-dvh place-items-center p-6 text-center"><div className="space-y-3"><p className="font-semibold">{remote.message}</p><a href="/entrar" className="font-semibold text-brand">Entrar de novo</a></div></main></ToastProvider>;
   const todayLong = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const title = TITLES.find(([p]) => path.startsWith(p))?.[1] ?? "Início";
+  const patientId = path.match(/^\/pacientes\/([^/]+)$/)?.[1];
+  const title = (mounted && patientId && db?.patients.find((p) => p.id === patientId)?.fullName) || (TITLES.find(([p]) => path.startsWith(p))?.[1] ?? "Início");
   const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
 
@@ -92,7 +103,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <ToastProvider>
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[70] focus:rounded-md focus:bg-surface-200 focus:px-4 focus:py-3 focus:font-semibold focus:text-ink focus:shadow-md">Pular para o conteúdo</a>
       <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
-        <aside className="hidden lg:block sticky top-0 h-dvh bg-rail text-rail-ink">{nav}</aside>
+        <aside className="hidden lg:block sticky top-0 h-dvh border-r border-rail-line bg-rail text-rail-ink">{nav}</aside>
 
         {drawer && (
           <div className="lg:hidden fixed inset-0 z-40 bg-brand-ink/60" onClick={() => setDrawer(false)}>
@@ -104,23 +115,22 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
 
         <div className="min-w-0 flex flex-col">
-          <header className="sticky top-0 z-30 bg-paper px-4 lg:px-8">
-            <div className="mx-auto flex max-w-[68rem] items-end gap-2 pt-3 pb-2 border-b-[3px] border-rule shadow-[0_3px_0_var(--paper),0_4px_0_var(--rule)]">
+          <header className="sticky top-0 z-30 border-b border-border bg-paper/85 px-4 backdrop-blur-md supports-[not(backdrop-filter:blur(1px))]:bg-paper lg:px-8">
+            <div className="mx-auto flex max-w-[68rem] items-center gap-2 py-2.5 lg:py-3.5">
             <button type="button" aria-label="Abrir menu" onClick={() => setDrawer(true)} className="lg:hidden grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Menu aria-hidden className="size-5" /></button>
             <LogoIcon size={32} className="lg:hidden shrink-0 rounded-md" />
-            <div className="min-w-0 flex-1 self-center lg:self-end">
-              <p className="hidden sm:block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted truncate">{[db?.profile.clinicName, todayLong].filter(Boolean).join(" · ")}</p>
-              <h1 className="text-xl lg:text-[26px] lg:leading-8 font-bold tracking-[-0.015em] truncate">{title}</h1>
+            <div className="min-w-0 flex-1 flex items-baseline gap-3">
+              <h1 className="text-xl lg:text-[28px] lg:leading-9 font-semibold tracking-[-0.025em] truncate">{title}</h1>
+              <p className="hidden md:block min-w-0 truncate text-sm text-ink-muted first-letter:uppercase">{[todayLong, mounted && db?.profile.clinicName].filter(Boolean).join(" · ")}</p>
             </div>
             <IconBtn label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
               onClick={() => db && api.account.updateProfile({ theme: nextTheme })}><ThemeIcon className="size-5" /></IconBtn>
             <IconBtn label="Ajuda" onClick={() => setHelp(true)}><CircleHelp className="size-5" /></IconBtn>
-            <Link href="/ajustes" aria-label="Ajustes" className="grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Settings className="size-5" /></Link>
             </div>
           </header>
 
           {db && isReadOnly(db) && (
-            <div role="status" className="mx-4 lg:mx-auto lg:w-[calc(100%-4rem)] lg:max-w-[68rem] mt-4 rounded-md bg-warning-soft px-4 py-2 text-sm">
+            <div role="status" className="mx-4 lg:mx-auto lg:w-[calc(100%-4rem)] lg:max-w-[68rem] mt-4 rounded-lg bg-warning-soft px-4 py-2.5 text-sm">
               Seu acesso venceu. Tudo continua visível, mas para registrar algo novo é preciso <Link href="/ajustes/conta" className="font-semibold underline">renovar</Link>.
             </div>
           )}
@@ -135,9 +145,29 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          <main id="conteudo" className="flex-1 px-4 lg:px-8 pb-12 pt-6 w-full max-w-6xl mx-auto">{children}</main>
+          <main id="conteudo" key={path} className="so-enter flex-1 px-4 lg:px-8 pb-28 lg:pb-12 pt-5 lg:pt-7 w-full max-w-6xl mx-auto">{children}</main>
         </div>
       </div>
+      <nav aria-label="Atalhos" className="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface-200/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid grid-cols-5">
+          {TABS.map((it) => {
+            const on = isActive(path, it.href);
+            const Icon = it.icon;
+            return (
+              <li key={it.href}>
+                <Link href={it.href} aria-current={on ? "page" : undefined} className={cx("flex h-16 flex-col items-center justify-center gap-1 text-[12px] font-medium transition-colors duration-150", on ? "text-brand" : "text-ink-muted hover:text-ink")}>
+                  <span className={cx("grid h-7 w-12 place-items-center rounded-pill transition-colors duration-150", on && "bg-brand-soft")}><Icon aria-hidden className="size-5" /></span>{it.label}
+                </Link>
+              </li>
+            );
+          })}
+          <li>
+            <button type="button" onClick={() => setDrawer(true)} className="flex h-16 w-full flex-col items-center justify-center gap-1 text-[12px] font-medium text-ink-muted hover:text-ink">
+              <span className="grid h-7 w-12 place-items-center"><Menu aria-hidden className="size-5" /></span>Mais
+            </button>
+          </li>
+        </ul>
+      </nav>
       <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>
@@ -150,8 +180,8 @@ function NavLink({ it, path }: { it: NavItem; path: string }) {
   return (
     <Link href={it.href} aria-current={active ? "page" : undefined}
       className={cx("flex items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150", it.sub ? "ml-6 h-10 text-[13px]" : "h-11",
-        active ? "bg-paper font-semibold text-ink shadow-[inset_3px_0_0_var(--rail-mark)]" : it.sub ? "text-rail-muted hover:bg-rail-hover hover:text-rail-ink" : "text-rail-ink hover:bg-rail-hover")}>
-      {!it.sub && <Icon aria-hidden className={cx("size-[18px]", active ? "text-brand" : "text-rail-muted")} />}{it.label}
+        active ? "bg-rail-active font-semibold text-brand-ink" : it.sub ? "text-rail-muted hover:bg-rail-hover hover:text-rail-ink" : "text-rail-ink hover:bg-rail-hover")}>
+      {!it.sub && <Icon aria-hidden className={cx("size-[18px]", active ? "text-brand-violet" : "text-rail-muted")} />}{it.label}
     </Link>
   );
 }

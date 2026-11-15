@@ -9,13 +9,13 @@ import { cx } from "./ui";
 
 /** Estilo do cartão na grade. Cancelado não aparece na grade (a busca ainda o encontra). */
 export const STATUS_CARD: Record<AppointmentStatus, string> = {
-  to_confirm: "bg-surface-200 border-2 border-dashed border-brand",
-  confirmed: "bg-brand-soft border-l-4 border-brand",
-  waiting: "bg-warning-soft border-l-4 border-warning",
-  in_service: "bg-surface-200 border-l-4 border-brand-violet ring-1 ring-brand-violet",
-  done: "bg-success-soft border-l-4 border-success",
-  no_show: "bg-danger-soft border-l-4 border-danger",
-  cancelled: "bg-surface-300 border-l-4 border-ink-muted",
+  to_confirm: "bg-surface-200 border border-dashed border-brand",
+  confirmed: "bg-brand-soft border border-brand/35",
+  waiting: "bg-warning-soft border border-warning/40",
+  in_service: "bg-surface-200 border border-brand ring-1 ring-brand",
+  done: "bg-success-soft border border-success/35",
+  no_show: "bg-danger-soft border border-danger/35",
+  cancelled: "bg-surface-300 border border-ink-muted/40",
 };
 
 /** Bolinha do status (legenda, menu e cartão). */

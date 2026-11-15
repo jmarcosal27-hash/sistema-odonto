@@ -127,17 +127,17 @@ export default function Page() {
     return (
       <div key={a.id} className="absolute z-20" style={{ top, height, left: `calc(${(a.lane / a.lanes) * 100}% + 2px)`, width: `calc(${100 / a.lanes}% - 4px)` }}>
         <button type="button" onClick={() => setForm({ editing: a })} aria-label={aria} title={aria}
-          className={cx("absolute inset-0 overflow-hidden rounded-sm py-0.5 pl-1.5 pr-10 text-left shadow-sm hover:ring-1 hover:ring-brand", STATUS_CARD[a.status],
+          className={cx("absolute inset-0 overflow-hidden rounded-md py-1 pl-2 pr-8 text-left transition-shadow duration-150 hover:shadow-[var(--so-shadow-md)]", STATUS_CARD[a.status],
             a.kind === "personal" && "!bg-surface-300 !border-ink-muted", a.forced && "outline outline-2 outline-warning")}>
-          <span className="block truncate text-[11px] font-semibold">
+          <span className={cx("text-xs font-semibold leading-4 break-words", height > 60 ? "line-clamp-2" : "block truncate")}>
             {a.forced && <Zap aria-hidden className="mr-0.5 inline size-3 text-warning" />}{a.forced && <span className="sr-only">Encaixe. </span>}
-            {a.time} {who}
+            {who}
           </span>
-          {height > 34 && <span className="block truncate text-[10px] text-ink-muted">{what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</span>}
-          {height > 48 && <span className="flex items-center gap-1 truncate text-[10px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
+          {height > 30 && <span className="block truncate text-[11px] leading-4 text-ink-muted"><span className="font-semibold text-ink">{a.time}</span> · {what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</span>}
+          {height > 64 && <span className="flex items-center gap-1 truncate text-[11px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
           {col.mode === "all" && pro && <span aria-hidden className="absolute bottom-0.5 right-1 size-2.5 rounded-full" style={{ background: pro.color }} />}
         </button>
-        <StatusMenu status={a.status} who={who} onPick={(s) => setStatus(a, s)} className="absolute right-0 top-0 z-10 h-full max-h-[min(100%,2.75rem)] min-h-5 w-10" />
+        <StatusMenu status={a.status} who={who} onPick={(s) => setStatus(a, s)} className="absolute right-0 top-0 z-10 h-full max-h-[min(100%,2.75rem)] min-h-5 w-8" />
       </div>
     );
   };
@@ -298,8 +298,8 @@ export default function Page() {
                             </button>
                           ))}
                           {d === todayISO() && nowMin >= START * 60 && nowMin <= END * 60 && (
-                            <div aria-hidden className="pointer-events-none absolute inset-x-0 z-30 border-t-2 border-danger" style={{ top: (nowMin - START * 60) * ppm }}>
-                              <span className="absolute -left-1 -top-1.5 size-2.5 rounded-full bg-danger" />
+                            <div aria-hidden className="pointer-events-none absolute inset-x-0 z-30 border-t-2 border-brand" style={{ top: (nowMin - START * 60) * ppm }}>
+                              <span className="absolute -left-1 -top-1.5 size-2.5 rounded-full bg-brand" />
                             </div>
                           )}
                           {placed.map((a) => apptCard(a, col))}

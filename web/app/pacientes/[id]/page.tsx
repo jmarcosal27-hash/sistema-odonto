@@ -63,11 +63,11 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </div>
         <div className="flex flex-wrap gap-2">
           {actions.map(({ label, icon: Icon, href }) => (
-            <a key={label} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-pill bg-surface-300 px-4 text-sm font-semibold"><Icon className="size-4" />{label}</a>
+            <a key={label} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong/70 bg-surface-100 px-4 text-sm font-semibold transition-colors duration-150 hover:bg-surface-300"><Icon className="size-4" />{label}</a>
           ))}
-          <Button variant="soft" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar</Button>
-          {!inWaitlist && !p.archived && <Button variant="soft" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}
-          <Link href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-4 text-sm font-semibold text-on-brand"><Stethoscope className="size-4" />Novo plano</Link>
+          <Button variant="secondary" className="h-10 px-4 text-sm" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar</Button>
+          {!inWaitlist && !p.archived && <Button variant="secondary" className="h-10 px-4 text-sm" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}
+          <Link href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-md bg-brand px-4 text-sm font-semibold text-on-brand transition-colors duration-150 hover:bg-brand-hover"><Stethoscope className="size-4" />Novo plano</Link>
         </div>
       </Card>
 

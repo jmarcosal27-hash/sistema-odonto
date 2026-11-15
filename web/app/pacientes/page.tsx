@@ -103,7 +103,7 @@ export default function Page() {
       <Card className="space-y-3">
         <div className="flex flex-wrap gap-2">
           <Input aria-label="Buscar paciente" placeholder="Nome, telefone ou CPF" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-48" />
-          <Select aria-label="Sexo" value={sex} onChange={(e) => setSex(e.target.value)} className="w-36"><option value="">Todos os sexos</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option></Select>
+          <Select aria-label="Sexo" value={sex} onChange={(e) => setSex(e.target.value)} className="w-44"><option value="">Todos os sexos</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option></Select>
           <Segmented label="Ordem" value={sort} onChange={setSort} options={[{ value: "recent", label: "Recentes" }, { value: "az", label: "A–Z" }]} />
           <Button onClick={() => setForm(true)}><Plus className="size-4" />Novo paciente</Button>
         </div>
