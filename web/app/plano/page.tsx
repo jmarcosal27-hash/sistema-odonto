@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2, Plus } from "lucide-react";
@@ -145,7 +146,7 @@ function PlanEditor() {
           <h2 id="itens" className="font-semibold">Itens do plano</h2>
           <div className="flex gap-2">
             <Button variant="soft" size="sm" onClick={() => openTooth(undefined)}><Plus className="size-4" />Item sem dente</Button>
-            {dirty && <Button variant="secondary" size="sm" onClick={() => { if (confirmClear()) { setItems([]); setMarks({}); } }}><Trash2 className="size-4" />Limpar</Button>}
+            {dirty && <Button variant="secondary" size="sm" onClick={async () => { if (await confirmClear()) { setItems([]); setMarks({}); } }}><Trash2 className="size-4" />Limpar</Button>}
           </div>
         </div>
         {!items.length && <Card><Empty title="Nenhum item ainda" body="Clique num dente do odontograma para registrar o que encontrou e escolher o tratamento." /></Card>}
@@ -232,5 +233,5 @@ function PlanEditor() {
 }
 
 function confirmClear() {
-  return window.confirm("Apagar todos os itens deste plano? Isso não pode ser desfeito.");
+  return ask({ title: "Limpar este plano?", body: "Todos os itens e marcações deste plano são apagados. Não dá para desfazer.", confirmLabel: "Limpar plano", danger: true });
 }

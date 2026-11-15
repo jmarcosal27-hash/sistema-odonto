@@ -26,6 +26,7 @@ const FAQ: { group: string; items: [string, string][] }[] = [
       ["Qual a diferença entre atendido e recebido?", "Atendido é o que você já fez na cadeira. Recebido é o dinheiro que entrou. Um atendimento pode estar feito e ainda a receber — o Financeiro mostra os dois."],
       ["Atendi sem orçamento, e agora?", "Em Atendimentos, use Registrar atendimento: paciente, procedimento, valor e se já recebeu. Leva segundos."],
       ["Como lembro pacientes que pararam de vir?", "Em Agenda › Retornos aparecem os pacientes perto da data de voltar (6 meses por padrão, ou o prazo que você definir por procedimento). Um toque abre o WhatsApp com sua mensagem pronta, e você acompanha quem já foi contatado e quem agendou."],
+      ["Por que o Resultado do mês é diferente do saldo do Caixa?", "O Resultado do mês é o que você recebeu menos as despesas lançadas no mês, pagas ou não. O saldo do Caixa conta só o dinheiro que de fato entrou e saiu da gaveta, incluindo o que sobrou de meses anteriores."],
       ["Para que serve a lista de espera?", "Para quem quer ser atendido antes. Quando uma consulta é cancelada, o horário aparece em Agenda › Lista de espera para você encaixar alguém."],
     ],
   },
@@ -36,6 +37,16 @@ const FAQ: { group: string; items: [string, string][] }[] = [
       ["O que acontece se a assinatura vencer?", "Nada é apagado. Você continua entrando e consultando tudo; só não dá para registrar algo novo até renovar."],
     ],
   },
+];
+
+const SHORTCUTS: [string, string][] = [
+  ["Ctrl K  ou  /", "Buscar paciente, tela ou ação"],
+  ["?", "Abrir esta ajuda"],
+  ["N", "Agenda: nova consulta"],
+  ["T", "Agenda: voltar para hoje"],
+  ["← →", "Agenda: dia ou semana anterior e seguinte"],
+  ["E", "Caixa: lançar entrada"],
+  ["S", "Caixa: lançar saída"],
 ];
 
 function Item({ q, a }: { q: string; a: string }) {
@@ -71,9 +82,15 @@ export function HelpModal({ open, onClose, onStartTour }: { open: boolean; onClo
           <p className="text-xs text-ink-muted mt-1">No Chrome ou Safari, abra o menu do navegador e escolha “Adicionar à tela inicial”. O sistema abre como um app.</p>
         </div>
         <Button variant="secondary" onClick={onStartTour} className="w-full">Refazer o guia inicial</Button>
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink-muted">Atalhos de teclado</h3>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-md bg-surface-300 p-4 text-sm">
+            {SHORTCUTS.map(([k, d]) => <div key={k} className="contents"><dt><kbd className="rounded-sm border border-border-strong bg-surface-200 px-1.5 py-0.5 text-xs font-semibold">{k}</kbd></dt><dd>{d}</dd></div>)}
+          </dl>
+        </section>
         {FAQ.map((g) => (
           <section key={g.group} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{g.group}</h3>
+            <h3 className="text-sm font-semibold text-ink-muted">{g.group}</h3>
             {g.items.map(([q, a]) => <Item key={q} q={q} a={a} />)}
           </section>
         ))}

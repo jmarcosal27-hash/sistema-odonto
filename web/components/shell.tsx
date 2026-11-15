@@ -15,6 +15,7 @@ import { useDb, api, isReadOnly, useRemoteState } from "@/lib/store";
 import { REMOTE, supabaseBrowser } from "@/lib/supabase/client";
 import { CreateClinic } from "./create-clinic";
 import { CommandPalette } from "./command-palette";
+import { ConfirmHost } from "./confirm";
 import { Logo, LogoIcon } from "./logo";
 
 // Ordem do Simples Dental: Inteligência, Pacientes, Agenda, Vendas, Financeiro, Prótese. `sub` = item recuado sob o anterior.
@@ -188,6 +189,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </ul>
       </nav>
       <CommandPalette open={search} onClose={() => setSearch(false)} />
+      <ConfirmHost />
       <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { useMemo, useState } from "react";
 import { Plus, Download } from "lucide-react";
 import { api, useDb } from "@/lib/store";
@@ -79,7 +80,7 @@ function ListTab({ db }: { db: Db }) {
 
       <Modal open={!!form} onClose={() => setForm(null)} title={form?.id ? "Editar convênio" : "Novo convênio"}
         footer={<>
-          {form?.id && <Button variant="danger" onClick={() => { if (form.id && confirm("Excluir este convênio e a tabela de valores dele? Pacientes ficam como particulares.")) run(async () => { await api.insurance.removeInsurer(form.id!); setForm(null); }, "Convênio excluído."); }}>Excluir</Button>}
+          {form?.id && <Button variant="danger" onClick={async () => { if (form.id && await ask({ title: "Excluir este convênio?", body: "A tabela de valores dele também é apagada. Os pacientes passam a constar como particulares.", confirmLabel: "Excluir convênio", danger: true })) run(async () => { await api.insurance.removeInsurer(form.id!); setForm(null); }, "Convênio excluído."); }}>Excluir</Button>}
           <Button variant="secondary" onClick={() => setForm(null)}>Cancelar</Button><Button onClick={save}>Salvar</Button>
         </>}>
         {form && (

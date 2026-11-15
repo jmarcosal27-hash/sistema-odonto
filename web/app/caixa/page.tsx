@@ -4,11 +4,12 @@ import { Suspense, useMemo, useState } from "react";
 import { Download, Plus, Undo2 } from "lucide-react";
 import { useDb, api, isReadOnly, useRemoteState } from "@/lib/store";
 import { CASH_METHODS, IN_CATEGORIES, OUT_CATEGORIES, cashCsv, cashLedger, cashTotals, commissionLines, expectedDrawer, methodLabel, signed, type CashEntry } from "@/lib/cash";
-import { dateBR, money, parseMoney, todayISO } from "@/lib/format";
+import { addDays, dateBR, money, parseMoney, todayISO } from "@/lib/format";
 import { periodFor } from "@/lib/finance";
 import type { CashMethod, Db } from "@/lib/types";
 import { Badge, Button, Card, Empty, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Textarea } from "@/components/ui";
 import { useAction } from "@/components/toast";
+import { useHotkeys } from "@/lib/hotkeys";
 
 type Tab = "book" | "close" | "commission";
 
@@ -50,6 +51,14 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
   const [pro, setPro] = useState("");
   const [kind, setKind] = useState<"all" | "in" | "out">("all");
   const [adding, setAdding] = useState<null | "in" | "out">(null);
+  const [preset, setPreset] = useState<"today" | "month" | "last" | "custom">("month");
+  const pickPreset = (p: typeof preset) => {
+    setPreset(p);
+    if (p === "today") { setFrom(todayISO()); setTo(todayISO()); }
+    if (p === "month") { setFrom(m0); setTo(m1); }
+    if (p === "last") { const [a, b] = periodFor("month", addDays(m0, -1)); setFrom(a); setTo(b); }
+  };
+  useHotkeys({ e: () => setAdding("in"), s: () => setAdding("out") }, !readOnly);
   const [reversing, setReversing] = useState<CashEntry | null>(null);
 
   const all = useMemo(() => cashLedger(db), [db]);
@@ -70,24 +79,31 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
 
   return (
     <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented size="sm" label="Período rápido" value={preset} onChange={pickPreset}
+          options={[{ value: "today", label: "Hoje" }, { value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher datas" }]} />
+        <Segmented size="sm" label="Tipo de lançamento" value={kind} onChange={setKind}
+          options={[{ value: "all", label: "Tudo" }, { value: "in", label: "Entradas" }, { value: "out", label: "Saídas" }]} />
+      </div>
       <div className="flex flex-wrap items-end gap-2">
-        <Field label="De">{(id) => <Input id={id} type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />}</Field>
-        <Field label="Até">{(id) => <Input id={id} type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} />}</Field>
+        {preset === "custom" && <>
+        <Field label="De">{(id) => <Input id={id} type="date" value={from} max={to} onChange={(e) => e.target.value && (setFrom(e.target.value), setPreset("custom"))} />}</Field>
+        <Field label="Até">{(id) => <Input id={id} type="date" value={to} min={from} onChange={(e) => e.target.value && (setTo(e.target.value), setPreset("custom"))} />}</Field>
+        </>}
         <Field label="Forma">{(id) => <Select id={id} value={method} onChange={(e) => setMethod(e.target.value as "" | CashMethod)}><option value="">Todas</option>{CASH_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</Select>}</Field>
         <Field label="Dentista">{(id) => <Select id={id} value={pro} onChange={(e) => setPro(e.target.value)}><option value="">Todos</option>{pros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>}</Field>
-        <Field label="Tipo">{(id) => <Select id={id} value={kind} onChange={(e) => setKind(e.target.value as "all" | "in" | "out")}><option value="all">Entradas e saídas</option><option value="in">Só entradas</option><option value="out">Só saídas</option></Select>}</Field>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Saldo inicial" value={money(totals.opening)} sub="caixa até o dia anterior" />
         <Kpi tone="success" label="Entradas" value={money(sum("in"))} valueClass="text-success" sub={filtered ? "com os filtros" : undefined} />
         <Kpi label="Saídas do caixa" value={money(sum("out"))} sub={filtered ? "com os filtros" : undefined} />
-        <Kpi label="Saldo final" value={money(totals.closing)} valueClass={totals.closing < 0 ? "text-danger" : undefined} sub="caixa todo no período" />
+        <Kpi label="Saldo final" value={money(totals.closing)} valueClass={totals.closing < 0 ? "text-danger" : undefined} sub="dinheiro que passou pelo caixa" />
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button disabled={readOnly} onClick={() => setAdding("in")}><Plus aria-hidden className="size-4" />Entrada</Button>
-        <Button variant="secondary" disabled={readOnly} onClick={() => setAdding("out")}><Plus aria-hidden className="size-4" />Saída</Button>
+        <Button disabled={readOnly} title="Atalho: E" aria-keyshortcuts="E" onClick={() => setAdding("in")}><Plus aria-hidden className="size-4" />Entrada</Button>
+        <Button variant="secondary" disabled={readOnly} title="Atalho: S" aria-keyshortcuts="S" onClick={() => setAdding("out")}><Plus aria-hidden className="size-4" />Saída</Button>
         <div className="flex-1" />
         <Button variant="secondary" disabled={!rows.length} onClick={exportCsv}><Download aria-hidden className="size-4" />Exportar CSV</Button>
       </div>

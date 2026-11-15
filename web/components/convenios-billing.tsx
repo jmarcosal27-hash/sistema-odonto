@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "./confirm";
 import { useMemo, useState } from "react";
 import { Download, Send, Trash2, Wallet } from "lucide-react";
 import { api } from "@/lib/store";
@@ -180,7 +181,7 @@ function BatchDetail({ db, batch, run, onClose }: { db: Db; batch: BillingBatch;
         <Button variant="secondary" onClick={download}><Download aria-hidden className="size-4" />Exportar CSV</Button>
         {batch.sentOn && items.some((i) => i.status === "pending") && <Button variant="secondary" onClick={payAll}>Marcar tudo como pago</Button>}
         <Button variant="secondary" disabled={pendingCash <= 0 || cashing || !batch.sentOn} onClick={toCash}><Wallet aria-hidden className="size-4" />Lançar {money(Math.max(0, pendingCash))} no caixa</Button>
-        <Button variant="ghost" onClick={() => { if (confirm("Excluir este lote? Os atendimentos voltam a poder ser faturados.")) run(async () => { await api.insurance.removeBatch(batch.id); onClose(); }, "Lote excluído."); }}><Trash2 aria-hidden className="size-4" />Excluir lote</Button>
+        <Button variant="ghost" onClick={async () => { if (await ask({ title: "Excluir este lote?", body: "Os atendimentos voltam a poder ser faturados.", confirmLabel: "Excluir lote", danger: true })) run(async () => { await api.insurance.removeBatch(batch.id); onClose(); }, "Lote excluído."); }}><Trash2 aria-hidden className="size-4" />Excluir lote</Button>
       </div>
       {!batch.sentOn && <p className="text-sm text-ink-muted">Marque o lote como enviado para registrar pagamentos e glosas.</p>}
 

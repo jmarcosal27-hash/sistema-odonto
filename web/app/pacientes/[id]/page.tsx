@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { use, useState } from "react";
 import { STATUS_LABEL } from "@/lib/agenda";
 import Link from "next/link";
@@ -84,7 +85,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 {upcoming.map((ap) => (
                   <li key={ap.id} className="flex items-center gap-3">
                     <span className="grid size-12 place-items-center rounded-md bg-brand text-on-brand text-center leading-tight">
-                      <span className="text-[10px] uppercase">{new Date(ap.date + "T12:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
+                      <span className="text-[11px] font-medium capitalize">{new Date(ap.date + "T12:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
                       <span className="text-lg font-bold">{ap.date.slice(8)}</span>
                     </span>
                     <span className="text-sm"><span className="font-semibold block">{dateShort(ap.date)} {ap.time ? `às ${ap.time}` : "· horário a definir"}</span>
@@ -194,8 +195,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       </div>
 
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={() => {
-          if (p.archived || window.confirm("Arquivar este paciente? Ele some das listas, mas o histórico fica guardado e dá para desarquivar.")) api.patients.archive(p.id, !p.archived).then(() => toast(p.archived ? "Paciente reativado." : "Paciente arquivado."));
+        <Button variant="ghost" size="sm" onClick={async () => {
+          if (p.archived || await ask({ title: "Arquivar este paciente?", body: "Ele some das listas, mas o histórico fica guardado e dá para desarquivar depois.", confirmLabel: "Arquivar" })) api.patients.archive(p.id, !p.archived).then(() => toast(p.archived ? "Paciente reativado." : "Paciente arquivado."));
         }}><Archive className="size-4" />{p.archived ? "Desarquivar" : "Arquivar paciente"}</Button>
       </div>
 

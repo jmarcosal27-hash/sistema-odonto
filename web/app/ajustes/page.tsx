@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { useState } from "react";
 import Link from "next/link";
 import { useDb, api } from "@/lib/store";
@@ -96,8 +97,8 @@ export default function Page() {
           <summary className="cursor-pointer font-semibold">Dados de exemplo</summary>
           <p className="mt-2 text-ink-muted">Esta versão de testes guarda tudo neste navegador e começa com pacientes fictícios.</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => window.confirm("Apagar tudo e começar do zero? Não dá para desfazer.") && api.account.reset(false)}>Começar do zero</Button>
-            <Button size="sm" variant="ghost" onClick={() => window.confirm("Substituir tudo pelos dados de exemplo?") && api.account.reset(true)}>Restaurar exemplos</Button>
+            <Button size="sm" variant="secondary" onClick={() => void ask({ title: "Começar do zero?", body: "Apaga pacientes, agenda, financeiro e documentos desta clínica. Não dá para desfazer.", confirmLabel: "Apagar tudo", danger: true, typeToConfirm: "APAGAR" }).then((ok) => { if (ok) void api.account.reset(false); })}>Começar do zero</Button>
+            <Button size="sm" variant="ghost" onClick={() => void ask({ title: "Restaurar os dados de exemplo?", body: "Tudo o que está no sistema agora é substituído pelos dados de exemplo.", confirmLabel: "Substituir", danger: true }).then((ok) => { if (ok) void api.account.reset(true); })}>Restaurar exemplos</Button>
           </div>
         </details>
       </Card>

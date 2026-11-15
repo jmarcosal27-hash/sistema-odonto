@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "./confirm";
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
@@ -38,7 +39,7 @@ export function ClinicalNotes({ db, patientId }: { db: Db; patientId: string }) 
                 <span className="flex items-center gap-1">
                   <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(n)} aria-label={`Editar nota de ${dateBR(n.date)}`}><Pencil className="size-3.5" />Editar</Button>
                   <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir nota de ${dateBR(n.date)}`}
-                    onClick={() => { if (window.confirm("Excluir esta nota de evolução? Não dá para desfazer.")) void run(() => api.clinicalNotes.remove(n.id), "Nota excluída."); }}>
+                    onClick={async () => { if (await ask({ title: "Excluir esta nota de evolução?", body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true })) void run(() => api.clinicalNotes.remove(n.id), "Nota excluída."); }}>
                     <Trash2 className="size-3.5" />Excluir
                   </Button>
                 </span>

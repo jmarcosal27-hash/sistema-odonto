@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -102,7 +103,7 @@ function Budgets() {
                     {p?.phone && <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border-strong/70 bg-surface-100 px-3 text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-300"><MessageCircle className="size-4" />Enviar</a>}
                     {b.status === "presented" && <>
                       <Button size="sm" onClick={() => setAuthorizing(b)}>Aprovar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Marcar o orçamento de ${p?.fullName ?? "este paciente"} (${money(b.totalCents)}) como recusado? Ele sai dos orçamentos em aberto.`)) run(() => api.budgets.decline(b.id), "Marcado como recusado."); }}><XIcon className="size-4" />Recusou</Button>
+                      <Button size="sm" variant="ghost" onClick={async () => { if (await ask({ title: "Marcar como recusado?", body: `O orçamento de ${p?.fullName ?? "este paciente"} (${money(b.totalCents)}) sai dos orçamentos em aberto.`, confirmLabel: "Marcar recusado" })) run(() => api.budgets.decline(b.id), "Marcado como recusado."); }}><XIcon className="size-4" />Recusou</Button>
                     </>}
                   </div>
                 </li>

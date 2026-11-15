@@ -15,12 +15,12 @@ const TABS = [
 export function AgendaTabs() {
   const path = usePathname();
   return (
-    <nav aria-label="Seções da agenda" className="flex justify-center">
-      <ul className="inline-flex flex-wrap justify-center rounded-lg sm:rounded-pill bg-surface-300 p-1 gap-1">
+    <nav aria-label="Seções da agenda" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:flex sm:justify-center sm:px-0">
+      <ul className="inline-flex min-w-max rounded-pill bg-surface-300 p-1 gap-1">
         {TABS.map(({ href, label, icon: Icon }) => (
           <li key={href}>
             <Link href={href} aria-current={path === href ? "page" : undefined}
-              className={cx("inline-flex items-center gap-1.5 rounded-pill h-8 px-4 text-sm font-semibold", path === href ? "bg-surface-200 shadow-sm" : "text-ink-muted hover:text-ink")}>
+              className={cx("inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill h-9 px-4 text-sm font-semibold", path === href ? "bg-surface-200 shadow-sm" : "text-ink-muted hover:text-ink")}>
               <Icon aria-hidden className="size-4" />{label}
             </Link>
           </li>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "./confirm";
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/store";
@@ -75,7 +76,7 @@ export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly
                     <span className="flex gap-1">
                       <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(m.id)} aria-label={`Editar ${m.name}`}><Pencil className="size-3.5" />Editar</Button>
                       <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir ${m.name}`}
-                        onClick={() => window.confirm(`Excluir "${m.name}" da lista de medicamentos? Não dá para desfazer.`) && void run(() => api.medications.remove(m.id), "Medicamento excluído.")}><Trash2 className="size-3.5" />Excluir</Button>
+                        onClick={() => void ask({ title: `Excluir "${m.name}"?`, body: "O medicamento sai da lista. Receitas já emitidas não mudam.", confirmLabel: "Excluir", danger: true }).then((ok) => { if (ok) void run(() => api.medications.remove(m.id), "Medicamento excluído."); })}><Trash2 className="size-3.5" />Excluir</Button>
                     </span>
                   </li>
                 ))}
@@ -95,7 +96,7 @@ export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly
                     <span className="flex gap-1">
                       <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setRenaming(t.id)} aria-label={`Renomear ${t.name}`}><Pencil className="size-3.5" />Renomear</Button>
                       <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir modelo ${t.name}`}
-                        onClick={() => window.confirm(`Excluir o modelo "${t.name}"? Não dá para desfazer.`) && void run(() => api.prescriptionTemplates.remove(t.id), "Modelo excluído.")}><Trash2 className="size-3.5" />Excluir</Button>
+                        onClick={() => void ask({ title: `Excluir o modelo "${t.name}"?`, body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true }).then((ok) => { if (ok) void run(() => api.prescriptionTemplates.remove(t.id), "Modelo excluído."); })}><Trash2 className="size-3.5" />Excluir</Button>
                     </span>
                   </li>
                 ))}

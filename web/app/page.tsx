@@ -167,6 +167,7 @@ export default function Home() {
               <div><dt className="text-[13px] font-medium text-ink-muted">Resultado do mês</dt><dd className={cx("mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
               <div><dt className="text-[13px] font-medium text-ink-muted">A receber</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums">{money(s.receivable)}</dd></div>
             </dl>
+            <p className="mt-3 text-xs leading-5 text-ink-muted">Resultado = recebido menos despesas lançadas no mês. O <Link href="/caixa" className="font-semibold text-brand">saldo do Caixa</Link> é outra conta: só o dinheiro que passou pela gaveta.</p>
           </Card>
         </div>
       </div>

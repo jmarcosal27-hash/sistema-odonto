@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -9,7 +10,7 @@ import { monthSummary, lastMonths, overdue } from "@/lib/finance";
 import { dateBR, money, parseMoney, todayISO, whatsappLink, plural } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/catalog";
 import type { Installment, PaymentMethod } from "@/lib/types";
-import { Badge, Button, Card, Empty, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle, cx } from "@/components/ui";
 import { useAction } from "@/components/toast";
 
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -37,7 +38,10 @@ function Finance() {
   const s = monthSummary(db, ym);
   const late = overdue(db);
   const series = lastMonths(ym, Number(span)).map((m) => ({ m, ...monthSummary(db, m) }));
-  const max = Math.max(1, ...series.flatMap((x) => [x.received, x.spent]));
+  const peak = Math.max(1, ...series.flatMap((x) => [x.received, x.spent]));
+  // Topo "redondo" da escala (1, 2 ou 5 × 10^n reais) para as linhas de referência.
+  const max = (() => { const r = peak / 100; const p = 10 ** Math.floor(Math.log10(r || 1)); const n = [1, 2, 5, 10].find((k) => k * p >= r) ?? 10; return n * p * 100; })();
+  const short = (c: number) => { const r = c / 100; return r >= 1000 ? `R$ ${(r / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : `R$ ${Math.round(r)}`; };
   const expensesAll = db.expenses.filter((e) => e.spentAt.startsWith(ym)).sort((a, b) => a.spentAt.localeCompare(b.spentAt));
   const expenses = expensesAll.filter((e) => expFilter === "all" || (expFilter === "paid" ? e.paid !== false : e.paid === false));
   const byCat = Object.entries(expensesAll.reduce<Record<string, number>>((acc, e) => { acc[e.category] = (acc[e.category] ?? 0) + e.amountCents; return acc; }, {})).sort((a, b) => b[1] - a[1]);
@@ -66,7 +70,7 @@ function Finance() {
 
       {tab === "overview" && <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Kpi label="Sobrou no mês" value={money(s.balance)} sub="recebido menos despesas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
+          <Kpi label="Resultado do mês" value={money(s.balance)} sub="recebido menos despesas lançadas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
           <Kpi label="Recebido" value={money(s.received)} valueClass="text-success" sub="avulsos + parcelas pagas" />
           <Kpi label="Despesas lançadas" value={money(s.spent)} sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
           <Kpi tone="warning" label="A receber" value={money(s.receivable)} sub={late.length ? plural(late.length, "parcela vencida", "parcelas vencidas") : "nada vencido"} />
@@ -79,16 +83,28 @@ function Finance() {
             </div>
             {series.every((x) => !x.received && !x.spent) ? <Empty title="Sem movimento no período" /> : (
               <figure>
-                <div className="flex h-48 items-end gap-2" role="img" aria-label={series.map((x) => `${label(x.m)}: recebido ${money(x.received)}, despesas ${money(x.spent)}`).join("; ")}>
+                <div className="flex gap-2">
+                <div aria-hidden className="relative h-48 w-14 shrink-0 text-right text-[11px] tabular-nums text-ink-muted">
+                  {[1, 0.5, 0].map((f) => <span key={f} className="absolute right-0 -translate-y-1/2" style={{ top: `${(1 - f) * 100}%` }}>{short(max * f)}</span>)}
+                </div>
+                <div className="relative flex-1">
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-48">
+                  {[1, 0.5, 0].map((f) => <span key={f} className={cx("absolute inset-x-0 border-t", f ? "border-dashed border-border" : "border-border-strong")} style={{ top: `${(1 - f) * 100}%` }} />)}
+                </div>
+                <div className="relative flex h-48 items-end gap-2" role="img" aria-label={series.map((x) => `${label(x.m)}: recebido ${money(x.received)}, despesas ${money(x.spent)}`).join("; ")}>
                   {series.map((x) => (
                     <div key={x.m} className="flex flex-1 flex-col items-center gap-1 h-full justify-end">
                       <div className="flex w-full items-end justify-center gap-0.5 h-full">
                         <div className="w-1/3 rounded-t-sm bg-success" style={{ height: `${(x.received / max) * 100}%` }} title={`Recebido ${money(x.received)}`} />
                         <div className="w-1/3 rounded-t-sm bg-border-strong" style={{ height: `${(x.spent / max) * 100}%` }} title={`Despesas ${money(x.spent)}`} />
                       </div>
-                      <span className={`text-[11px] ${x.m === ym ? "font-bold text-ink" : "text-ink-muted"}`}>{label(x.m)}</span>
                     </div>
                   ))}
+                </div>
+                <div aria-hidden className="mt-1.5 flex gap-2">
+                  {series.map((x) => <span key={x.m} className={cx("flex-1 text-center text-[11px]", x.m === ym ? "font-bold text-ink" : "text-ink-muted")}>{label(x.m)}{!x.received && !x.spent && <span className="block font-normal">sem mov.</span>}</span>)}
+                </div>
+                </div>
                 </div>
                 <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-border-strong" />Despesas</span></figcaption>
               </figure>
@@ -134,7 +150,7 @@ function Finance() {
                     {!i.paidAt ? <>
                       {isLate && p?.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Passando para lembrar da parcela ${i.number}/${i.of} de ${money(i.amountCents)}, que venceu em ${dateBR(i.dueDate)}. Qualquer dúvida, é só chamar.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Lembrar</a>}
                       <Button size="sm" onClick={() => setPaying(i)}>Receber</Button>
-                    </> : <Button size="sm" variant="ghost" onClick={() => window.confirm("Desfazer o recebimento desta parcela?") && run(() => api.installments.unpay(i.id))}>Desfazer</Button>}
+                    </> : <Button size="sm" variant="ghost" onClick={() => void ask({ title: "Desfazer o recebimento?", body: "A parcela volta para a lista de contas a receber.", confirmLabel: "Desfazer recebimento" }).then((ok) => { if (ok) void run(() => api.installments.unpay(i.id)); })}>Desfazer</Button>}
                   </li>
                 );
               })}
@@ -165,7 +181,7 @@ function Finance() {
                     <span className="tabular-nums font-semibold">− {money(e.amountCents)}</span>
                     {paid ? <Badge tone="success">Paga</Badge> : isLate ? <Badge tone="danger">Atrasada</Badge> : <Badge tone="warning">A pagar</Badge>}
                     <Button size="sm" variant={paid ? "ghost" : "secondary"} onClick={() => run(() => api.expenses.setPaid(e.id, !paid))}>{paid ? "Marcar a pagar" : "Paguei"}</Button>
-                    <button type="button" aria-label={`Apagar despesa ${e.category}`} onClick={() => window.confirm("Apagar esta despesa?") && run(() => api.expenses.remove(e.id), "Despesa apagada.")} className="rounded-pill p-2 text-ink-muted hover:text-danger"><Trash2 className="size-4" /></button>
+                    <button type="button" aria-label={`Apagar despesa ${e.category}`} onClick={() => void ask({ title: "Apagar esta despesa?", body: "Ela sai do financeiro e dos indicadores do mês.", confirmLabel: "Apagar", danger: true }).then((ok) => { if (ok) void run(() => api.expenses.remove(e.id), "Despesa apagada."); })} className="rounded-pill p-2 text-ink-muted hover:text-danger"><Trash2 className="size-4" /></button>
                   </li>
                 );
               })}
