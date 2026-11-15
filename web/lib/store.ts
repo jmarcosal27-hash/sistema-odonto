@@ -8,17 +8,25 @@ import { useSyncExternalStore } from "react";
 import type {
   AnamnesisAnswer, AnamnesisQuestion, Certificate, ClinicalNote, CustomDocument, Medication, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
-  Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry,
+  Procedure, Profile, RecallStatus, CashMethod, CashMovement, CommissionPayoutItem, CommissionRule, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry, Opportunity, ProsthesisJob, Professional,
 } from "./types";
+import { MAX_COMMENT } from "./types";
+import { addProsthesisEvent, moveProsthesis, normalizeJob, normalizeLab, type JobInput } from "./prosthesis";
+import { backfillSales,defaultStages, moveOpportunity, pushEvent, sortedStages, stageOfKind, syncBudgetOpportunity } from "./sales";
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES, hasUnanswered } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
+import { MAX_BLOCK_DAYS, prepareAppointment, toMin } from "./agenda";
+import { checkHofItem } from "./hof";
+import { checkMovement, checkRule } from "./cash";
+import { batchStatus, checkItemAmounts, itemStatus, itemsFromTreatments, expectedPayment, normalizeInsurer, eligibleTreatments, type InsurerInput } from "./convenios";
+import { normName } from "./convenios-presets";
 import { buildSeed } from "./seed";
 import { MAX_DEMO_FILE_BYTES, checkFile, readAsDataUrl } from "./files";
 import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 6;
+const VERSION = 12;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -33,6 +41,10 @@ export function emptyDb(): Db {
     installments: [], waitlist: [], recall: {}, recallMonths: {},
     clinicalNotes: [], anamnesisTemplates: [], anamnesisRecords: [],
     medications: [], prescriptions: [], prescriptionTemplates: [], certificates: [], customDocuments: [], patientFiles: [],
+    salesStages: defaultStages(), opportunities: [], opportunityEvents: [], salesGoals: {},
+    laboratories: [], prosthesisJobs: [], prosthesisEvents: [], professionals: [], timeBlocks: [],
+    cashMovements: [], cashReceipts: [], cashDays: [], commissionRules: [], commissionPayouts: [],
+    insurers: [], insurerPrices: [], billingBatches: [], billingItems: [],
     templates: [
       { kind: "confirmation", body: "Olá, {nome}! Passando para confirmar seu horário em {data} às {hora}. Pode responder com SIM para confirmar? 😊" },
       { kind: "recall", body: "Oi, {nome}! Já está na hora da sua revisão. Quer que eu reserve um horário para você nesta semana?" },
@@ -60,6 +72,17 @@ function migrate(db: Db): Db {
   db.patientFiles ??= [];
   // v6: fichas de anamnese antigas passam a concluídas (imutáveis); correção vira revisão
   db.anamnesisRecords.forEach((r) => { if (!r.status) { r.status = "completed"; r.completedAt ??= r.createdAt; } });
+  // v7: itens de HOF (campos opcionais em PlanItem); planos e orçamentos antigos seguem como estão, sem perda
+  // v8: funil de vendas. Cria as quatro etapas padrão e uma oportunidade para cada orçamento existente (aberto, aprovado ou recusado), sem tocar nos orçamentos.
+  backfillSales(db);
+  // v9: controle de prótese (laboratórios, serviços e histórico). Começa vazio e não toca em nada que já existe.
+  db.laboratories ??= []; db.prosthesisJobs ??= []; db.prosthesisEvents ??= [];
+  // v10: agenda por profissional e bloqueios. Começa vazia; agendamentos antigos seguem sem profissional (coluna "Sem profissional") e sem perda.
+  db.professionals ??= []; db.timeBlocks ??= [];
+  // v11: caixa e comissões. Começam vazios; o caixa lê parcelas pagas, atendimentos recebidos e despesas que já existem.
+  db.cashMovements ??= []; db.cashReceipts ??= []; db.cashDays ??= []; db.commissionRules ??= []; db.commissionPayouts ??= [];
+  // v12: convênios e faturamento. Começam vazios; pacientes antigos seguem como particulares (sem insurerId).
+  db.insurers ??= []; db.insurerPrices ??= []; db.billingBatches ??= []; db.billingItems ??= [];
   db.version = VERSION;
   return db;
 }
@@ -226,6 +249,7 @@ const localApi = {
   plans: {
     async save(plan: Omit<TreatmentPlan, "id" | "createdAt" | "status"> & { id?: string }) {
       const id = plan.id ?? uid();
+      plan = { ...plan, items: plan.items.map(checkHofItem) };
       commit((db) => {
         guard(db);
         const existing = db.plans.find((p) => p.id === id);
@@ -252,6 +276,7 @@ const localApi = {
           status: "presented", authorizedItemIds: [], presentedAt: new Date().toISOString(),
         });
         event(db, plan.patientId, "budget_presented", "Orçamento apresentado");
+        syncBudgetOpportunity(db, db.budgets[db.budgets.length - 1], db.profile.professionalName || undefined);
       });
       return id;
     },
@@ -304,6 +329,7 @@ const localApi = {
         }));
         event(db, b.patientId, "budget_authorized",
           (chosen.length === plan.items.length ? "Orçamento aprovado" : `Orçamento aprovado em parte (${chosen.length} de ${plan.items.length} itens)`) + (n > 1 ? ` em ${n}x` : ""));
+        syncBudgetOpportunity(db, b, db.profile.professionalName || undefined);
       });
     },
     async decline(budgetId: string) {
@@ -313,6 +339,7 @@ const localApi = {
         if (!b) throw new Error("Orçamento não encontrado.");
         if (b.status !== "presented") throw new Error("Esse orçamento já foi respondido.");
         b.status = "declined";
+        syncBudgetOpportunity(db, b, db.profile.professionalName || undefined);
       });
     },
   },
@@ -363,15 +390,10 @@ const localApi = {
   },
 
   appointments: {
-    async save(a: Omit<Appointment, "id"> & { id?: string }) {
+    async save(input: Omit<Appointment, "id"> & { id?: string }) {
       commit((db) => {
         guard(db);
-        if (a.time && a.status !== "cancelled") {
-          const start = toMin(a.time), end = start + a.durationMinutes;
-          const clash = db.appointments.find((x) => x.id !== a.id && x.date === a.date && x.time && x.status !== "cancelled"
-            && toMin(x.time) < end && start < toMin(x.time) + x.durationMinutes);
-          if (clash) throw new Error(`Esse horário bate com outro compromisso às ${clash.time}.`);
-        }
+        const a = prepareAppointment(db, input);
         const existing = a.id && db.appointments.find((x) => x.id === a.id);
         if (existing) Object.assign(existing, a);
         else {
@@ -396,6 +418,47 @@ const localApi = {
         if (status === "done") touchVisit(db, a.patientId, a.date);
       });
     },
+  },
+
+  professionals: {
+    async save(p: { id?: string; name: string; color: string; active: boolean }) {
+      commit((db) => {
+        guard(db);
+        const name = p.name.trim();
+        if (!name || name.length > 80) throw new Error("O nome do profissional precisa ter de 1 a 80 caracteres.");
+        if (!/^#[0-9a-fA-F]{6}$/.test(p.color)) throw new Error("Escolha uma cor para o profissional.");
+        if (db.professionals.some((x) => x.id !== p.id && x.name.toLowerCase() === name.toLowerCase())) throw new Error("Já existe um profissional com esse nome.");
+        const existing = p.id ? db.professionals.find((x) => x.id === p.id) : undefined;
+        if (p.id && !existing) throw new Error("Profissional não encontrado.");
+        if (existing) Object.assign(existing, { name, color: p.color, active: p.active });
+        else db.professionals.push({ id: uid(), name, color: p.color, active: p.active } satisfies Professional);
+      });
+    },
+    /** Os agendamentos do profissional ficam, só sem profissional; os bloqueios dele saem junto. */
+    async remove(id: string) {
+      commit((db) => {
+        guard(db);
+        db.professionals = db.professionals.filter((x) => x.id !== id);
+        db.appointments.forEach((a) => { if (a.professionalId === id) a.professionalId = undefined; });
+        db.timeBlocks = db.timeBlocks.filter((b) => b.professionalId !== id);
+      });
+    },
+  },
+
+  timeBlocks: {
+    /** Um bloqueio por dia em `dates`. Sem profissional = clínica toda. */
+    async create(b: { professionalId?: string; dates: string[]; startTime: string; endTime: string; reason: string }) {
+      commit((db) => {
+        guard(db);
+        const reason = b.reason.trim() || "Bloqueio";
+        if (reason.length > 80) throw new Error("O motivo pode ter até 80 caracteres.");
+        if (!b.startTime || !b.endTime || toMin(b.endTime) <= toMin(b.startTime)) throw new Error("O fim precisa ser depois do início.");
+        if (!b.dates.length || b.dates.length > MAX_BLOCK_DAYS) throw new Error(`Escolha de 1 a ${MAX_BLOCK_DAYS} dias.`);
+        if (b.professionalId && !db.professionals.some((p) => p.id === b.professionalId)) throw new Error("Profissional não encontrado.");
+        b.dates.forEach((date) => db.timeBlocks.push({ id: uid(), professionalId: b.professionalId, date, startTime: b.startTime, endTime: b.endTime, reason }));
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.timeBlocks = db.timeBlocks.filter((x) => x.id !== id); }); },
   },
 
   waitlist: {
@@ -522,6 +585,20 @@ const localApi = {
         Object.assign(cur, { name, route: m.route, controlled: m.controlled, unit: m.unit?.trim() || undefined, defaultPosology: m.defaultPosology?.trim() || undefined });
       });
     },
+    /** Acrescenta só os presets que a clínica ainda não tem (por nome); nunca sobrescreve o que ela editou. */
+    async importPresets(items: { name: string; route: Medication["route"]; controlled: boolean; unit?: string; posology: string }[]) {
+      let added = 0;
+      commit((db) => {
+        guard(db);
+        const now = new Date().toISOString();
+        for (const it of items) {
+          if (db.medications.some((x) => x.name.toLowerCase() === it.name.toLowerCase())) continue;
+          db.medications.push({ id: uid(), name: it.name, route: it.route, controlled: it.controlled, unit: it.unit, defaultPosology: it.posology, createdAt: now });
+          added++;
+        }
+      });
+      return added;
+    },
     // Receitas já emitidas guardam o nome em cada item, então seguem iguais.
     async remove(id: string) {
       commit((db) => {
@@ -618,10 +695,369 @@ const localApi = {
     },
   },
 
+  sales: {
+    async createOpportunity(o: { patientId: string; title: string; valueCents: number; responsible?: string }) {
+      const id = uid();
+      commit((db) => {
+        guard(db);
+        const title = o.title.trim();
+        if (!title) throw new Error("Dê um título à oportunidade.");
+        if (title.length > 120) throw new Error("Título longo demais (até 120 caracteres).");
+        if (!Number.isInteger(o.valueCents) || o.valueCents < 0) throw new Error("Informe um valor válido.");
+        if (!db.patients.some((p) => p.id === o.patientId)) throw new Error("Escolha o paciente.");
+        const stage = stageOfKind(db, "open");
+        if (!stage) throw new Error("Etapas do funil não encontradas.");
+        const now = new Date().toISOString();
+        const responsible = o.responsible?.trim().slice(0, 120) || undefined;
+        db.opportunities.push({ id, patientId: o.patientId, stageId: stage.id, title, valueCents: o.valueCents, responsible, createdAt: now, updatedAt: now, stageChangedAt: now } satisfies Opportunity);
+        pushEvent(db, id, "system", "Criou esta oportunidade", db.profile.professionalName || undefined);
+      });
+      return id;
+    },
+    async updateOpportunity(id: string, patch: { title?: string; valueCents?: number; responsible?: string; label?: string }) {
+      commit((db) => {
+        guard(db);
+        const o = db.opportunities.find((x) => x.id === id);
+        if (!o) throw new Error("Oportunidade não encontrada.");
+        if (patch.title !== undefined) {
+          const t = patch.title.trim();
+          if (!t || t.length > 120) throw new Error("O título precisa ter de 1 a 120 caracteres.");
+          o.title = t;
+        }
+        if (patch.valueCents !== undefined) {
+          if (!Number.isInteger(patch.valueCents) || patch.valueCents < 0) throw new Error("Informe um valor válido.");
+          o.valueCents = patch.valueCents;
+        }
+        if ("responsible" in patch) o.responsible = patch.responsible?.trim().slice(0, 120) || undefined;
+        if ("label" in patch) o.label = patch.label?.trim().slice(0, 30) || undefined;
+        o.updatedAt = new Date().toISOString();
+      });
+    },
+    async moveOpportunity(id: string, stageId: string) {
+      commit((db) => {
+        guard(db);
+        const o = db.opportunities.find((x) => x.id === id);
+        if (!o) throw new Error("Oportunidade não encontrada.");
+        if (!db.salesStages.some((s) => s.id === stageId)) throw new Error("Etapa não encontrada.");
+        moveOpportunity(db, o, stageId, db.profile.professionalName || undefined);
+      });
+    },
+    async addComment(opportunityId: string, body: string) {
+      commit((db) => {
+        guard(db);
+        const text = body.trim();
+        if (!text) throw new Error("Escreva o comentário.");
+        if (text.length > MAX_COMMENT) throw new Error(`O comentário pode ter até ${MAX_COMMENT} caracteres.`);
+        if (!db.opportunities.some((x) => x.id === opportunityId)) throw new Error("Oportunidade não encontrada.");
+        pushEvent(db, opportunityId, "comment", text, db.profile.professionalName || undefined);
+      });
+    },
+    async createStage(name: string) {
+      commit((db) => {
+        guard(db);
+        const n = name.trim();
+        if (!n || n.length > 40) throw new Error("O nome da etapa precisa ter de 1 a 40 caracteres.");
+        if (db.salesStages.some((s) => s.name.toLowerCase() === n.toLowerCase())) throw new Error("Já existe uma etapa com esse nome.");
+        db.salesStages.push({ id: uid(), name: n, position: Math.max(-1, ...db.salesStages.map((s) => s.position)) + 1 });
+      });
+    },
+    async renameStage(id: string, name: string) {
+      commit((db) => {
+        guard(db);
+        const s = db.salesStages.find((x) => x.id === id);
+        const n = name.trim();
+        if (!s) throw new Error("Etapa não encontrada.");
+        if (!n || n.length > 40) throw new Error("O nome da etapa precisa ter de 1 a 40 caracteres.");
+        if (db.salesStages.some((x) => x.id !== id && x.name.toLowerCase() === n.toLowerCase())) throw new Error("Já existe uma etapa com esse nome.");
+        s.name = n;
+      });
+    },
+    /** Etapas padrão não saem. Etapa com cartões só sai se `moveToId` disser para onde eles vão. */
+    async deleteStage(id: string, moveToId?: string) {
+      commit((db) => {
+        guard(db);
+        const s = db.salesStages.find((x) => x.id === id);
+        if (!s) throw new Error("Etapa não encontrada.");
+        if (s.kind) throw new Error("As etapas padrão não podem ser excluídas.");
+        const cards = db.opportunities.filter((o) => o.stageId === id);
+        if (cards.length) {
+          if (!moveToId || moveToId === id || !db.salesStages.some((x) => x.id === moveToId)) throw new Error("Escolha outra etapa para mover os cartões.");
+          cards.forEach((o) => moveOpportunity(db, o, moveToId, db.profile.professionalName || undefined));
+        }
+        db.salesStages = sortedStages(db).filter((x) => x.id !== id);
+      });
+    },
+    async setGoal(month: string, cents: number) {
+      commit((db) => {
+        guard(db);
+        if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Mês inválido.");
+        if (!Number.isInteger(cents) || cents < 0) throw new Error("Informe um valor válido.");
+        if (cents === 0) delete db.salesGoals[month]; else db.salesGoals[month] = cents;
+      });
+    },
+  },
+
+  prosthesis: {
+    async createLab(input: { name: string; phone?: string; notes?: string }) {
+      const lab = { id: uid(), ...normalizeLab(input) };
+      commit((db) => {
+        guard(db);
+        if (db.laboratories.some((l) => l.name.toLowerCase() === lab.name.toLowerCase())) throw new Error("Já existe um laboratório com esse nome.");
+        db.laboratories.push(lab);
+      });
+      return lab.id;
+    },
+    async updateLab(id: string, input: { name: string; phone?: string; notes?: string }) {
+      commit((db) => {
+        guard(db);
+        const l = db.laboratories.find((x) => x.id === id);
+        if (!l) throw new Error("Laboratório não encontrado.");
+        const n = normalizeLab(input);
+        if (db.laboratories.some((x) => x.id !== id && x.name.toLowerCase() === n.name.toLowerCase())) throw new Error("Já existe um laboratório com esse nome.");
+        Object.assign(l, { phone: undefined, notes: undefined }, n);
+      });
+    },
+    /** Os serviços do laboratório excluído ficam, só sem laboratório. */
+    async deleteLab(id: string) {
+      commit((db) => {
+        guard(db);
+        db.laboratories = db.laboratories.filter((x) => x.id !== id);
+        db.prosthesisJobs.forEach((j) => { if (j.laboratoryId === id) j.laboratoryId = undefined; });
+      });
+    },
+    async createJob(input: JobInput) {
+      const id = uid();
+      commit((db) => {
+        guard(db);
+        const f = normalizeJob(input);
+        if (!db.patients.some((p) => p.id === f.patientId)) throw new Error("Escolha o paciente.");
+        if (f.laboratoryId && !db.laboratories.some((l) => l.id === f.laboratoryId)) throw new Error("Laboratório não encontrado.");
+        const now = new Date().toISOString();
+        db.prosthesisJobs.push({ id, stage: "pre_lab", ...f, createdAt: now, updatedAt: now, stageChangedAt: now });
+        addProsthesisEvent(db, id, "system", "Criou este serviço", db.profile.professionalName || undefined);
+      });
+      return id;
+    },
+    async updateJob(id: string, input: JobInput) {
+      commit((db) => {
+        guard(db);
+        const j = db.prosthesisJobs.find((x) => x.id === id);
+        if (!j) throw new Error("Serviço não encontrado.");
+        const f = normalizeJob(input);
+        if (f.laboratoryId && !db.laboratories.some((l) => l.id === f.laboratoryId)) throw new Error("Laboratório não encontrado.");
+        if (f.isReturn && !j.isReturn) addProsthesisEvent(db, id, "system", `Marcado como retorno: ${f.returnReason}`, db.profile.professionalName || undefined);
+        Object.assign(j, { teeth: undefined, shade: undefined, laboratoryId: undefined, sentOn: undefined, dueOn: undefined, costCents: undefined, notes: undefined, label: undefined, returnReason: undefined }, f, { patientId: j.patientId, updatedAt: new Date().toISOString() });
+      });
+    },
+    async moveJob(id: string, stage: ProsthesisJob["stage"]) {
+      commit((db) => {
+        guard(db);
+        const j = db.prosthesisJobs.find((x) => x.id === id);
+        if (!j) throw new Error("Serviço não encontrado.");
+        moveProsthesis(db, j, stage, db.profile.professionalName || undefined);
+      });
+    },
+    async addComment(jobId: string, body: string) {
+      commit((db) => {
+        guard(db);
+        const text = body.trim();
+        if (!text) throw new Error("Escreva o comentário.");
+        if (text.length > MAX_COMMENT) throw new Error(`O comentário pode ter até ${MAX_COMMENT} caracteres.`);
+        if (!db.prosthesisJobs.some((x) => x.id === jobId)) throw new Error("Serviço não encontrado.");
+        addProsthesisEvent(db, jobId, "comment", text, db.profile.professionalName || undefined);
+      });
+    },
+    async deleteJob(id: string) {
+      commit((db) => {
+        guard(db);
+        db.prosthesisJobs = db.prosthesisJobs.filter((x) => x.id !== id);
+        db.prosthesisEvents = db.prosthesisEvents.filter((e) => e.jobId !== id);
+      });
+    },
+  },
+
+  /** Convênios: cadastro, tabela de repasse e faturamento por lote. Regras de valores em ./convenios. */
+  insurance: {
+    async saveInsurer(f: InsurerInput) {
+      const row = normalizeInsurer(f);
+      commit((db) => {
+        guard(db);
+        if (db.insurers.some((x) => x.id !== f.id && normName(x.name) === normName(row.name))) throw new Error("Já existe um convênio com esse nome.");
+        const cur = f.id ? db.insurers.find((x) => x.id === f.id) : undefined;
+        if (f.id && !cur) throw new Error("Convênio não encontrado.");
+        if (cur) Object.assign(cur, row, { suggested: f.suggested ? true : undefined }); else db.insurers.push({ ...row, id: uid() });
+      });
+    },
+    /** Importa a lista sugerida sem duplicar por nome normalizado. Devolve quantos entraram. */
+    async importPreset(list: { name: string; type: InsurerInput["type"]; ans?: string }[]) {
+      let added = 0;
+      commit((db) => {
+        guard(db);
+        const have = new Set(db.insurers.map((x) => normName(x.name)));
+        for (const p of list) {
+          if (have.has(normName(p.name))) continue;
+          have.add(normName(p.name)); added++;
+          db.insurers.push({ id: uid(), name: p.name, type: p.type, ansCode: p.ans || undefined, active: false, paymentDays: 30, closingDay: 30, defaultGlossPercent: 0, suggested: true });
+        }
+      });
+      return added;
+    },
+    async removeInsurer(id: string) {
+      commit((db) => {
+        guard(db);
+        if (db.billingBatches.some((b) => b.insurerId === id)) throw new Error("Este convênio tem lotes de faturamento. Desative em vez de excluir.");
+        db.insurers = db.insurers.filter((x) => x.id !== id);
+        db.insurerPrices = db.insurerPrices.filter((p) => p.insurerId !== id);
+        db.patients.forEach((p) => { if (p.insurerId === id) { p.insurerId = undefined; p.insuranceCard = undefined; p.insuranceValidUntil = undefined; } });
+      });
+    },
+    async savePrice(insurerId: string, procedureKey: string, procedureName: string, priceCents: number) {
+      if (!Number.isInteger(priceCents) || priceCents < 0) throw new Error("Informe um valor válido.");
+      commit((db) => {
+        guard(db);
+        if (!db.insurers.some((x) => x.id === insurerId)) throw new Error("Convênio não encontrado.");
+        const cur = db.insurerPrices.find((p) => p.insurerId === insurerId && p.procedureKey === procedureKey);
+        if (cur) cur.priceCents = priceCents; else db.insurerPrices.push({ id: uid(), insurerId, procedureKey, procedureName, priceCents });
+      });
+    },
+    async removePrice(insurerId: string, procedureKey: string) {
+      commit((db) => { guard(db); db.insurerPrices = db.insurerPrices.filter((p) => !(p.insurerId === insurerId && p.procedureKey === procedureKey)); });
+    },
+    /** Cria o lote com os atendimentos escolhidos (só os elegíveis: do convênio, concluídos e fora de outro lote). */
+    async createBatch(insurerId: string, year: number, month: number, treatmentIds: string[], professionalName?: string) {
+      const id = uid();
+      commit((db) => {
+        guard(db);
+        const ins = db.insurers.find((x) => x.id === insurerId);
+        if (!ins) throw new Error("Convênio não encontrado.");
+        const ok = new Set(treatmentIds);
+        const list = eligibleTreatments(db, insurerId, year, month).filter((t) => ok.has(t.id));
+        if (!list.length) throw new Error("Escolha ao menos um atendimento para faturar.");
+        db.billingBatches.push({ id, insurerId, year, month, status: "draft", cashedCents: 0, createdAt: new Date().toISOString() });
+        itemsFromTreatments(db, ins, list, professionalName).forEach((i) => db.billingItems.push({ ...i, id: uid(), batchId: id }));
+      });
+      return id;
+    },
+    async submitBatch(id: string, protocol: string, sentOn: string) {
+      commit((db) => {
+        guard(db);
+        const b = db.billingBatches.find((x) => x.id === id);
+        if (!b) throw new Error("Lote não encontrado.");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(sentOn)) throw new Error("Informe a data de envio.");
+        const ins = db.insurers.find((x) => x.id === b.insurerId);
+        b.protocol = protocol.trim().slice(0, 60) || undefined; b.sentOn = sentOn; b.expectedOn = expectedPayment(sentOn, ins?.paymentDays ?? 30);
+        b.status = batchStatus(b.sentOn, db.billingItems.filter((i) => i.batchId === id));
+      });
+    },
+    /** Registra pagamento e glosa de um item e recalcula o status do lote. */
+    async updateItem(id: string, f: { paidCents: number; glossCents: number; glossReason?: string }) {
+      commit((db) => {
+        guard(db);
+        const it = db.billingItems.find((x) => x.id === id);
+        if (!it) throw new Error("Item não encontrado.");
+        checkItemAmounts(it.billedCents, f.paidCents, f.glossCents, f.glossReason);
+        const b = db.billingBatches.find((x) => x.id === it.batchId);
+        if (!b?.sentOn) throw new Error("Marque o lote como enviado antes de registrar pagamento.");
+        Object.assign(it, { paidCents: f.paidCents, glossCents: f.glossCents, glossReason: f.glossCents > 0 ? f.glossReason?.trim().slice(0, 300) : undefined, status: itemStatus(it.billedCents, f.paidCents, f.glossCents) });
+        b.status = batchStatus(b.sentOn, db.billingItems.filter((i) => i.batchId === b.id));
+      });
+    },
+    async setCashed(id: string, cashedCents: number) {
+      commit((db) => { guard(db); const b = db.billingBatches.find((x) => x.id === id); if (b) b.cashedCents = cashedCents; });
+    },
+    async removeBatch(id: string) {
+      commit((db) => {
+        guard(db);
+        db.billingItems = db.billingItems.filter((i) => i.batchId !== id);
+        db.billingBatches = db.billingBatches.filter((b) => b.id !== id);
+      });
+    },
+  },
+
   expenses: {
     async create(e: Omit<Expense, "id">) { commit((db) => { guard(db); db.expenses.push({ ...e, id: uid() }); }); },
     async setPaid(id: string, paid: boolean) { commit((db) => { guard(db); const e = db.expenses.find((x) => x.id === id); if (e) e.paid = paid; }); },
     async remove(id: string) { commit((db) => { guard(db); db.expenses = db.expenses.filter((x) => x.id !== id); }); },
+  },
+
+  cash: {
+    async addMovement(m: Omit<CashMovement, "id" | "reversedAt" | "reversalReason">) {
+      const check = checkMovement(m); if (check) throw new Error(check);
+      commit((db) => { guard(db); db.cashMovements.push({ ...m, description: m.description?.trim() || undefined, id: uid() }); });
+    },
+    /** Estorno com motivo; nunca apaga. Recebimento de paciente estornado deixa de contar no caixa e na comissão. */
+    async reverse(source: "installment" | "treatment" | "movement", id: string, reason: string) {
+      const r = reason.trim(); if (r.length < 3) throw new Error("Diga o motivo do estorno.");
+      const at = new Date().toISOString();
+      commit((db) => {
+        guard(db);
+        if (source === "movement") {
+          const m = db.cashMovements.find((x) => x.id === id);
+          if (!m || m.reversedAt) throw new Error("Lançamento não encontrado ou já estornado.");
+          m.reversedAt = at; m.reversalReason = r;
+          return;
+        }
+        let meta = db.cashReceipts.find((x) => x.sourceType === source && x.sourceId === id);
+        if (meta?.reversedAt) throw new Error("Recebimento já estornado.");
+        if (!meta) { meta = { id: uid(), sourceType: source, sourceId: id }; db.cashReceipts.push(meta); }
+        meta.reversedAt = at; meta.reversalReason = r;
+      });
+    },
+    async setReceipt(sourceType: "installment" | "treatment", sourceId: string, patch: { professionalId?: string; method?: CashMethod }) {
+      commit((db) => {
+        guard(db);
+        let meta = db.cashReceipts.find((x) => x.sourceType === sourceType && x.sourceId === sourceId);
+        if (meta?.reversedAt) throw new Error("Recebimento estornado não pode ser alterado.");
+        if (!meta) { meta = { id: uid(), sourceType, sourceId }; db.cashReceipts.push(meta); }
+        if ("professionalId" in patch) meta.professionalId = patch.professionalId || undefined;
+        if ("method" in patch) meta.method = patch.method;
+      });
+    },
+    async openDay(day: string, openingCents: number) {
+      if (!Number.isInteger(openingCents) || openingCents < 0) throw new Error("Valor de abertura inválido.");
+      commit((db) => {
+        guard(db);
+        const d = db.cashDays.find((x) => x.day === day);
+        if (d?.closedAt) throw new Error("Caixa do dia já fechado.");
+        if (d) d.openingCents = openingCents; else db.cashDays.push({ id: uid(), day, openingCents });
+      });
+    },
+    async closeDay(day: string, countedCents: number, notes?: string) {
+      if (!Number.isInteger(countedCents) || countedCents < 0) throw new Error("Valor contado inválido.");
+      commit((db) => {
+        guard(db);
+        let d = db.cashDays.find((x) => x.day === day);
+        if (d?.closedAt) throw new Error("Caixa do dia já fechado.");
+        if (!d) { d = { id: uid(), day, openingCents: 0 }; db.cashDays.push(d); }
+        d.countedCents = countedCents; d.closedAt = new Date().toISOString(); d.notes = notes?.trim() || undefined;
+      });
+    },
+    async saveRule(r: Omit<CommissionRule, "id">) {
+      const check = checkRule(r); if (check) throw new Error(check);
+      commit((db) => {
+        guard(db);
+        if (!db.professionals.some((p) => p.id === r.professionalId)) throw new Error("Dentista não encontrado.");
+        const key = r.procedureKey.trim();
+        const ex = db.commissionRules.find((x) => x.professionalId === r.professionalId && x.procedureKey.toLowerCase() === key.toLowerCase());
+        if (ex) { ex.percent = r.percent; ex.labCostPercent = r.labCostPercent; } else db.commissionRules.push({ ...r, procedureKey: key, id: uid() });
+      });
+    },
+    async removeRule(id: string) { commit((db) => { guard(db); db.commissionRules = db.commissionRules.filter((x) => x.id !== id); }); },
+    /** Paga a comissão: cria o pagamento e a SAÍDA no caixa ligada a ele. Cada recebimento só entra em um pagamento. */
+    async payCommission(p: { professionalId: string; periodFrom: string; periodTo: string; paidOn: string; method: CashMethod; items: CommissionPayoutItem[] }) {
+      const total = p.items.reduce((s, i) => s + i.amountCents, 0);
+      if (!p.items.length || total <= 0) throw new Error("Nada a pagar.");
+      commit((db) => {
+        guard(db);
+        const pro = db.professionals.find((x) => x.id === p.professionalId);
+        if (!pro) throw new Error("Dentista não encontrado.");
+        const done = new Set(db.commissionPayouts.flatMap((x) => x.items.map((i) => `${i.sourceType}:${i.sourceId}`)));
+        if (p.items.some((i) => done.has(`${i.sourceType}:${i.sourceId}`))) throw new Error("Algum recebimento já teve a comissão paga. Atualize a tela.");
+        const payoutId = uid();
+        db.commissionPayouts.push({ id: payoutId, professionalId: pro.id, professionalName: pro.name, periodFrom: p.periodFrom, periodTo: p.periodTo, amountCents: total, paidOn: p.paidOn, items: p.items });
+        db.cashMovements.push({ id: uid(), kind: "out", date: p.paidOn, amountCents: total, method: p.method, category: "Comissão", description: `Comissão de ${pro.name} (${p.periodFrom} a ${p.periodTo})`, professionalId: pro.id, payoutId });
+      });
+    },
   },
 
   catalog: {
@@ -665,8 +1101,6 @@ const localApi = {
     exportJson(): string { return JSON.stringify(load(), null, 2); },
   },
 };
-
-function toMin(t: string) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
 
 export const regionLabel = (r: PlanItem["region"]) => (r === "upper" ? "arcada superior" : r === "lower" ? "arcada inferior" : "ambas as arcadas");
 
@@ -728,9 +1162,15 @@ export const api: typeof localApi = remoteApi ? {
   installments: remoteApi.installments,
   treatments: remoteApi.treatments,
   appointments: remoteApi.appointments,
+  professionals: remoteApi.professionals,
+  timeBlocks: remoteApi.timeBlocks,
   waitlist: remoteApi.waitlist,
   recall: remoteApi.recall,
   expenses: remoteApi.expenses,
+  cash: remoteApi.cash,
+  insurance: remoteApi.insurance,
+  sales: remoteApi.sales,
+  prosthesis: remoteApi.prosthesis,
   clinicalNotes: remoteApi.clinicalNotes,
   prescriptions: remoteApi.prescriptions,
   medications: remoteApi.medications,

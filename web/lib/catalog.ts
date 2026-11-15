@@ -1,3 +1,4 @@
+import { EXTRA_PROCEDURES } from "./catalog-presets";
 import type { AnamnesisAnswer, AnamnesisChoice, Procedure, Specialty, ToothCondition, Phase } from "./types";
 
 // Catálogo base montado a partir da nomenclatura odontológica de uso comum.
@@ -80,8 +81,13 @@ const raw: Record<string, { name: string; groups: Record<string, string[]> }> = 
     },
   },
   harmonizacao: {
-    name: "Harmonização orofacial",
-    groups: { "Procedimentos": ["Preenchimento labial", "Toxina botulínica estética", "Bioestimulador"] },
+    name: "Harmonização orofacial (HOF)",
+    // Os 3 primeiros mantêm a posição (os ids derivam dela); o resto é acrescentado ao fim.
+    groups: { "Procedimentos": [
+      "Preenchimento labial", "Toxina botulínica estética", "Bioestimulador de colágeno",
+      "Preenchimento malar", "Preenchimento mandibular", "Preenchimento de mento", "Preenchimento de olheiras", "Preenchimento de têmporas",
+      "Fios de PDO", "Peeling", "Skinbooster", "Lipo de papada enzimática", "Rinomodelação",
+    ] },
   },
   odontogeriatria: {
     name: "Odontogeriatria",
@@ -89,12 +95,24 @@ const raw: Record<string, { name: string; groups: Record<string, string[]> }> = 
   },
 };
 
+// Presets extras entram no fim de cada grupo (ids antigos não mudam); nome repetido é ignorado.
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const seen = new Set(Object.values(raw).flatMap((s) => Object.values(s.groups).flat().map(norm)));
+for (const [sid, groups] of Object.entries(EXTRA_PROCEDURES)) {
+  for (const [group, names] of Object.entries(groups)) {
+    const list = (raw[sid].groups[group] ??= []);
+    for (const n of names) if (!seen.has(norm(n))) { seen.add(norm(n)); list.push(n); }
+  }
+}
+
 export const SPECIALTIES: Specialty[] = Object.entries(raw).map(([id, s]) => ({ id, name: s.name }));
 
 export const DEFAULT_ACTIVE_SPECIALTIES = [
   "geral", "dentistica", "endo", "perio", "cirurgia", "protese",
-  "implante", "orto", "odontoped", "radio", "dtm", "estomato",
+  "implante", "orto", "odontoped", "radio", "dtm", "estomato", "harmonizacao",
 ];
+
+export const HOF_SPECIALTY_ID = "harmonizacao";
 
 export const BASE_PROCEDURES: Procedure[] = Object.entries(raw).flatMap(([sid, s]) =>
   Object.entries(s.groups).flatMap(([group, names]) =>
@@ -174,3 +192,5 @@ export function choiceOf(a: AnamnesisAnswer): AnamnesisChoice | undefined {
 
 /** Há pergunta de sim/não sem resposta? Rascunho aceita; concluir não. */
 export const hasUnanswered = (answers: AnamnesisAnswer[]) => answers.some((a) => a.kind === "yesno" && !choiceOf(a));
+
+export { PRESET_MEDICATIONS, MEDICATIONS_DISCLAIMER } from "./catalog-presets";

@@ -43,6 +43,13 @@
   --danger-soft: #fce8e6;
   --so-shadow-sm: 0 1px 2px rgba(31, 27, 46, 0.08);
   --so-shadow-md: 0 8px 24px rgba(31, 27, 46, 0.12);
+  /* Cores de etapa dos kanbans (vendas e prótese) */
+  --stage-blue: #1a6fd1;
+  --stage-teal: #0e9f8e;
+  --stage-amber: #8a5a00;
+  --stage-violet: #6d4fd8;
+  --stage-gray: #6b6683;
+  --stage-blue-soft: #e3effc;
 }
 
 /* Tema escuro do sistema, quando o usuário não escolheu um tema no app */
@@ -68,6 +75,12 @@
     --danger-soft: #4a1f2a;
     --so-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --so-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --stage-blue: #7db4f5;
+    --stage-teal: #5eead4;
+    --stage-amber: #f5c451;
+    --stage-violet: #bba8f5;
+    --stage-gray: #b9b3d0;
+    --stage-blue-soft: #1c2f4a;
   }
 }
 
@@ -93,6 +106,12 @@
   --danger-soft: #4a1f2a;
   --so-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --so-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --stage-blue: #7db4f5;
+  --stage-teal: #5eead4;
+  --stage-amber: #f5c451;
+  --stage-violet: #bba8f5;
+  --stage-gray: #b9b3d0;
+  --stage-blue-soft: #1c2f4a;
 }
 
 @theme inline {
@@ -118,6 +137,12 @@
   --color-brand-violet: var(--brand-violet);
   --color-brand-lavender: var(--brand-lavender);
   --color-brand-white: var(--brand-white);
+  --color-stage-blue: var(--stage-blue);
+  --color-stage-teal: var(--stage-teal);
+  --color-stage-amber: var(--stage-amber);
+  --color-stage-violet: var(--stage-violet);
+  --color-stage-gray: var(--stage-gray);
+  --color-stage-blue-soft: var(--stage-blue-soft);
 
   --font-sans: var(--font-jakarta), "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 

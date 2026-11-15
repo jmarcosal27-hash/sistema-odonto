@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Patient } from "@/lib/types";
-import { api } from "@/lib/store";
+import { api, useDb } from "@/lib/store";
 import { isValidCpf, maskCep, maskCpf, maskPhone } from "@/lib/format";
 import { REFERRAL_SOURCES } from "@/lib/catalog";
 import { Modal, Button, Field, Input, Select, Textarea, Segmented, ErrorNote } from "./ui";
@@ -20,6 +20,7 @@ export function PatientForm({ open, onClose, initial, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const run = useAction();
+  const insurers = (useDb()?.insurers ?? []).filter((i) => i.active || i.id === f.insurerId);
   const editing = initial && "id" in initial;
   const set = (patch: Partial<Patient>) => setF((x) => ({ ...x, ...patch }));
   const setAddr = (patch: Partial<NonNullable<Patient["address"]>>) => setF((x) => ({ ...x, address: { ...x.address, ...patch } }));
@@ -110,6 +111,13 @@ export function PatientForm({ open, onClose, initial, onSaved }: {
         <fieldset className="grid gap-3 sm:grid-cols-2">
           <legend className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-2">Outros</legend>
           <Field label="Como conheceu você">{(id) => <Select id={id} value={f.referralSource ?? ""} onChange={(e) => set({ referralSource: e.target.value || undefined })}><option value="">—</option>{REFERRAL_SOURCES.map((r) => <option key={r}>{r}</option>)}</Select>}</Field>
+          {insurers.length > 0 && (
+            <>
+              <Field label="Convênio" hint="Vazio = paciente particular.">{(id, d) => <Select id={id} aria-describedby={d} value={f.insurerId ?? ""} onChange={(e) => set(e.target.value ? { insurerId: e.target.value } : { insurerId: undefined, insuranceCard: undefined, insuranceValidUntil: undefined })}><option value="">Particular</option>{insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</Select>}</Field>
+              {f.insurerId && <Field label="Número da carteirinha">{(id) => <Input id={id} value={f.insuranceCard ?? ""} maxLength={40} onChange={(e) => set({ insuranceCard: e.target.value || undefined })} />}</Field>}
+              {f.insurerId && <Field label="Validade da carteirinha">{(id) => <Input id={id} type="date" value={f.insuranceValidUntil ?? ""} onChange={(e) => set({ insuranceValidUntil: e.target.value || undefined })} />}</Field>}
+            </>
+          )}
           <Field label="Observações" className="sm:col-span-2">{(id) => <Textarea id={id} value={f.notes ?? ""} onChange={(e) => set({ notes: e.target.value || undefined })} placeholder="Alergias, preferências de horário…" />}</Field>
         </fieldset>
         <button type="submit" hidden />

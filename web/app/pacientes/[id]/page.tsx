@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import { STATUS_LABEL } from "@/lib/agenda";
 import Link from "next/link";
 import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plus, Archive, Hourglass } from "lucide-react";
 import { useDb, api, patientStatus, PAYMENT_METHODS } from "@/lib/store";
@@ -87,7 +88,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                       <span className="text-lg font-bold">{ap.date.slice(8)}</span>
                     </span>
                     <span className="text-sm"><span className="font-semibold block">{dateShort(ap.date)} {ap.time ? `às ${ap.time}` : "· horário a definir"}</span>
-                      <span className="text-ink-muted">{{ consultation: "Consulta", return: "Retorno", personal: "Pessoal" }[ap.kind]} · {ap.durationMinutes} min · {{ to_confirm: "a confirmar", confirmed: "confirmado", done: "concluído", cancelled: "cancelado", no_show: "faltou" }[ap.status]}</span></span>
+                      <span className="text-ink-muted">{{ consultation: "Consulta", return: "Retorno", personal: "Pessoal" }[ap.kind]} · {ap.durationMinutes} min · {STATUS_LABEL[ap.status].toLowerCase()}</span></span>
                   </li>
                 ))}
               </ul>

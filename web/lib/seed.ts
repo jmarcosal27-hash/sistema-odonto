@@ -1,5 +1,6 @@
 import type { Db } from "./types";
 import { addDays, todayISO } from "./format";
+import { backfillSales } from "./sales";
 
 // Dados de exemplo inventados (nomes e números fictícios) para as telas terem
 // algo real a mostrar. Ajustes > Seus dados permite começar do zero.
@@ -94,5 +95,6 @@ export function buildSeed(db: Db): Db {
   db.prices = { "geral-avaliação-0": 15000, "geral-prevenção-0": 25000 };
   db.recallMonths = { "geral-prevenção-0": 6, "dentistica-estética-0": 12 };
   db.profile = { ...db.profile, professionalName: "Dra. Exemplo", onboardingDone: false };
+  backfillSales(db); // uma oportunidade para cada orçamento de exemplo
   return db;
 }

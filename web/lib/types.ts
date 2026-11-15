@@ -25,6 +25,10 @@ export interface Patient {
   referralSource?: string;
   notes?: string;
   recallEnabled: boolean;
+  /** Convênio do paciente (vazio = particular), número da carteirinha e validade. */
+  insurerId?: string;
+  insuranceCard?: string;
+  insuranceValidUntil?: string; // yyyy-mm-dd
   archived?: boolean;
   lastVisitAt?: string; // ISO
   createdAt: string;
@@ -51,8 +55,27 @@ export interface Procedure {
 
 export type Region = "upper" | "lower" | "both";
 
+/** Anotação desenhada no faceograma. Coordenadas no viewBox 0 0 300 400 (ponto = 1 par, seta e linha = 2). */
+export interface HofShape {
+  id: string;
+  kind: "point" | "arrow" | "line";
+  points: [number, number][];
+  color?: string; // #rrggbb; sem cor usa o padrão do faceograma
+}
+
+export type HofUnit = "U" | "mL" | "seringa";
+export type HofFace = "female" | "male";
+
 export interface PlanItem {
   id: string;
+  /** Item de harmonização orofacial: usa os campos hof* e product*. Fichas antigas não têm nenhum deles. */
+  hof?: boolean;
+  hofFace?: HofFace;
+  hofRegions?: string[]; // ids de HOF_REGIONS
+  hofMarks?: HofShape[];
+  productAmount?: number;
+  productUnit?: HofUnit;
+  dentistName?: string;
   tooth?: number; // FDI
   region?: Region; // item de arcada, sem dente específico
   conditions: ToothCondition[];
@@ -148,7 +171,29 @@ export interface WaitlistEntry {
 }
 
 export type AppointmentKind = "consultation" | "return" | "personal";
-export type AppointmentStatus = "to_confirm" | "confirmed" | "done" | "cancelled" | "no_show";
+/** `waiting` = paciente na recepção; `in_service` = na cadeira. */
+export type AppointmentStatus = "to_confirm" | "confirmed" | "waiting" | "in_service" | "done" | "cancelled" | "no_show";
+
+/** Dentista ou cadeira da clínica: uma coluna na agenda do dia. */
+export interface Professional {
+  id: string;
+  name: string;
+  color: string; // #rrggbb
+  active: boolean;
+}
+
+/** Procedimento previsto no agendamento. Duração e valor entram na soma do agendamento. */
+export interface AppointmentProcedure { name: string; priceCents: number; durationMinutes: number; procedureId?: string }
+
+/** Horário bloqueado (almoço, folga, manutenção). Um bloqueio por dia; sem profissional = clínica toda. */
+export interface TimeBlock {
+  id: string;
+  professionalId?: string;
+  date: string; // yyyy-mm-dd
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  reason: string;
+}
 
 export interface Appointment {
   id: string;
@@ -160,6 +205,13 @@ export interface Appointment {
   durationMinutes: number;
   status: AppointmentStatus;
   notes?: string;
+  /** Agendamentos antigos não têm profissional: aparecem na coluna "Sem profissional". */
+  professionalId?: string;
+  /** Vários procedimentos: a duração do agendamento é a soma deles. */
+  procedures?: AppointmentProcedure[];
+  label?: string;
+  /** Encaixe: foi marcado por cima de outro compromisso ou bloqueio de propósito. */
+  forced?: boolean;
 }
 
 export interface MessageTemplate { kind: "confirmation" | "recall"; body: string }
@@ -311,8 +363,139 @@ export interface PatientFile {
   dataUrl?: string;
 }
 
+/** Etapa do funil de vendas. As quatro padrão têm `kind` e não podem ser excluídas nem mudar de tipo; as criadas pela clínica não têm. */
+export type SalesStageKind = "open" | "in_progress" | "won" | "lost";
+
+export interface SalesStage {
+  id: string;
+  name: string;
+  position: number;
+  kind?: SalesStageKind;
+}
+
+/** Oportunidade do funil. Orçamentos criam a sua automaticamente (`budgetId`); as demais são manuais. */
+export interface Opportunity {
+  id: string;
+  patientId: string;
+  stageId: string;
+  budgetId?: string;
+  title: string;
+  valueCents: number;
+  responsible?: string;
+  label?: string;
+  createdAt: string;
+  updatedAt: string;
+  stageChangedAt: string;
+}
+
+/** Comentário do usuário (até 255 caracteres) ou linha do histórico (mudança de etapa, criação). */
+export interface OpportunityEvent {
+  id: string;
+  opportunityId: string;
+  kind: "comment" | "stage" | "system";
+  body: string;
+  authorName?: string;
+  createdAt: string;
+}
+
+export const MAX_COMMENT = 255;
+
+/** Controle de prótese: trabalho enviado a um laboratório. A etapa é fixa (o fluxo é sempre o mesmo). */
+export type ProsthesisStage = "pre_lab" | "sent" | "lab" | "scheduled" | "done";
+export type ProsthesisKind = "crown" | "total" | "ppr" | "veneer" | "protocol" | "splint" | "other";
+
+export interface Laboratory {
+  id: string;
+  name: string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface ProsthesisJob {
+  id: string;
+  patientId: string;
+  stage: ProsthesisStage;
+  /** Profissional responsável (texto livre ou nome de um membro). */
+  professional: string;
+  description: string;
+  kind: ProsthesisKind;
+  /** Dente(s) ou região, texto livre curto. */
+  teeth?: string;
+  /** Cor ou escala. */
+  shade?: string;
+  laboratoryId?: string;
+  sentOn?: string; // yyyy-mm-dd
+  dueOn?: string; // previsão de retorno, yyyy-mm-dd
+  costCents?: number;
+  notes?: string;
+  label?: string;
+  /** Retrabalho: o serviço voltou para refazer ou ajustar, sempre com motivo. */
+  isReturn: boolean;
+  returnReason?: string;
+  createdAt: string;
+  updatedAt: string;
+  stageChangedAt: string;
+}
+
+export interface ProsthesisEvent {
+  id: string;
+  jobId: string;
+  kind: "comment" | "stage" | "system";
+  body: string;
+  authorName?: string;
+  createdAt: string;
+}
+
+/** Forma de pagamento no caixa: as de PaymentMethod mais convênio. */
+export type CashMethod = PaymentMethod | "insurance";
+/** Lançamento manual do caixa (entrada ou saída) ou saída de comissão paga. Nunca é apagado: só estornado. */
+export interface CashMovement {
+  id: string;
+  kind: "in" | "out";
+  date: string; // yyyy-mm-dd
+  amountCents: number;
+  method: CashMethod;
+  category: string;
+  description?: string;
+  patientId?: string;
+  professionalId?: string;
+  payoutId?: string;
+  reversedAt?: string;
+  reversalReason?: string;
+}
+/** Dados extras de um recebimento que já existe (parcela paga ou atendimento recebido): dentista, forma e estorno. */
+export interface CashReceiptMeta {
+  id: string;
+  sourceType: "installment" | "treatment";
+  sourceId: string;
+  professionalId?: string;
+  method?: CashMethod;
+  reversedAt?: string;
+  reversalReason?: string;
+}
+/** Abertura e fechamento do caixa de um dia. Fechado = fixo. */
+export interface CashDay { id: string; day: string; openingCents: number; countedCents?: number; closedAt?: string; notes?: string }
+/** procedureKey "" = regra padrão do dentista; senão, override para aquele procedimento. Percentuais 0 a 100. */
+export interface CommissionRule { id: string; professionalId: string; procedureKey: string; percent: number; labCostPercent: number }
+export interface CommissionPayoutItem { sourceType: "installment" | "treatment"; sourceId: string; amountCents: number }
+export interface CommissionPayout {
+  id: string;
+  professionalId?: string;
+  professionalName: string;
+  periodFrom: string;
+  periodTo: string;
+  amountCents: number;
+  paidOn: string;
+  items: CommissionPayoutItem[];
+}
+
 export interface Db {
   version: number;
+  cashMovements: CashMovement[];
+  cashReceipts: CashReceiptMeta[];
+  cashDays: CashDay[];
+  commissionRules: CommissionRule[];
+  commissionPayouts: CommissionPayout[];
   patients: Patient[];
   events: PatientEvent[];
   customProcedures: Procedure[];
@@ -338,4 +521,69 @@ export interface Db {
   certificates: Certificate[];
   customDocuments: CustomDocument[];
   patientFiles: PatientFile[];
+  salesStages: SalesStage[];
+  opportunities: Opportunity[];
+  opportunityEvents: OpportunityEvent[];
+  /** Meta de vendas por mês ("yyyy-mm"), em centavos. */
+  salesGoals: Record<string, number>;
+  laboratories: Laboratory[];
+  prosthesisJobs: ProsthesisJob[];
+  prosthesisEvents: ProsthesisEvent[];
+  professionals: Professional[];
+  timeBlocks: TimeBlock[];
+  insurers: Insurer[];
+  insurerPrices: InsurerPrice[];
+  billingBatches: BillingBatch[];
+  billingItems: BillingItem[];
+}
+
+/** Convênios: cadastro da clínica, tabela de repasse e faturamento por lote. Valores em centavos. */
+export interface Insurer {
+  id: string;
+  name: string;
+  type: "odonto" | "saude_odonto" | "autogestao";
+  ansCode?: string;
+  active: boolean;
+  /** Dias entre o envio do lote e o pagamento. */
+  paymentDays: number;
+  /** Dia do mês em que o lote fecha (1 a 31). */
+  closingDay: number;
+  /** Glosa média esperada, em % (0 a 100). */
+  defaultGlossPercent: number;
+  contact?: string;
+  notes?: string;
+  /** Veio da lista sugerida e ainda não foi revisado. */
+  suggested?: boolean;
+}
+/** Repasse por procedimento. procedureKey = id do procedimento do catálogo ou o nome normalizado. */
+export interface InsurerPrice { id: string; insurerId: string; procedureKey: string; procedureName: string; priceCents: number }
+export type BillingBatchStatus = "draft" | "sent" | "paid" | "partial" | "glossed";
+export interface BillingBatch {
+  id: string;
+  insurerId: string;
+  year: number;
+  month: number; // 1..12
+  status: BillingBatchStatus;
+  protocol?: string;
+  sentOn?: string;
+  expectedOn?: string;
+  /** Quanto do valor pago já virou entrada no caixa. */
+  cashedCents: number;
+  createdAt: string;
+}
+export type BillingItemStatus = "pending" | "paid" | "partial" | "glossed";
+export interface BillingItem {
+  id: string;
+  batchId: string;
+  treatmentId?: string;
+  patientId: string;
+  cardNumber?: string;
+  procedureName: string;
+  professionalName?: string;
+  performedAt: string;
+  billedCents: number;
+  paidCents: number;
+  glossCents: number;
+  glossReason?: string;
+  status: BillingItemStatus;
 }

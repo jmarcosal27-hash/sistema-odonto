@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutGrid, Stethoscope, FileText, ClipboardCheck, Users, CalendarDays, BarChart3, Tags,
-  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp,
+  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp, Handshake, FlaskConical, Wallet, IdCard,
 } from "lucide-react";
 import { cx } from "./ui";
 import { ToastProvider } from "./toast";
@@ -16,26 +16,26 @@ import { REMOTE, supabaseBrowser } from "@/lib/supabase/client";
 import { CreateClinic } from "./create-clinic";
 import { Logo, LogoIcon } from "./logo";
 
-const NAV = [
-  [{ href: "/", label: "Início", icon: LayoutGrid }, { href: "/indicadores", label: "Indicadores", icon: TrendingUp }],
-  [
-    { href: "/plano", label: "Plano de tratamento", icon: Stethoscope },
-    { href: "/orcamentos", label: "Orçamentos", icon: FileText },
-    { href: "/atendimentos", label: "Atendimentos", icon: ClipboardCheck },
-  ],
-  [
-    { href: "/pacientes", label: "Pacientes", icon: Users },
-    { href: "/agenda", label: "Agenda", icon: CalendarDays },
-  ],
-  [
-    { href: "/financeiro", label: "Financeiro", icon: BarChart3 },
-    { href: "/tabela", label: "Tabela de preços", icon: Tags },
-  ],
+// Ordem do Simples Dental: Inteligência, Pacientes, Agenda, Vendas, Financeiro, Prótese. `sub` = item recuado sob o anterior.
+type NavItem = { href: string; label: string; icon: typeof LayoutGrid; sub?: boolean };
+const NAV: NavItem[] = [
+  { href: "/", label: "Início", icon: LayoutGrid },
+  { href: "/indicadores", label: "Inteligência", icon: TrendingUp },
+  { href: "/pacientes", label: "Pacientes", icon: Users },
+  { href: "/plano", label: "Plano de tratamento", icon: Stethoscope, sub: true },
+  { href: "/orcamentos", label: "Orçamentos", icon: FileText, sub: true },
+  { href: "/atendimentos", label: "Atendimentos", icon: ClipboardCheck, sub: true },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/vendas", label: "Vendas", icon: Handshake },
+  { href: "/financeiro", label: "Financeiro", icon: BarChart3 },
+  { href: "/caixa", label: "Caixa", icon: Wallet },
+  { href: "/convenios", label: "Convênios", icon: IdCard },
+  { href: "/protese", label: "Controle de prótese", icon: FlaskConical },
 ];
 
 const TITLES: [string, string][] = [
-  ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/atendimentos", "Atendimentos"],
-  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"],
+  ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Controle de prótese"], ["/atendimentos", "Atendimentos"],
+  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"], ["/caixa", "Caixa e comissões"], ["/convenios", "Convênios"],
   ["/tabela", "Tabela de preços"], ["/ajustes/conta", "Sua assinatura"], ["/ajustes", "Ajustes"],
 ];
 
@@ -70,27 +70,16 @@ export function Shell({ children }: { children: ReactNode }) {
     <nav aria-label="Principal" className="flex flex-col h-full">
       <div className="px-2 py-3"><Logo width={144} /></div>
       <div className="flex-1 overflow-y-auto px-2">
-        {NAV.map((group, gi) => (
-          <ul key={gi} className={cx("space-y-1 py-2", gi > 0 && "border-t border-border")}>
-            {group.map(({ href, label, icon: Icon }) => {
-              const active = isActive(path, href);
-              return (
-                <li key={href}>
-                  <Link href={href} aria-current={active ? "page" : undefined}
-                    className={cx("flex items-center gap-3 rounded-md px-3 h-11 text-sm transition-colors duration-150",
-                      active ? "bg-surface-200 font-semibold shadow-sm" : "hover:bg-surface-200/60")}>
-                    <Icon aria-hidden className="size-[18px]" />{label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        ))}
+        <ul className="space-y-0.5 py-2">
+          {NAV.map((it) => <li key={it.href}><NavLink it={it} path={path} /></li>)}
+        </ul>
       </div>
-      <div className="px-2 py-3 border-t border-border">
-        <Link href="/ajustes" className="flex items-center gap-3 rounded-md px-3 h-11 text-sm hover:bg-surface-200/60">
-          <Settings aria-hidden className="size-[18px]" />Ajustes
-        </Link>
+      <div className="px-2 py-3 border-t border-border space-y-0.5">
+        <NavLink it={{ href: "/ajustes", label: "Ajustes", icon: Settings }} path={path} />
+        <NavLink it={{ href: "/tabela", label: "Tabela de preços", icon: Tags, sub: true }} path={path} />
+        <button type="button" onClick={() => { setDrawer(false); setHelp(true); }} className="flex w-full items-center gap-3 rounded-md px-3 h-11 text-sm hover:bg-surface-200/60">
+          <CircleHelp aria-hidden className="size-[18px]" />Como funciona
+        </button>
         <button type="button" onClick={() => logout()} className="flex w-full items-center gap-3 rounded-md px-3 h-11 text-sm text-ink-muted hover:bg-surface-200/60">
           <LogOut aria-hidden className="size-[18px]" />Sair
         </button>
@@ -146,6 +135,18 @@ export function Shell({ children }: { children: ReactNode }) {
       <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>
+  );
+}
+
+function NavLink({ it, path }: { it: NavItem; path: string }) {
+  const active = isActive(path, it.href);
+  const Icon = it.icon;
+  return (
+    <Link href={it.href} aria-current={active ? "page" : undefined}
+      className={cx("flex items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150", it.sub ? "ml-6 h-10" : "h-11",
+        active ? "bg-stage-blue-soft font-semibold text-stage-blue" : "hover:bg-surface-200/60")}>
+      <Icon aria-hidden className="size-[18px]" />{it.label}
+    </Link>
   );
 }
 
