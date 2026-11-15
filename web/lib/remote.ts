@@ -14,10 +14,13 @@ import type {
   AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Certificate, ClinicalNote, CustomDocument, Medication, PatientFile, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Budget, Db, Expense, Installment, MessageTemplate, Patient, PatientEvent, PaymentMethod,
   PlanItem, Procedure, Profile, RecallState, RecallStatus, Treatment, TreatmentPlan, WaitlistEntry,
+  Opportunity, OpportunityEvent, SalesStage, Laboratory, ProsthesisEvent, ProsthesisJob,
 } from "./types";
+import { MAX_COMMENT } from "./types";
 import { supabaseBrowser } from "./supabase/client";
 import { todayISO } from "./format";
 import { hasUnanswered } from "./catalog";
+import { normalizeJob, normalizeLab, type JobInput } from "./prosthesis";
 import { checkHofItem } from "./hof";
 import { EXT, MAX_FILE_BYTES, checkFile } from "./files";
 
@@ -68,7 +71,10 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const c = m.clinic_id as string;
   const by = (t: string, order?: [string, boolean][]) => loadAll(sb, t, c, order);
 
-  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files] =
+  // Funil de vendas: se a migration de vendas ainda não foi aplicada, o resto do app segue funcionando e /vendas avisa.
+  const optional = (t: string, order?: [string, boolean][]) => by(t, order).catch(() => [] as Row[]);
+
+  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files, stages, opps, oppEvents, goals, labs, pjobs, pevents] =
     await Promise.all([
       q(sb.from("clinics").select("*").eq("id", c).single()), by("access_grants", [["expires_at", false], ["id", true]]),
       by("patients"), by("patient_events"), by("custom_procedures"), by("procedure_settings", [["procedure_id", true]]),
@@ -81,6 +87,10 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       by("prescription_items", [["position", true], ["id", true]]), by("prescription_templates", [["name", true], ["id", true]]),
       by("certificates", [["issued_on", false], ["id", true]]),
       by("custom_documents", [["issued_on", false], ["id", true]]), by("patient_files", [["created_at", false], ["id", true]]),
+      optional("sales_stages", [["position", true], ["id", true]]), optional("opportunities", [["created_at", false], ["id", true]]),
+      optional("opportunity_events", [["created_at", true], ["id", true]]), optional("sales_goals", [["month", true]]),
+      optional("laboratories", [["name", true], ["id", true]]), optional("prosthesis_jobs", [["created_at", false], ["id", true]]),
+      optional("prosthesis_events", [["created_at", true], ["id", true]]),
     ]);
   const cl = clinic as Row;
   const g = (grants as Row[])[0];
@@ -112,7 +122,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const snap = (r: Row) => ({ professionalName: s(r.professional_name), professionalCro: s(r.professional_cro), professionalCroUf: s(r.professional_cro_uf) });
 
   const db: Db = {
-    version: 7,
+    version: 9,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -193,6 +203,27 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       id: r.id as string, patientId: r.patient_id as string, name: r.name as string, mime: r.mime as PatientFile["mime"],
       sizeBytes: r.size_bytes as number, createdAt: r.created_at as string,
     })),
+    salesStages: (stages as Row[]).map((r): SalesStage => ({ id: r.id as string, name: r.name as string, position: r.position as number, kind: (r.kind as SalesStage["kind"]) ?? undefined })),
+    opportunities: (opps as Row[]).map((r): Opportunity => ({
+      id: r.id as string, patientId: r.patient_id as string, stageId: r.stage_id as string, budgetId: s(r.budget_id), title: r.title as string,
+      valueCents: r.value_cents as number, responsible: s(r.responsible_name), label: s(r.label),
+      createdAt: r.created_at as string, updatedAt: r.updated_at as string, stageChangedAt: r.stage_changed_at as string,
+    })),
+    opportunityEvents: (oppEvents as Row[]).map((r): OpportunityEvent => ({
+      id: r.id as string, opportunityId: r.opportunity_id as string, kind: r.kind as OpportunityEvent["kind"], body: r.body as string,
+      authorName: s(r.author_name), createdAt: r.created_at as string,
+    })),
+    salesGoals: Object.fromEntries((goals as Row[]).map((r) => [String(r.month).slice(0, 7), r.goal_cents as number])),
+    laboratories: (labs as Row[]).map((r): Laboratory => ({ id: r.id as string, name: r.name as string, phone: s(r.phone), notes: s(r.notes) })),
+    prosthesisJobs: (pjobs as Row[]).map((r): ProsthesisJob => ({
+      id: r.id as string, patientId: r.patient_id as string, stage: r.stage as ProsthesisJob["stage"], professional: r.professional_name as string,
+      description: r.description as string, kind: r.kind as ProsthesisJob["kind"], teeth: s(r.teeth), shade: s(r.shade), laboratoryId: s(r.laboratory_id),
+      sentOn: s(r.sent_on), dueOn: s(r.due_on), costCents: r.cost_cents === null ? undefined : Number(r.cost_cents), notes: s(r.notes), label: s(r.label),
+      isReturn: r.is_return as boolean, returnReason: s(r.return_reason), createdAt: r.created_at as string, updatedAt: r.updated_at as string, stageChangedAt: r.stage_changed_at as string,
+    })),
+    prosthesisEvents: (pevents as Row[]).map((r): ProsthesisEvent => ({
+      id: r.id as string, jobId: r.job_id as string, kind: r.kind as ProsthesisEvent["kind"], body: r.body as string, authorName: s(r.author_name), createdAt: r.created_at as string,
+    })),
     profile: {
       logo: s(cl.logo_data), professionalName: s(m.professional_name), cro: s(m.cro), croUf: s(m.cro_uf), cpf: s(m.cpf), birthDate: s(m.birth_date), workMode: cl.work_mode as Profile["workMode"], contact: s(cl.contact),
       pdfColor: s(cl.pdf_color), theme: m.theme as Profile["theme"], activeSpecialtyIds: cl.active_specialty_ids as string[],
@@ -227,6 +258,13 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
     for (const [k, col] of map) if (k in p) out[col] = p[k] ?? null;
     return out;
   };
+
+  // paciente e etapa não mudam por aqui: o banco recusa troca de paciente e a etapa muda só por moveJob
+  const jobRow = (f: ReturnType<typeof normalizeJob>) => ({
+    patient_id: f.patientId, professional_name: f.professional, description: f.description, kind: f.kind, teeth: f.teeth ?? null, shade: f.shade ?? null,
+    laboratory_id: f.laboratoryId ?? null, sent_on: f.sentOn ?? null, due_on: f.dueOn ?? null, cost_cents: f.costCents ?? null, notes: f.notes ?? null,
+    label: f.label ?? null, is_return: f.isReturn, return_reason: f.returnReason ?? null,
+  });
 
   return {
     patients: {
@@ -374,6 +412,100 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
       }),
       setPaid: (id: string, paid: boolean) => run(async () => { await q(ctx().sb.from("expenses").update({ paid }).eq("id", id)); }),
       remove: (id: string) => run(async () => { await q(ctx().sb.from("expenses").delete().eq("id", id)); }),
+    },
+
+    // Criar e mover oportunidade por orçamento é feito por gatilhos no banco; aqui só o que a pessoa faz no funil.
+    // O histórico de mudança de etapa também é gravado pelo banco (gatilho em opportunities).
+    sales: {
+      createOpportunity: (o: { patientId: string; title: string; valueCents: number; responsible?: string }) => run(async () => {
+        const { sb, session, db } = ctx();
+        const title = o.title.trim();
+        if (!title) throw new Error("Dê um título à oportunidade.");
+        const stage = db.salesStages.find((x) => x.kind === "open");
+        if (!stage) throw new Error("Etapas do funil não encontradas. A atualização do banco de dados (vendas) já foi aplicada?");
+        const row = (await q(sb.from("opportunities").insert({ clinic_id: session.clinicId, patient_id: o.patientId, stage_id: stage.id, title,
+          value_cents: o.valueCents, responsible_name: o.responsible?.trim() || null }).select("id").single())) as Row;
+        return row.id as string;
+      }),
+      updateOpportunity: (id: string, patch: { title?: string; valueCents?: number; responsible?: string; label?: string }) => run(async () => {
+        const row: Row = {};
+        if (patch.title !== undefined) row.title = patch.title.trim();
+        if (patch.valueCents !== undefined) row.value_cents = patch.valueCents;
+        if ("responsible" in patch) row.responsible_name = patch.responsible?.trim() || null;
+        if ("label" in patch) row.label = patch.label?.trim() || null;
+        const rows = await q(ctx().sb.from("opportunities").update(row).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      moveOpportunity: (id: string, stageId: string) => run(async () => {
+        const rows = await q(ctx().sb.from("opportunities").update({ stage_id: stageId }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      addComment: (opportunityId: string, body: string) => run(async () => {
+        const { sb, session } = ctx();
+        const text = body.trim();
+        if (!text) throw new Error("Escreva o comentário.");
+        if (text.length > MAX_COMMENT) throw new Error(`O comentário pode ter até ${MAX_COMMENT} caracteres.`);
+        await q(sb.from("opportunity_events").insert({ clinic_id: session.clinicId, opportunity_id: opportunityId, kind: "comment", body: text }));
+      }),
+      createStage: (name: string) => run(async () => {
+        const { sb, session, db } = ctx();
+        const n = name.trim();
+        if (!n) throw new Error("Dê um nome à etapa.");
+        await q(sb.from("sales_stages").insert({ clinic_id: session.clinicId, name: n, position: Math.max(-1, ...db.salesStages.map((x) => x.position)) + 1 }));
+      }),
+      renameStage: (id: string, name: string) => run(async () => {
+        const n = name.trim();
+        if (!n) throw new Error("Dê um nome à etapa.");
+        const rows = await q(ctx().sb.from("sales_stages").update({ name: n }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica muda as etapas.");
+      }),
+      deleteStage: (id: string, moveToId?: string) => run(async () => { await q(ctx().sb.rpc("delete_sales_stage", { p_stage: id, p_move_to: moveToId ?? null })); }),
+      setGoal: (month: string, cents: number) => run(async () => {
+        const { sb, session } = ctx();
+        if (cents === 0) await q(sb.from("sales_goals").delete().eq("clinic_id", session.clinicId).eq("month", `${month}-01`));
+        else await q(sb.from("sales_goals").upsert({ clinic_id: session.clinicId, month: `${month}-01`, goal_cents: cents, updated_at: new Date().toISOString() }));
+      }),
+    },
+
+    // Histórico de etapa e de criação é gravado pelo banco (gatilhos em prosthesis_jobs); aqui só o que a pessoa faz.
+    prosthesis: {
+      createLab: (input: { name: string; phone?: string; notes?: string }) => run(async () => {
+        const { sb, session } = ctx();
+        const l = normalizeLab(input);
+        const row = (await q(sb.from("laboratories").insert({ clinic_id: session.clinicId, name: l.name, phone: l.phone ?? null, notes: l.notes ?? null }).select("id").single())) as Row;
+        return row.id as string;
+      }),
+      updateLab: (id: string, input: { name: string; phone?: string; notes?: string }) => run(async () => {
+        const l = normalizeLab(input);
+        const rows = await q(ctx().sb.from("laboratories").update({ name: l.name, phone: l.phone ?? null, notes: l.notes ?? null }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      deleteLab: (id: string) => run(async () => { await q(ctx().sb.from("laboratories").delete().eq("id", id)); }),
+      createJob: (input: JobInput) => run(async () => {
+        const { sb, session } = ctx();
+        const f = normalizeJob(input);
+        const row = (await q(sb.from("prosthesis_jobs").insert({ clinic_id: session.clinicId, ...jobRow(f) }).select("id").single())) as Row;
+        return row.id as string;
+      }),
+      updateJob: (id: string, input: JobInput) => run(async () => {
+        const rows = await q(ctx().sb.from("prosthesis_jobs").update(jobRow(normalizeJob(input))).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      moveJob: (id: string, stage: ProsthesisJob["stage"]) => run(async () => {
+        const rows = await q(ctx().sb.from("prosthesis_jobs").update({ stage }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
+      addComment: (jobId: string, body: string) => run(async () => {
+        const { sb, session } = ctx();
+        const t = body.trim();
+        if (!t) throw new Error("Escreva o comentário.");
+        if (t.length > MAX_COMMENT) throw new Error(`O comentário pode ter até ${MAX_COMMENT} caracteres.`);
+        await q(sb.from("prosthesis_events").insert({ clinic_id: session.clinicId, job_id: jobId, kind: "comment", body: t }));
+      }),
+      deleteJob: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("prosthesis_jobs").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
+      }),
     },
 
     clinicalNotes: {

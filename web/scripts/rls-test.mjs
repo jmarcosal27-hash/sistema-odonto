@@ -615,6 +615,265 @@ check(!!hfGuard, "budgets_guard continua valendo: total do orçamento de HOF NÃ
 const { error: hfAuth } = await a.rpc("authorize_budget", { p_budget: hofBudget, p_item_ids: [hofRow.id], p_installments: 1, p_first_due: "2026-12-01", p_method: "pix", p_paid_now: false });
 check(!hfAuth, "A aprova orçamento com item de HOF");
 
+// ===== Vendas (migration 20261116000002) =====
+const { data: stagesA } = await a.from("sales_stages").select("id,kind,name").eq("clinic_id", clinicA);
+const stg = (k) => stagesA?.find((s) => s.kind === k)?.id;
+check(stagesA?.length === 4 && ["open", "in_progress", "won", "lost"].every(stg), "clínica nova já nasce com as 4 etapas padrão");
+const oppOf = async (client, budget) => (await client.from("opportunities").select("*").eq("budget_id", budget).maybeSingle()).data;
+const histOf = async (oppId) => (await a.from("opportunity_events").select("kind,body,author_name").eq("opportunity_id", oppId).order("created_at")).data ?? [];
+const authorize1 = async (budget) => {
+  const plan = (await a.from("budgets").select("plan_id").eq("id", budget).single()).data.plan_id;
+  const ids = (await a.from("plan_items").select("id").eq("plan_id", plan)).data.map((i) => i.id);
+  return a.rpc("authorize_budget", { p_budget: budget, p_item_ids: ids, p_installments: 1, p_first_due: "2026-12-01", p_method: "pix", p_paid_now: false });
+};
+
+// criação e movimentação automáticas a partir do orçamento
+const oAuth = await oppOf(a, budgetId);
+check(oAuth?.stage_id === stg("won") && oAuth.value_cents === 2400 && oAuth.patient_id === pat.id, "orçamento aprovado nos testes acima tem oportunidade em Ganha, com o valor em centavos");
+const oDecl = await oppOf(a, b2);
+check(oDecl?.stage_id === stg("lost"), "orçamento recusado tem oportunidade em Perdida");
+const bs1 = await mkBudget();
+const oNew = await oppOf(a, bs1);
+check(oNew?.stage_id === stg("open") && oNew.value_cents === 700 && oNew.title === "Orçamento de tratamento", "criar orçamento cria a oportunidade em Em aberto");
+check((await histOf(oNew.id)).some((e) => e.kind === "system" && e.body === "Criou esta oportunidade"), "histórico registra a criação da oportunidade");
+const { error: bsAuth } = await authorize1(bs1);
+check(!bsAuth, "aprovar orçamento continua funcionando com a oportunidade ligada");
+check((await oppOf(a, bs1))?.stage_id === stg("won"), "aprovar o orçamento move a oportunidade para Ganha");
+check((await histOf(oNew.id)).some((e) => e.kind === "stage" && e.body === "Em aberto → Ganha"), "histórico registra a mudança de etapa feita pelo orçamento");
+const bs2 = await mkBudget();
+await a.rpc("decline_budget", { p_budget: bs2 });
+const oBs2 = await oppOf(a, bs2);
+check(oBs2?.stage_id === stg("lost"), "recusar o orçamento move a oportunidade para Perdida");
+const { error: dupOpp } = await a.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), budget_id: bs1, title: "Duplicada" });
+check(!!dupOpp, "um orçamento só tem uma oportunidade");
+const { error: oppBudMove } = await a.from("opportunities").update({ budget_id: b3 }).eq("id", oNew.id);
+check(!!oppBudMove, "oportunidade NÃO troca de orçamento");
+const { error: oppPatMove } = await a.from("opportunities").update({ patient_id: cPat.id }).eq("id", oNew.id);
+check(!!oppPatMove, "oportunidade NÃO troca de paciente");
+const { error: oppXBud } = await a.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), budget_id: bBudget, title: "Orçamento de outra clínica" });
+check(!!oppXBud, "oportunidade NÃO aponta para orçamento de outra clínica");
+
+// oportunidade manual, mover, comentar
+const { data: man, error: mn1 } = await a.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), title: "Clareamento", value_cents: 80000, responsible_name: "Dra. A", label: "retorno" }).select("id,stage_changed_at").single();
+check(!mn1 && man, "A cria oportunidade manual (paciente, título, valor, responsável)");
+for (const [label, row] of [["título vazio", { title: "   " }], ["valor negativo", { value_cents: -1 }], ["título acima de 120", { title: "x".repeat(121) }], ["rótulo acima de 30", { label: "x".repeat(31) }], ["responsável acima de 120", { responsible_name: "x".repeat(121) }]]) {
+  const { error } = await a.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), title: "Ok", ...row });
+  check(!!error, `CHECK oportunidade: ${label} é recusado`);
+}
+await new Promise((r) => setTimeout(r, 20));
+const { data: mv, error: mv1 } = await a.from("opportunities").update({ stage_id: stg("in_progress") }).eq("id", man.id).select("stage_changed_at").single();
+check(!mv1 && new Date(mv.stage_changed_at) > new Date(man.stage_changed_at), "A move a oportunidade de etapa e a data da mudança é atualizada");
+check((await histOf(man.id)).some((e) => e.kind === "stage" && e.body === "Em aberto → Em andamento"), "histórico registra Em aberto → Em andamento");
+const { error: cm1 } = await a.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "Paciente pediu para ligar na sexta.", author_id: cUser.id, author_name: "Outra pessoa" });
+const cmRow = (await a.from("opportunity_events").select("author_id,author_name").eq("opportunity_id", man.id).eq("kind", "comment").single()).data;
+check(!cm1 && cmRow?.author_id === aUser.user.id && cmRow.author_name !== "Outra pessoa", "A comenta; autor e nome vêm do servidor, não do cliente");
+const { error: cm2 } = await a.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "x".repeat(255) });
+check(!cm2, "comentário de 255 caracteres é aceito");
+const { error: cm3 } = await a.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "x".repeat(256) });
+check(!!cm3, "CHECK: comentário acima de 255 caracteres é recusado");
+const { error: cm4 } = await a.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "   " });
+check(!!cm4, "CHECK: comentário vazio é recusado");
+const { error: cm5 } = await a.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "stage", body: "Falso → Falso" });
+check(!!cm5, "usuário NÃO forja linha de histórico de etapa");
+const { data: cmUpd } = await a.from("opportunity_events").update({ body: "alterado" }).eq("opportunity_id", man.id).select("id");
+const { data: cmDel } = await a.from("opportunity_events").delete().eq("opportunity_id", man.id).select("id");
+check((!cmUpd || cmUpd.length === 0) && (!cmDel || cmDel.length === 0), "comentários e histórico NÃO são editados nem apagados");
+
+// etapas
+const { data: customStage, error: st1 } = await a.from("sales_stages").insert({ clinic_id: clinicA, name: "Negociação", position: 4 }).select("id").single();
+check(!st1 && customStage, "dono cria etapa personalizada");
+const { error: st2 } = await a.from("sales_stages").insert({ clinic_id: clinicA, name: "ganha", position: 9 });
+check(!!st2, "nome de etapa repetido (sem diferenciar maiúsculas) é recusado");
+const { error: st3 } = await a.from("sales_stages").insert({ clinic_id: clinicA, name: "Falsa padrão", position: 9, kind: "won" });
+check(!!st3, "usuário NÃO cria etapa com tipo padrão");
+const { data: st4 } = await a.from("sales_stages").update({ name: "Ganhou" }).eq("id", stg("won")).select("id");
+check(st4?.length === 1, "dono renomeia etapa padrão");
+await a.from("sales_stages").update({ name: "Ganha" }).eq("id", stg("won"));
+const { error: st5 } = await a.from("sales_stages").update({ kind: "lost" }).eq("id", customStage.id);
+check(!!st5, "etapa NÃO muda de tipo");
+const { error: st5b } = await a.from("sales_stages").update({ kind: null }).eq("id", stg("open"));
+check(!!st5b, "etapa padrão NÃO vira personalizada");
+const { data: st6 } = await a.from("sales_stages").delete().eq("id", stg("lost")).select("id");
+check(!st6 || st6.length === 0, "etapa padrão NÃO é excluída");
+const { error: st6b } = await a.rpc("delete_sales_stage", { p_stage: stg("lost"), p_move_to: stg("open") });
+check(!!st6b, "delete_sales_stage recusa etapa padrão");
+await a.from("opportunities").update({ stage_id: customStage.id }).eq("id", man.id);
+const { error: st7 } = await a.rpc("delete_sales_stage", { p_stage: customStage.id });
+check(!!st7, "etapa com cartões NÃO é excluída sem destino para eles");
+const { error: st8 } = await a.rpc("delete_sales_stage", { p_stage: customStage.id, p_move_to: customStage.id });
+check(!!st8, "destino dos cartões não pode ser a própria etapa");
+const { error: st9 } = await b.rpc("delete_sales_stage", { p_stage: customStage.id, p_move_to: stg("open") });
+check(!!st9, "B NÃO exclui etapa da clínica A");
+const { error: st10 } = await c.rpc("delete_sales_stage", { p_stage: customStage.id, p_move_to: stg("open") });
+check(!!st10, "dentista (não é o dono) NÃO exclui etapa");
+const { error: st11 } = await a.rpc("delete_sales_stage", { p_stage: customStage.id, p_move_to: stg("in_progress") });
+const manAfter = (await a.from("opportunities").select("stage_id").eq("id", man.id).single()).data;
+const { data: gone } = await a.from("sales_stages").select("id").eq("id", customStage.id);
+check(!st11 && manAfter?.stage_id === stg("in_progress") && gone?.length === 0, "excluir etapa move os cartões para o destino e remove a etapa");
+const { data: emptyStage } = await a.from("sales_stages").insert({ clinic_id: clinicA, name: "Vazia", position: 5 }).select("id").single();
+const { error: st12 } = await a.rpc("delete_sales_stage", { p_stage: emptyStage.id });
+check(!st12, "etapa vazia é excluída sem destino");
+const { error: cst } = await c.from("sales_stages").insert({ clinic_id: clinicA, name: "Do dentista", position: 7 });
+check(!!cst, "dentista NÃO cria etapa");
+
+// metas do mês
+const { error: g1 } = await a.from("sales_goals").upsert({ clinic_id: clinicA, month: "2026-11-01", goal_cents: 5000000 });
+check(!g1, "dono define a meta do mês");
+const { error: g2 } = await a.from("sales_goals").upsert({ clinic_id: clinicA, month: "2026-11-01", goal_cents: 6000000 });
+const { data: gRows } = await a.from("sales_goals").select("goal_cents").eq("clinic_id", clinicA);
+check(!g2 && gRows?.length === 1 && gRows[0].goal_cents === 6000000, "dono altera a meta do mês (uma linha por mês)");
+const { error: g3 } = await a.from("sales_goals").insert({ clinic_id: clinicA, month: "2026-12-15", goal_cents: 1 });
+check(!!g3, "CHECK: meta só aceita o primeiro dia do mês");
+const { error: g4 } = await a.from("sales_goals").insert({ clinic_id: clinicA, month: "2026-12-01", goal_cents: -1 });
+check(!!g4, "CHECK: meta negativa é recusada");
+const { error: g5 } = await c.from("sales_goals").upsert({ clinic_id: clinicA, month: "2026-11-01", goal_cents: 1 });
+const { data: gAfterC } = await a.from("sales_goals").select("goal_cents").eq("clinic_id", clinicA);
+check(!!g5 && gAfterC?.[0]?.goal_cents === 6000000, "dentista NÃO altera a meta");
+const { data: gC } = await c.from("sales_goals").select("goal_cents").eq("clinic_id", clinicA);
+check(gC?.length === 1, "dentista LÊ a meta do mês");
+
+// dentista move e comenta (não é só do dono)
+const { data: cMove } = await c.from("opportunities").update({ stage_id: stg("open") }).eq("id", man.id).select("id");
+check(cMove?.length === 1, "dentista move oportunidade de etapa");
+const { error: cCom } = await c.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "Comentário do dentista" });
+check(!cCom, "dentista comenta na oportunidade");
+const { data: cDelOpp } = await c.from("opportunities").delete().eq("id", man.id).select("id");
+check(!cDelOpp || cDelOpp.length === 0, "dentista NÃO exclui oportunidade");
+
+// isolamento entre clínicas
+for (const t of ["sales_stages", "opportunities", "opportunity_events", "sales_goals"]) {
+  const { data: rows } = await b.from(t).select("clinic_id").eq("clinic_id", clinicA);
+  check(rows?.length === 0, `B NÃO vê ${t} da clínica A`);
+}
+const { data: bStages } = await b.from("sales_stages").select("id").eq("clinic_id", clinicB);
+check(bStages?.length === 4, "B tem as próprias 4 etapas padrão");
+const bOpen = (await b.from("sales_stages").select("id").eq("clinic_id", clinicB).eq("kind", "open").single()).data.id;
+const { error: xo1 } = await b.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), title: "Intruso" });
+check(!!xo1, "B NÃO cria oportunidade na clínica A");
+const { error: xo2 } = await b.from("opportunities").insert({ clinic_id: clinicB, patient_id: pat.id, stage_id: bOpen, title: "Paciente de outra clínica" });
+check(!!xo2, "B NÃO cria oportunidade na própria clínica para paciente de A");
+const { error: xo3 } = await b.from("opportunities").insert({ clinic_id: clinicB, patient_id: patB.id, stage_id: stg("open"), title: "Etapa de outra clínica" });
+check(!!xo3, "oportunidade NÃO usa etapa de outra clínica");
+const { data: xo4 } = await b.from("opportunities").update({ stage_id: bOpen }).eq("id", man.id).select("id");
+check(!xo4 || xo4.length === 0, "B NÃO move oportunidade de A");
+const { data: xo5 } = await b.from("opportunities").delete().eq("id", man.id).select("id");
+check(!xo5 || xo5.length === 0, "B NÃO exclui oportunidade de A");
+const { error: xo6 } = await b.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "Intruso" });
+check(!!xo6, "B NÃO comenta em oportunidade da clínica A");
+const { error: xo7 } = await b.from("opportunity_events").insert({ clinic_id: clinicB, opportunity_id: man.id, kind: "comment", body: "Cruzado" });
+check(!!xo7, "B NÃO comenta em oportunidade de A usando a própria clínica");
+const { error: xo8 } = await b.from("sales_stages").insert({ clinic_id: clinicA, name: "Intruso", position: 9 });
+check(!!xo8, "B NÃO cria etapa na clínica A");
+const { data: xo9 } = await b.from("sales_stages").update({ name: "Alterada por B" }).eq("id", stg("open")).select("id");
+check(!xo9 || xo9.length === 0, "B NÃO renomeia etapa de A");
+const { error: xo10 } = await b.from("sales_goals").upsert({ clinic_id: clinicA, month: "2026-11-01", goal_cents: 1 });
+check(!!xo10, "B NÃO altera a meta de A");
+const { error: xo11 } = await b.from("sales_goals").upsert({ clinic_id: clinicB, month: "2026-11-01", goal_cents: 100000 });
+check(!xo11, "B define a própria meta");
+const bOppAuto = (await b.from("opportunities").select("id,stage_id").eq("budget_id", bBudget).maybeSingle()).data;
+check(bOppAuto?.stage_id === bOpen, "o orçamento de B criou a oportunidade na etapa Em aberto de B");
+
+// modo dividido: oportunidade herda a visibilidade do paciente
+await a.from("clinics").update({ practice_mode: "split" }).eq("id", clinicA);
+const { data: spOpps } = await c.from("opportunities").select("id").eq("patient_id", pat.id);
+check(spOpps?.length === 0, "split: C NÃO vê oportunidades de paciente de outro dentista");
+const { data: spEv } = await c.from("opportunity_events").select("id").eq("opportunity_id", man.id);
+check(spEv?.length === 0, "split: C NÃO vê comentários de oportunidade de paciente de outro dentista");
+const { error: spIns } = await c.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), title: "Paciente alheio" });
+check(!!spIns, "split: C NÃO cria oportunidade para paciente de outro dentista");
+const { data: spMove } = await c.from("opportunities").update({ stage_id: stg("won") }).eq("id", man.id).select("id");
+check(!spMove || spMove.length === 0, "split: C NÃO move oportunidade de paciente de outro dentista");
+const { data: spOppOwn, error: spOppErr } = await c.from("opportunities").insert({ clinic_id: clinicA, patient_id: cPat.id, stage_id: stg("open"), title: "Paciente próprio" }).select("id").single();
+check(!spOppErr && spOppOwn, "split: C cria oportunidade para o próprio paciente");
+await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
+
+// excluir orçamento mantém a oportunidade, só solta o vínculo
+const { error: delBud } = await a.from("budgets").delete().eq("id", bs2);
+const oKept = (await a.from("opportunities").select("id,budget_id").eq("id", oBs2.id).maybeSingle()).data;
+check(!delBud && oKept?.id === oBs2.id && oKept.budget_id === null, "excluir o orçamento NÃO apaga a oportunidade (só solta o vínculo)");
+const { data: aDelOpp } = await a.from("opportunities").delete().eq("id", spOppOwn.id).select("id");
+check(aDelOpp?.length === 1, "dono exclui oportunidade");
+
+// ===== Controle de prótese (migration 20261116000003) =====
+const { data: lab1, error: lb1 } = await a.from("laboratories").insert({ clinic_id: clinicA, name: "Lab Sorriso", phone: "11999990000", notes: "Entrega em 7 dias" }).select("id").single();
+check(!lb1 && lab1, "A cadastra laboratório");
+const { error: lb2 } = await a.from("laboratories").insert({ clinic_id: clinicA, name: " lab sorriso " });
+check(!!lb2, "nome de laboratório repetido (sem diferenciar maiúsculas) é recusado");
+const { error: lb3 } = await a.from("laboratories").insert({ clinic_id: clinicA, name: "   " });
+check(!!lb3, "CHECK: laboratório sem nome é recusado");
+const { data: lbB } = await b.from("laboratories").select("id").eq("clinic_id", clinicA);
+check(lbB?.length === 0, "B NÃO vê laboratórios da clínica A");
+const { error: lbBi } = await b.from("laboratories").insert({ clinic_id: clinicA, name: "Intruso" });
+check(!!lbBi, "B NÃO cadastra laboratório na clínica A");
+const { data: lbBu } = await b.from("laboratories").update({ name: "Alterado por B" }).eq("id", lab1.id).select("id");
+check(!lbBu || lbBu.length === 0, "B NÃO altera laboratório de A");
+const { data: labB1 } = await b.from("laboratories").insert({ clinic_id: clinicB, name: "Lab de B" }).select("id").single();
+
+const job = (extra = {}) => ({ clinic_id: clinicA, patient_id: pat.id, professional_name: "Dra. A", description: "Coroa de zircônia no 26", kind: "crown", teeth: "26", shade: "A2", laboratory_id: lab1.id, sent_on: "2026-11-01", due_on: "2026-11-10", cost_cents: 45000, ...extra });
+const { data: pj, error: pj1 } = await a.from("prosthesis_jobs").insert(job()).select("id,stage,stage_changed_at,is_return").single();
+check(!pj1 && pj?.stage === "pre_lab" && pj.is_return === false, "A cria serviço de prótese (nasce em Pré-laboratório)");
+const pHist = async (id) => (await a.from("prosthesis_events").select("kind,body,author_name").eq("job_id", id).order("created_at")).data ?? [];
+check((await pHist(pj.id)).some((e) => e.kind === "system" && e.body === "Criou este serviço"), "histórico registra a criação do serviço (gravado pelo servidor)");
+for (const [label, row] of [["profissional vazio", { professional_name: "  " }], ["descrição vazia", { description: "  " }], ["descrição acima de 255", { description: "x".repeat(256) }], ["tipo inválido", { kind: "ponte" }],
+  ["etapa inválida", { stage: "voando" }], ["valor negativo", { cost_cents: -1 }], ["rótulo acima de 30", { label: "x".repeat(31) }], ["previsão antes do envio", { sent_on: "2026-11-10", due_on: "2026-11-01" }],
+  ["retorno sem motivo", { is_return: true, return_reason: "  " }]]) {
+  const { error } = await a.from("prosthesis_jobs").insert(job(row));
+  check(!!error, `CHECK serviço de prótese: ${label} é recusado`);
+}
+const { error: pjXLab } = await a.from("prosthesis_jobs").insert(job({ laboratory_id: labB1.id }));
+check(!!pjXLab, "serviço NÃO aponta para laboratório de outra clínica");
+const { data: pjB } = await b.from("prosthesis_jobs").select("id").eq("clinic_id", clinicA);
+check(pjB?.length === 0, "B NÃO vê serviços da clínica A");
+const { error: pjBi } = await b.from("prosthesis_jobs").insert(job());
+check(!!pjBi, "B NÃO cria serviço na clínica A");
+const { data: pjBu } = await b.from("prosthesis_jobs").update({ stage: "done" }).eq("id", pj.id).select("id");
+check(!pjBu || pjBu.length === 0, "B NÃO move serviço de A");
+const { error: pjPat } = await a.from("prosthesis_jobs").update({ patient_id: cPat.id }).eq("id", pj.id);
+check(!!pjPat, "serviço NÃO troca de paciente");
+
+await new Promise((r) => setTimeout(r, 20));
+const { data: pmv, error: pmv1 } = await a.from("prosthesis_jobs").update({ stage: "sent" }).eq("id", pj.id).select("stage_changed_at").single();
+check(!pmv1 && new Date(pmv.stage_changed_at) > new Date(pj.stage_changed_at), "A move o serviço de etapa e a data da mudança é atualizada");
+await a.from("prosthesis_jobs").update({ stage: "lab" }).eq("id", pj.id);
+const pH = await pHist(pj.id);
+check(pH.some((e) => e.kind === "stage" && e.body === "Pré-laboratório → Envio") && pH.some((e) => e.kind === "stage" && e.body === "Envio → Laboratório"), "histórico registra cada mudança de etapa");
+check(pH.filter((e) => e.kind === "stage").every((e) => !!e.author_name), "histórico guarda quem moveu");
+await a.from("prosthesis_jobs").update({ is_return: true, return_reason: "Cor não combinou" }).eq("id", pj.id);
+check((await pHist(pj.id)).some((e) => e.kind === "system" && e.body === "Marcado como retorno: Cor não combinou"), "histórico registra a marcação de retorno com o motivo");
+
+const { error: pc1 } = await a.from("prosthesis_events").insert({ clinic_id: clinicA, job_id: pj.id, kind: "comment", body: "Laboratório confirmou o prazo.", author_id: cUser.id, author_name: "Outra pessoa" });
+const pcRow = (await a.from("prosthesis_events").select("author_id,author_name").eq("job_id", pj.id).eq("kind", "comment").single()).data;
+check(!pc1 && pcRow?.author_id === aUser.user.id && pcRow.author_name !== "Outra pessoa", "A comenta no serviço; autor e nome vêm do servidor");
+const { error: pc2 } = await a.from("prosthesis_events").insert({ clinic_id: clinicA, job_id: pj.id, kind: "comment", body: "x".repeat(255) });
+check(!pc2, "comentário de 255 caracteres é aceito no serviço");
+const { error: pc3 } = await a.from("prosthesis_events").insert({ clinic_id: clinicA, job_id: pj.id, kind: "comment", body: "x".repeat(256) });
+check(!!pc3, "CHECK: comentário do serviço acima de 255 é recusado");
+const { error: pc4 } = await a.from("prosthesis_events").insert({ clinic_id: clinicA, job_id: pj.id, kind: "stage", body: "Falso → Falso" });
+check(!!pc4, "usuário NÃO forja linha de histórico do serviço");
+const { error: pc5 } = await b.from("prosthesis_events").insert({ clinic_id: clinicA, job_id: pj.id, kind: "comment", body: "Intruso" });
+check(!!pc5, "B NÃO comenta em serviço de A");
+const { data: pcB } = await b.from("prosthesis_events").select("id").eq("job_id", pj.id);
+check(pcB?.length === 0, "B NÃO vê histórico do serviço de A");
+const { data: pcUpd } = await a.from("prosthesis_events").update({ body: "alterado" }).eq("job_id", pj.id).select("id");
+const { data: pcDel } = await a.from("prosthesis_events").delete().eq("job_id", pj.id).select("id");
+check((!pcUpd || pcUpd.length === 0) && (!pcDel || pcDel.length === 0), "histórico e comentários do serviço NÃO são editados nem apagados");
+
+// só o dono exclui serviço e laboratório (o dentista da clínica A tem can_write, mas não é dono)
+const { data: cDelPj } = await c.from("prosthesis_jobs").delete().eq("id", pj.id).select("id");
+check(!cDelPj || cDelPj.length === 0, "dentista (não é o dono) NÃO exclui serviço");
+const { data: cDelLab } = await c.from("laboratories").delete().eq("id", lab1.id).select("id");
+check(!cDelLab || cDelLab.length === 0, "dentista (não é o dono) NÃO exclui laboratório");
+
+// excluir laboratório solta os serviços, não os apaga
+const { data: lab2 } = await a.from("laboratories").insert({ clinic_id: clinicA, name: "Lab Temporário" }).select("id").single();
+const { data: pj2 } = await a.from("prosthesis_jobs").insert(job({ laboratory_id: lab2.id, description: "Faceta no 11" })).select("id").single();
+const { error: lbDel } = await a.from("laboratories").delete().eq("id", lab2.id);
+const pj2After = (await a.from("prosthesis_jobs").select("id,laboratory_id").eq("id", pj2.id).maybeSingle()).data;
+check(!lbDel && pj2After?.id === pj2.id && pj2After.laboratory_id === null, "excluir laboratório NÃO apaga o serviço (só solta o vínculo)");
+const { data: pjDel } = await a.from("prosthesis_jobs").delete().eq("id", pj2.id).select("id");
+check(pjDel?.length === 1, "dono exclui serviço");
+check(((await a.from("prosthesis_events").select("id").eq("job_id", pj2.id)).data ?? []).length === 0, "excluir o serviço apaga o histórico dele em cascata");
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
@@ -682,8 +941,60 @@ check(!xe6 || xe6.length === 0, "acesso vencido: A NÃO edita medicamento");
 const { data: xe7 } = await a.from("prescription_templates").update({ name: "Após vencer 2" }).eq("id", tplRx.id).select("id");
 check(!xe7 || xe7.length === 0, "acesso vencido: A NÃO renomeia modelo");
 
+// Vendas com acesso vencido: lê, não escreve
+const { data: expOpps } = await a.from("opportunities").select("id").eq("clinic_id", clinicA);
+check((expOpps?.length ?? 0) >= 3, "acesso vencido: A ainda LÊ as oportunidades");
+const { data: expStages } = await a.from("sales_stages").select("id").eq("clinic_id", clinicA);
+check(expStages?.length === 4, "acesso vencido: A ainda LÊ as etapas");
+const { data: expEv } = await a.from("opportunity_events").select("id").eq("opportunity_id", man.id);
+check((expEv?.length ?? 0) >= 3, "acesso vencido: A ainda LÊ comentários e histórico");
+const { error: xv1 } = await a.from("opportunities").insert({ clinic_id: clinicA, patient_id: pat.id, stage_id: stg("open"), title: "Após vencer" });
+check(!!xv1, "acesso vencido: A NÃO cria oportunidade");
+const { data: xv2 } = await a.from("opportunities").update({ stage_id: stg("won") }).eq("id", man.id).select("id");
+check(!xv2 || xv2.length === 0, "acesso vencido: A NÃO move oportunidade");
+const { data: xv2b } = await a.from("opportunities").update({ title: "Alterada após vencer" }).eq("id", man.id).select("id");
+check(!xv2b || xv2b.length === 0, "acesso vencido: A NÃO edita oportunidade");
+const { error: xv3 } = await a.from("opportunity_events").insert({ clinic_id: clinicA, opportunity_id: man.id, kind: "comment", body: "Após vencer" });
+check(!!xv3, "acesso vencido: A NÃO comenta");
+const { error: xv4 } = await a.from("sales_stages").insert({ clinic_id: clinicA, name: "Após vencer", position: 8 });
+check(!!xv4, "acesso vencido: A NÃO cria etapa");
+const { data: xv5 } = await a.from("sales_stages").update({ name: "Renomeada após vencer" }).eq("id", stg("open")).select("id");
+check(!xv5 || xv5.length === 0, "acesso vencido: A NÃO renomeia etapa");
+const { error: xv7 } = await a.from("sales_goals").upsert({ clinic_id: clinicA, month: "2026-11-01", goal_cents: 1 });
+check(!!xv7, "acesso vencido: A NÃO altera a meta");
+const { data: xv8 } = await a.from("opportunities").delete().eq("id", man.id).select("id");
+check(!xv8 || xv8.length === 0, "acesso vencido: A NÃO exclui oportunidade");
+
+// Prótese com acesso vencido: lê, não escreve
+const { data: expPj } = await a.from("prosthesis_jobs").select("id").eq("clinic_id", clinicA);
+check((expPj?.length ?? 0) >= 1, "acesso vencido: A ainda LÊ os serviços de prótese");
+const { data: expLb } = await a.from("laboratories").select("id").eq("clinic_id", clinicA);
+check((expLb?.length ?? 0) >= 1, "acesso vencido: A ainda LÊ os laboratórios");
+const { data: expPe } = await a.from("prosthesis_events").select("id").eq("job_id", pj.id);
+check((expPe?.length ?? 0) >= 3, "acesso vencido: A ainda LÊ comentários e histórico do serviço");
+const { error: xp1 } = await a.from("prosthesis_jobs").insert(job({ description: "Após vencer" }));
+check(!!xp1, "acesso vencido: A NÃO cria serviço de prótese");
+const { data: xp2 } = await a.from("prosthesis_jobs").update({ stage: "done" }).eq("id", pj.id).select("id");
+check(!xp2 || xp2.length === 0, "acesso vencido: A NÃO move serviço de prótese");
+const { data: xp3 } = await a.from("prosthesis_jobs").update({ description: "Alterado após vencer" }).eq("id", pj.id).select("id");
+check(!xp3 || xp3.length === 0, "acesso vencido: A NÃO edita serviço de prótese");
+const { error: xp4 } = await a.from("prosthesis_events").insert({ clinic_id: clinicA, job_id: pj.id, kind: "comment", body: "Após vencer" });
+check(!!xp4, "acesso vencido: A NÃO comenta no serviço");
+const { error: xp5 } = await a.from("laboratories").insert({ clinic_id: clinicA, name: "Após vencer" });
+check(!!xp5, "acesso vencido: A NÃO cadastra laboratório");
+const { data: xp6 } = await a.from("laboratories").update({ name: "Renomeado após vencer" }).eq("id", lab1.id).select("id");
+check(!xp6 || xp6.length === 0, "acesso vencido: A NÃO edita laboratório");
+const { data: xp7 } = await a.from("prosthesis_jobs").delete().eq("id", pj.id).select("id");
+check(!xp7 || xp7.length === 0, "acesso vencido: A NÃO exclui serviço de prótese");
+
 // Limpeza
 await admin.from("clinics").delete().in("id", [clinicA, clinicB]);
+const { count: leftover } = await admin.from("opportunities").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
+const { count: leftStages } = await admin.from("sales_stages").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
+const { count: leftPj } = await admin.from("prosthesis_jobs").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
+const { count: leftLab } = await admin.from("laboratories").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
+check(leftPj === 0 && leftLab === 0, "limpeza: excluir a clínica apaga serviços de prótese, laboratórios e histórico em cascata");
+check(leftover === 0 && leftStages === 0, "limpeza: excluir a clínica apaga etapas, oportunidades, comentários e metas em cascata");
 await admin.storage.from(bucket).remove([pathA, pathC]).catch(() => {});
 for (const u of [a, b, c, f, rcp]) { const { data: { user } } = await u.auth.getUser(); await admin.auth.admin.deleteUser(user.id); }
 console.log(failures ? `\n${failures} falha(s)` : "\nTudo certo.");

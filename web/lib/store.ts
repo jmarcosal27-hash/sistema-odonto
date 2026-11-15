@@ -8,8 +8,11 @@ import { useSyncExternalStore } from "react";
 import type {
   AnamnesisAnswer, AnamnesisQuestion, Certificate, ClinicalNote, CustomDocument, Medication, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
-  Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry,
+  Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry, Opportunity, ProsthesisJob,
 } from "./types";
+import { MAX_COMMENT } from "./types";
+import { addProsthesisEvent, moveProsthesis, normalizeJob, normalizeLab, type JobInput } from "./prosthesis";
+import { backfillSales,defaultStages, moveOpportunity, pushEvent, sortedStages, stageOfKind, syncBudgetOpportunity } from "./sales";
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES, hasUnanswered } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
 import { checkHofItem } from "./hof";
@@ -19,7 +22,7 @@ import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 7;
+const VERSION = 9;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -34,6 +37,8 @@ export function emptyDb(): Db {
     installments: [], waitlist: [], recall: {}, recallMonths: {},
     clinicalNotes: [], anamnesisTemplates: [], anamnesisRecords: [],
     medications: [], prescriptions: [], prescriptionTemplates: [], certificates: [], customDocuments: [], patientFiles: [],
+    salesStages: defaultStages(), opportunities: [], opportunityEvents: [], salesGoals: {},
+    laboratories: [], prosthesisJobs: [], prosthesisEvents: [],
     templates: [
       { kind: "confirmation", body: "Olá, {nome}! Passando para confirmar seu horário em {data} às {hora}. Pode responder com SIM para confirmar? 😊" },
       { kind: "recall", body: "Oi, {nome}! Já está na hora da sua revisão. Quer que eu reserve um horário para você nesta semana?" },
@@ -62,6 +67,10 @@ function migrate(db: Db): Db {
   // v6: fichas de anamnese antigas passam a concluídas (imutáveis); correção vira revisão
   db.anamnesisRecords.forEach((r) => { if (!r.status) { r.status = "completed"; r.completedAt ??= r.createdAt; } });
   // v7: itens de HOF (campos opcionais em PlanItem); planos e orçamentos antigos seguem como estão, sem perda
+  // v8: funil de vendas. Cria as quatro etapas padrão e uma oportunidade para cada orçamento existente (aberto, aprovado ou recusado), sem tocar nos orçamentos.
+  backfillSales(db);
+  // v9: controle de prótese (laboratórios, serviços e histórico). Começa vazio e não toca em nada que já existe.
+  db.laboratories ??= []; db.prosthesisJobs ??= []; db.prosthesisEvents ??= [];
   db.version = VERSION;
   return db;
 }
@@ -255,6 +264,7 @@ const localApi = {
           status: "presented", authorizedItemIds: [], presentedAt: new Date().toISOString(),
         });
         event(db, plan.patientId, "budget_presented", "Orçamento apresentado");
+        syncBudgetOpportunity(db, db.budgets[db.budgets.length - 1], db.profile.professionalName || undefined);
       });
       return id;
     },
@@ -307,6 +317,7 @@ const localApi = {
         }));
         event(db, b.patientId, "budget_authorized",
           (chosen.length === plan.items.length ? "Orçamento aprovado" : `Orçamento aprovado em parte (${chosen.length} de ${plan.items.length} itens)`) + (n > 1 ? ` em ${n}x` : ""));
+        syncBudgetOpportunity(db, b, db.profile.professionalName || undefined);
       });
     },
     async decline(budgetId: string) {
@@ -316,6 +327,7 @@ const localApi = {
         if (!b) throw new Error("Orçamento não encontrado.");
         if (b.status !== "presented") throw new Error("Esse orçamento já foi respondido.");
         b.status = "declined";
+        syncBudgetOpportunity(db, b, db.profile.professionalName || undefined);
       });
     },
   },
@@ -621,6 +633,187 @@ const localApi = {
     },
   },
 
+  sales: {
+    async createOpportunity(o: { patientId: string; title: string; valueCents: number; responsible?: string }) {
+      const id = uid();
+      commit((db) => {
+        guard(db);
+        const title = o.title.trim();
+        if (!title) throw new Error("Dê um título à oportunidade.");
+        if (title.length > 120) throw new Error("Título longo demais (até 120 caracteres).");
+        if (!Number.isInteger(o.valueCents) || o.valueCents < 0) throw new Error("Informe um valor válido.");
+        if (!db.patients.some((p) => p.id === o.patientId)) throw new Error("Escolha o paciente.");
+        const stage = stageOfKind(db, "open");
+        if (!stage) throw new Error("Etapas do funil não encontradas.");
+        const now = new Date().toISOString();
+        const responsible = o.responsible?.trim().slice(0, 120) || undefined;
+        db.opportunities.push({ id, patientId: o.patientId, stageId: stage.id, title, valueCents: o.valueCents, responsible, createdAt: now, updatedAt: now, stageChangedAt: now } satisfies Opportunity);
+        pushEvent(db, id, "system", "Criou esta oportunidade", db.profile.professionalName || undefined);
+      });
+      return id;
+    },
+    async updateOpportunity(id: string, patch: { title?: string; valueCents?: number; responsible?: string; label?: string }) {
+      commit((db) => {
+        guard(db);
+        const o = db.opportunities.find((x) => x.id === id);
+        if (!o) throw new Error("Oportunidade não encontrada.");
+        if (patch.title !== undefined) {
+          const t = patch.title.trim();
+          if (!t || t.length > 120) throw new Error("O título precisa ter de 1 a 120 caracteres.");
+          o.title = t;
+        }
+        if (patch.valueCents !== undefined) {
+          if (!Number.isInteger(patch.valueCents) || patch.valueCents < 0) throw new Error("Informe um valor válido.");
+          o.valueCents = patch.valueCents;
+        }
+        if ("responsible" in patch) o.responsible = patch.responsible?.trim().slice(0, 120) || undefined;
+        if ("label" in patch) o.label = patch.label?.trim().slice(0, 30) || undefined;
+        o.updatedAt = new Date().toISOString();
+      });
+    },
+    async moveOpportunity(id: string, stageId: string) {
+      commit((db) => {
+        guard(db);
+        const o = db.opportunities.find((x) => x.id === id);
+        if (!o) throw new Error("Oportunidade não encontrada.");
+        if (!db.salesStages.some((s) => s.id === stageId)) throw new Error("Etapa não encontrada.");
+        moveOpportunity(db, o, stageId, db.profile.professionalName || undefined);
+      });
+    },
+    async addComment(opportunityId: string, body: string) {
+      commit((db) => {
+        guard(db);
+        const text = body.trim();
+        if (!text) throw new Error("Escreva o comentário.");
+        if (text.length > MAX_COMMENT) throw new Error(`O comentário pode ter até ${MAX_COMMENT} caracteres.`);
+        if (!db.opportunities.some((x) => x.id === opportunityId)) throw new Error("Oportunidade não encontrada.");
+        pushEvent(db, opportunityId, "comment", text, db.profile.professionalName || undefined);
+      });
+    },
+    async createStage(name: string) {
+      commit((db) => {
+        guard(db);
+        const n = name.trim();
+        if (!n || n.length > 40) throw new Error("O nome da etapa precisa ter de 1 a 40 caracteres.");
+        if (db.salesStages.some((s) => s.name.toLowerCase() === n.toLowerCase())) throw new Error("Já existe uma etapa com esse nome.");
+        db.salesStages.push({ id: uid(), name: n, position: Math.max(-1, ...db.salesStages.map((s) => s.position)) + 1 });
+      });
+    },
+    async renameStage(id: string, name: string) {
+      commit((db) => {
+        guard(db);
+        const s = db.salesStages.find((x) => x.id === id);
+        const n = name.trim();
+        if (!s) throw new Error("Etapa não encontrada.");
+        if (!n || n.length > 40) throw new Error("O nome da etapa precisa ter de 1 a 40 caracteres.");
+        if (db.salesStages.some((x) => x.id !== id && x.name.toLowerCase() === n.toLowerCase())) throw new Error("Já existe uma etapa com esse nome.");
+        s.name = n;
+      });
+    },
+    /** Etapas padrão não saem. Etapa com cartões só sai se `moveToId` disser para onde eles vão. */
+    async deleteStage(id: string, moveToId?: string) {
+      commit((db) => {
+        guard(db);
+        const s = db.salesStages.find((x) => x.id === id);
+        if (!s) throw new Error("Etapa não encontrada.");
+        if (s.kind) throw new Error("As etapas padrão não podem ser excluídas.");
+        const cards = db.opportunities.filter((o) => o.stageId === id);
+        if (cards.length) {
+          if (!moveToId || moveToId === id || !db.salesStages.some((x) => x.id === moveToId)) throw new Error("Escolha outra etapa para mover os cartões.");
+          cards.forEach((o) => moveOpportunity(db, o, moveToId, db.profile.professionalName || undefined));
+        }
+        db.salesStages = sortedStages(db).filter((x) => x.id !== id);
+      });
+    },
+    async setGoal(month: string, cents: number) {
+      commit((db) => {
+        guard(db);
+        if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Mês inválido.");
+        if (!Number.isInteger(cents) || cents < 0) throw new Error("Informe um valor válido.");
+        if (cents === 0) delete db.salesGoals[month]; else db.salesGoals[month] = cents;
+      });
+    },
+  },
+
+  prosthesis: {
+    async createLab(input: { name: string; phone?: string; notes?: string }) {
+      const lab = { id: uid(), ...normalizeLab(input) };
+      commit((db) => {
+        guard(db);
+        if (db.laboratories.some((l) => l.name.toLowerCase() === lab.name.toLowerCase())) throw new Error("Já existe um laboratório com esse nome.");
+        db.laboratories.push(lab);
+      });
+      return lab.id;
+    },
+    async updateLab(id: string, input: { name: string; phone?: string; notes?: string }) {
+      commit((db) => {
+        guard(db);
+        const l = db.laboratories.find((x) => x.id === id);
+        if (!l) throw new Error("Laboratório não encontrado.");
+        const n = normalizeLab(input);
+        if (db.laboratories.some((x) => x.id !== id && x.name.toLowerCase() === n.name.toLowerCase())) throw new Error("Já existe um laboratório com esse nome.");
+        Object.assign(l, { phone: undefined, notes: undefined }, n);
+      });
+    },
+    /** Os serviços do laboratório excluído ficam, só sem laboratório. */
+    async deleteLab(id: string) {
+      commit((db) => {
+        guard(db);
+        db.laboratories = db.laboratories.filter((x) => x.id !== id);
+        db.prosthesisJobs.forEach((j) => { if (j.laboratoryId === id) j.laboratoryId = undefined; });
+      });
+    },
+    async createJob(input: JobInput) {
+      const id = uid();
+      commit((db) => {
+        guard(db);
+        const f = normalizeJob(input);
+        if (!db.patients.some((p) => p.id === f.patientId)) throw new Error("Escolha o paciente.");
+        if (f.laboratoryId && !db.laboratories.some((l) => l.id === f.laboratoryId)) throw new Error("Laboratório não encontrado.");
+        const now = new Date().toISOString();
+        db.prosthesisJobs.push({ id, stage: "pre_lab", ...f, createdAt: now, updatedAt: now, stageChangedAt: now });
+        addProsthesisEvent(db, id, "system", "Criou este serviço", db.profile.professionalName || undefined);
+      });
+      return id;
+    },
+    async updateJob(id: string, input: JobInput) {
+      commit((db) => {
+        guard(db);
+        const j = db.prosthesisJobs.find((x) => x.id === id);
+        if (!j) throw new Error("Serviço não encontrado.");
+        const f = normalizeJob(input);
+        if (f.laboratoryId && !db.laboratories.some((l) => l.id === f.laboratoryId)) throw new Error("Laboratório não encontrado.");
+        if (f.isReturn && !j.isReturn) addProsthesisEvent(db, id, "system", `Marcado como retorno: ${f.returnReason}`, db.profile.professionalName || undefined);
+        Object.assign(j, { teeth: undefined, shade: undefined, laboratoryId: undefined, sentOn: undefined, dueOn: undefined, costCents: undefined, notes: undefined, label: undefined, returnReason: undefined }, f, { patientId: j.patientId, updatedAt: new Date().toISOString() });
+      });
+    },
+    async moveJob(id: string, stage: ProsthesisJob["stage"]) {
+      commit((db) => {
+        guard(db);
+        const j = db.prosthesisJobs.find((x) => x.id === id);
+        if (!j) throw new Error("Serviço não encontrado.");
+        moveProsthesis(db, j, stage, db.profile.professionalName || undefined);
+      });
+    },
+    async addComment(jobId: string, body: string) {
+      commit((db) => {
+        guard(db);
+        const text = body.trim();
+        if (!text) throw new Error("Escreva o comentário.");
+        if (text.length > MAX_COMMENT) throw new Error(`O comentário pode ter até ${MAX_COMMENT} caracteres.`);
+        if (!db.prosthesisJobs.some((x) => x.id === jobId)) throw new Error("Serviço não encontrado.");
+        addProsthesisEvent(db, jobId, "comment", text, db.profile.professionalName || undefined);
+      });
+    },
+    async deleteJob(id: string) {
+      commit((db) => {
+        guard(db);
+        db.prosthesisJobs = db.prosthesisJobs.filter((x) => x.id !== id);
+        db.prosthesisEvents = db.prosthesisEvents.filter((e) => e.jobId !== id);
+      });
+    },
+  },
+
   expenses: {
     async create(e: Omit<Expense, "id">) { commit((db) => { guard(db); db.expenses.push({ ...e, id: uid() }); }); },
     async setPaid(id: string, paid: boolean) { commit((db) => { guard(db); const e = db.expenses.find((x) => x.id === id); if (e) e.paid = paid; }); },
@@ -734,6 +927,8 @@ export const api: typeof localApi = remoteApi ? {
   waitlist: remoteApi.waitlist,
   recall: remoteApi.recall,
   expenses: remoteApi.expenses,
+  sales: remoteApi.sales,
+  prosthesis: remoteApi.prosthesis,
   clinicalNotes: remoteApi.clinicalNotes,
   prescriptions: remoteApi.prescriptions,
   medications: remoteApi.medications,

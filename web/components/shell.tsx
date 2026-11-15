@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutGrid, Stethoscope, FileText, ClipboardCheck, Users, CalendarDays, BarChart3, Tags,
-  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp,
+  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp, Handshake, FlaskConical,
 } from "lucide-react";
 import { cx } from "./ui";
 import { ToastProvider } from "./toast";
@@ -21,6 +21,8 @@ const NAV = [
   [
     { href: "/plano", label: "Plano de tratamento", icon: Stethoscope },
     { href: "/orcamentos", label: "Orçamentos", icon: FileText },
+    { href: "/vendas", label: "Vendas", icon: Handshake },
+    { href: "/protese", label: "Prótese", icon: FlaskConical },
     { href: "/atendimentos", label: "Atendimentos", icon: ClipboardCheck },
   ],
   [
@@ -34,7 +36,7 @@ const NAV = [
 ];
 
 const TITLES: [string, string][] = [
-  ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/atendimentos", "Atendimentos"],
+  ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Prótese"], ["/atendimentos", "Atendimentos"],
   ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"],
   ["/tabela", "Tabela de preços"], ["/ajustes/conta", "Sua assinatura"], ["/ajustes", "Ajustes"],
 ];

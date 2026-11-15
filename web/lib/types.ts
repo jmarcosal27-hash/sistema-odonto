@@ -329,6 +329,89 @@ export interface PatientFile {
   dataUrl?: string;
 }
 
+/** Etapa do funil de vendas. As quatro padrão têm `kind` e não podem ser excluídas nem mudar de tipo; as criadas pela clínica não têm. */
+export type SalesStageKind = "open" | "in_progress" | "won" | "lost";
+
+export interface SalesStage {
+  id: string;
+  name: string;
+  position: number;
+  kind?: SalesStageKind;
+}
+
+/** Oportunidade do funil. Orçamentos criam a sua automaticamente (`budgetId`); as demais são manuais. */
+export interface Opportunity {
+  id: string;
+  patientId: string;
+  stageId: string;
+  budgetId?: string;
+  title: string;
+  valueCents: number;
+  responsible?: string;
+  label?: string;
+  createdAt: string;
+  updatedAt: string;
+  stageChangedAt: string;
+}
+
+/** Comentário do usuário (até 255 caracteres) ou linha do histórico (mudança de etapa, criação). */
+export interface OpportunityEvent {
+  id: string;
+  opportunityId: string;
+  kind: "comment" | "stage" | "system";
+  body: string;
+  authorName?: string;
+  createdAt: string;
+}
+
+export const MAX_COMMENT = 255;
+
+/** Controle de prótese: trabalho enviado a um laboratório. A etapa é fixa (o fluxo é sempre o mesmo). */
+export type ProsthesisStage = "pre_lab" | "sent" | "lab" | "scheduled" | "done";
+export type ProsthesisKind = "crown" | "total" | "ppr" | "veneer" | "protocol" | "splint" | "other";
+
+export interface Laboratory {
+  id: string;
+  name: string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface ProsthesisJob {
+  id: string;
+  patientId: string;
+  stage: ProsthesisStage;
+  /** Profissional responsável (texto livre ou nome de um membro). */
+  professional: string;
+  description: string;
+  kind: ProsthesisKind;
+  /** Dente(s) ou região, texto livre curto. */
+  teeth?: string;
+  /** Cor ou escala. */
+  shade?: string;
+  laboratoryId?: string;
+  sentOn?: string; // yyyy-mm-dd
+  dueOn?: string; // previsão de retorno, yyyy-mm-dd
+  costCents?: number;
+  notes?: string;
+  label?: string;
+  /** Retrabalho: o serviço voltou para refazer ou ajustar, sempre com motivo. */
+  isReturn: boolean;
+  returnReason?: string;
+  createdAt: string;
+  updatedAt: string;
+  stageChangedAt: string;
+}
+
+export interface ProsthesisEvent {
+  id: string;
+  jobId: string;
+  kind: "comment" | "stage" | "system";
+  body: string;
+  authorName?: string;
+  createdAt: string;
+}
+
 export interface Db {
   version: number;
   patients: Patient[];
@@ -356,4 +439,12 @@ export interface Db {
   certificates: Certificate[];
   customDocuments: CustomDocument[];
   patientFiles: PatientFile[];
+  salesStages: SalesStage[];
+  opportunities: Opportunity[];
+  opportunityEvents: OpportunityEvent[];
+  /** Meta de vendas por mês ("yyyy-mm"), em centavos. */
+  salesGoals: Record<string, number>;
+  laboratories: Laboratory[];
+  prosthesisJobs: ProsthesisJob[];
+  prosthesisEvents: ProsthesisEvent[];
 }

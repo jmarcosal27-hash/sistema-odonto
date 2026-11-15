@@ -25,6 +25,7 @@ function Budgets() {
   const [q, setQ] = useState("");
   const [authorizing, setAuthorizing] = useState<Budget | null>(null);
   const highlight = params.get("abrir");
+  const onlyPatient = params.get("paciente"); // vem do funil de vendas: orçamentos de um paciente
 
   useEffect(() => {
     if (highlight) document.getElementById(`b-${highlight}`)?.scrollIntoView({ block: "center" });
@@ -35,10 +36,11 @@ function Budgets() {
     const n = q.trim().toLowerCase();
     return db.budgets
       .filter((b) => filter === "all" || b.status === filter)
+      .filter((b) => !onlyPatient || b.patientId === onlyPatient)
       .map((b) => ({ b, p: db.patients.find((x) => x.id === b.patientId) }))
       .filter(({ p }) => !n || p?.fullName.toLowerCase().includes(n))
       .sort((a, z) => z.b.presentedAt.localeCompare(a.b.presentedAt));
-  }, [db, filter, q]);
+  }, [db, filter, q, onlyPatient]);
 
   if (!db) return <PageSkeleton />;
   const open = db.budgets.filter((b) => b.status === "presented");
@@ -59,6 +61,12 @@ function Budgets() {
         <Kpi label="Taxa de aprovação" value={`${conversion}%`} sub="de todos os orçamentos" />
       </div>
 
+      {onlyPatient && (
+        <p role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-brand-soft px-4 py-2 text-sm">
+          Mostrando só os orçamentos de <strong>{db.patients.find((x) => x.id === onlyPatient)?.fullName ?? "um paciente"}</strong>.
+          <Link href="/orcamentos" className="font-semibold text-brand underline">Ver todos</Link>
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Segmented label="Situação" value={filter} onChange={setFilter}
           options={[{ value: "all", label: "Todos" }, { value: "presented", label: "Em aberto" }, { value: "authorized", label: "Aprovados" }, { value: "declined", label: "Recusados" }]} />
