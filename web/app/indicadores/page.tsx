@@ -51,7 +51,7 @@ export default function Page() {
         <Metric label="Faturado" value={money(k.billed)} help="Valor dos procedimentos concluídos no período, pagos ou não." />
         <Metric label="Recebido" value={money(k.received)} tone="success" help="Dinheiro que entrou: atendimentos avulsos pagos e parcelas recebidas." />
         <Metric label="Média por paciente" value={k.avgPerPayer === null ? "—" : money(k.avgPerPayer)} hint={k.avgPerPayer === null ? "sem pagamentos no período" : "entre quem pagou"} help="Recebido dividido pelo número de pacientes que pagaram algo no período." />
-        <Metric label="Inadimplência" value={money(k.overdue)} tone={k.overdue ? "danger" : undefined} hint="parcelas vencidas hoje" help="Soma das parcelas com vencimento passado e ainda não pagas." />
+        <Metric label="Inadimplência" value={money(k.overdue)} tone={k.overdue ? "danger" : undefined} hint="só o que já venceu" help="Soma das parcelas com vencimento passado e ainda não pagas. O “A receber” do Financeiro inclui também as parcelas que ainda vão vencer." />
         <Metric label="Taxa de falta" value={pct(k.noShowRate)} tone={k.noShowRate && k.noShowRate > 0.15 ? "danger" : undefined} hint={k.noShowRate === null ? "sem consultas no período" : "faltas ÷ consultas que aconteceriam"} help="Consultas marcadas como 'faltou' dividido por atendidas + faltas." />
         <Metric label="Conversão de orçamentos" value={pct(k.conversion)} hint={plural(k.budgetsCount, "apresentado", "apresentados")} help="Aprovados ÷ orçamentos já respondidos (aprovados + recusados) apresentados no período." />
         <Metric label="Consultas realizadas" value={k.visits} help="Compromissos com paciente marcados como atendidos no período." />

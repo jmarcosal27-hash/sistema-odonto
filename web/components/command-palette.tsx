@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarPlus, Search, UserPlus, UserRound } from "lucide-react";
+import { ArrowRight, CalendarPlus, Search, UserPlus, UserRound, CircleHelp } from "lucide-react";
+import { FAQ } from "./help-modal";
 import { useDb } from "@/lib/store";
 import { cx } from "./ui";
 
@@ -18,7 +19,7 @@ const PAGES: [string, string][] = [
 const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 /** Busca global (Ctrl+K ou /): pacientes, telas e as duas ações mais comuns do balcão. */
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({ open, onClose, onHelp }: { open: boolean; onClose: () => void; onHelp?: (question: string) => void }) {
   const db = useDb();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -40,13 +41,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       .map((p) => ({ id: p.id, label: p.fullName, hint: p.phone, href: `/pacientes/${p.id}`, icon: UserRound, group: "Pacientes" })) : [];
     const pages: Item[] = PAGES.filter(([l]) => !n || norm(l).includes(n)).slice(0, n ? 5 : 8)
       .map(([label, href]) => ({ id: href, label, href, icon: ArrowRight, group: "Ir para" }));
-    return [...patients, ...actions, ...pages];
+    const help: Item[] = n.length >= 3 ? FAQ.flatMap((g) => g.items).filter(([qq, a]) => norm(qq).includes(n) || norm(a).includes(n)).slice(0, 4)
+      .map(([qq]) => ({ id: "h-" + qq, label: qq, href: "#ajuda", icon: CircleHelp, group: "Ajuda" })) : [];
+    return [...patients, ...actions, ...pages, ...help];
   }, [q, db]);
 
   useEffect(() => { setSel(0); }, [q]);
   if (!open) return null;
 
-  const go = (it?: Item) => { if (!it) return; onClose(); router.push(it.href); };
+  const go = (it?: Item) => { if (!it) return; onClose(); if (it.href === "#ajuda") onHelp?.(it.label); else router.push(it.href); };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, items.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }

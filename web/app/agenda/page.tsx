@@ -148,8 +148,8 @@ export default function Page() {
             {a.forced && <Zap aria-hidden className="mr-0.5 inline size-3 text-warning" />}{a.forced && <span className="sr-only">Encaixe. </span>}
             {who}
           </span>
-          {height > 30 && <span className="block truncate text-[11px] leading-4 text-ink-muted"><span><span className="font-semibold text-ink">{a.time}</span>{height <= 64 && ` · ${STATUS_LABEL[a.status]}`} · {what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</span></span>}
-          {height > 64 && <span className="flex items-center gap-1 truncate text-[11px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
+          {height > 30 && <span className="block truncate text-[11px] leading-4 text-ink-muted"><span><span className="font-semibold text-ink">{a.time}</span>{view === "week" ? "" : <>{height <= 64 && ` · ${STATUS_LABEL[a.status]}`} · {what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</>}</span></span>}
+          {height > 64 && view !== "week" && <span className="flex items-center gap-1 truncate text-[11px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
           {col.mode === "all" && pro && <span aria-hidden className="absolute bottom-0.5 right-1 size-2.5 rounded-full" style={{ background: pro.color }} />}
         </button>
         <StatusMenu status={a.status} who={who} onPick={(s) => setStatus(a, s)} className={cx("absolute right-0 top-0 z-10 h-full max-h-[min(100%,2.75rem)] min-h-5", view === "week" ? "w-6" : "w-8")} />
@@ -245,7 +245,7 @@ export default function Page() {
             </div>
             <h2 className="text-sm font-semibold first-letter:uppercase flex-1 min-w-48">{label} <span className="font-normal text-ink-muted">· {plural(total, "compromisso", "compromissos")}</span></h2>
             <div className="flex flex-wrap items-center gap-2">
-            {view === "week" && <label className="flex min-h-10 items-center gap-1.5 text-xs"><input type="checkbox" className="size-5" checked={hideWeekend} onChange={(e) => setHideWeekend(e.target.checked)} />Ocultar fim de semana</label>}
+            {view === "week" && <label className="flex min-h-10 items-center gap-1.5 text-xs"><input type="checkbox" className="size-5" checked={hideWeekend} onChange={(e) => setHideWeekend(e.target.checked)} />Sem fim de semana</label>}
             {view === "day" && mobile && hasPros && (
               <Select aria-label="Profissional" className="!w-auto flex-1 min-w-36" value={mobilePros.some((c) => c.key === mobileProf) ? mobileProf : "all"} onChange={(e) => setMobileProf(e.target.value)}>
                 <option value="all">Todos os profissionais</option>
@@ -255,7 +255,7 @@ export default function Page() {
             <Segmented size="sm" label="Visualização" value={view} onChange={setView} options={[{ value: "day", label: view === "day" && hasPros ? "Dia por profissional" : "Dia" }, { value: "week", label: "Semana" }]} />
             <Segmented size="sm" label="Zoom da grade" value={zoom} onChange={setZoom} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }]} />
             <Button size="sm" variant="secondary" onClick={() => setBlockForm({ date: day })}><Lock aria-hidden className="size-4" />Bloquear</Button>
-            <Button size="sm" title="Atalho: N" aria-keyshortcuts="N" onClick={() => setForm({ preset: { date: day } })}><Plus className="size-4" />Nova consulta<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">N</kbd></Button>
+            <Button size="sm" title="Atalho: N" aria-keyshortcuts="N" onClick={() => setForm({ preset: { date: day } })}><Plus className="size-4" />Nova consulta</Button>
             </div>
           </div>
 

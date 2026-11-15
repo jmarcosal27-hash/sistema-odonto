@@ -64,7 +64,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       <Card className="flex flex-wrap items-center gap-4">
         <Avatar name={p.fullName} />
         <div className="flex-1 min-w-48">
-          <h2 className="sr-only">{p.fullName}</h2>
+          <h2 className="text-lg font-semibold leading-6 tracking-[-0.015em] break-words lg:sr-only">{p.fullName}</h2>
           <p className="text-sm text-ink-muted">{[a !== undefined && `${a} anos`, p.sex && SEX[p.sex], p.phone].filter(Boolean).join(" · ") || "Sem dados de contato"}</p>
           <div className="mt-1 flex flex-wrap gap-1">{p.archived && <Badge>Arquivado</Badge>}{inWaitlist && <Badge tone="info">Na lista de espera</Badge>}{{ in_treatment: <Badge tone="accent">Em tratamento</Badge>, open_budget: <Badge tone="warning">Orçamento em aberto</Badge>, seen: <Badge tone="success">Já atendido</Badge>, new: <Badge>Ainda não veio</Badge> }[status]}</div>
         </div>

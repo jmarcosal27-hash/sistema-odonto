@@ -39,9 +39,9 @@ export default function Page() {
         {!p.professionalName && <p className="rounded-md bg-warning-soft px-3 py-2 text-sm">Sem nome, o orçamento impresso sai sem identificação.</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Nome profissional">{(id) => <Input id={id} value={p.professionalName ?? ""} onChange={(e) => set({ professionalName: e.target.value })} placeholder="Ex.: Dra. Camila Rocha" />}</Field>
-          <Field label="CRO (opcional)">{(id) => <Input id={id} value={p.cro ?? ""} onChange={(e) => set({ cro: e.target.value })} />}</Field>
-          <Field label="UF do CRO" hint="Obrigatória para receitas e atestados.">{(id, d) => <Input id={id} aria-describedby={d} maxLength={2} value={p.croUf ?? ""} onChange={(e) => set({ croUf: e.target.value.toUpperCase().replace(/[^A-Z]/g, "") })} placeholder="SP" autoCapitalize="characters" />}</Field>
-          <Field label="CPF (opcional)">{(id) => <Input id={id} inputMode="numeric" autoComplete="off" value={maskCpf(p.cpf ?? "")} onChange={(e) => set({ cpf: e.target.value.replace(/D/g, "").slice(0, 11) })} />}</Field>
+          <Field label="CRO" hint="Obrigatório para receitas e atestados.">{(id, d) => <Input id={id} aria-describedby={d} inputMode="numeric" maxLength={8} value={p.cro ?? ""} onChange={(e) => set({ cro: e.target.value.replace(/\D/g, "") })} placeholder="Só números" />}</Field>
+          <Field label="UF do CRO" hint="Ex.: SP. Também sai nos documentos.">{(id, d) => <Input id={id} aria-describedby={d} maxLength={2} value={p.croUf ?? ""} onChange={(e) => set({ croUf: e.target.value.toUpperCase().replace(/[^A-Z]/g, "") })} placeholder="SP" autoCapitalize="characters" />}</Field>
+          <Field label="CPF (opcional)" error={p.cpf && p.cpf.replace(/\D/g, "").length > 0 && p.cpf.replace(/\D/g, "").length < 11 ? "CPF incompleto: são 11 números." : undefined}>{(id) => <Input id={id} inputMode="numeric" autoComplete="off" value={maskCpf(p.cpf ?? "")} onChange={(e) => set({ cpf: e.target.value.replace(/\D/g, "").slice(0, 11) })} />}</Field>
           <Field label="Data de nascimento (opcional)">{(id) => <Input id={id} type="date" value={p.birthDate ?? ""} onChange={(e) => set({ birthDate: e.target.value })} />}</Field>
           <Field label="Contato no documento" className="sm:col-span-2">{(id) => <Input id={id} value={p.contact ?? ""} onChange={(e) => set({ contact: e.target.value })} placeholder="Telefone e endereço do consultório" />}</Field>
         </div>

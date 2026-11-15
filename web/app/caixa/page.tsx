@@ -90,7 +90,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
         <Field label="De">{(id) => <Input id={id} type="date" value={from} max={to} onChange={(e) => e.target.value && (setFrom(e.target.value), setPreset("custom"))} />}</Field>
         <Field label="Até">{(id) => <Input id={id} type="date" value={to} min={from} onChange={(e) => e.target.value && (setTo(e.target.value), setPreset("custom"))} />}</Field>
         </>}
-        <Field label="Forma">{(id) => <Select id={id} value={method} onChange={(e) => setMethod(e.target.value as "" | CashMethod)}><option value="">Todas</option>{CASH_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</Select>}</Field>
+        <Field label="Forma de pagamento">{(id) => <Select id={id} value={method} onChange={(e) => setMethod(e.target.value as "" | CashMethod)}><option value="">Todas</option>{CASH_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</Select>}</Field>
         <Field label="Dentista">{(id) => <Select id={id} value={pro} onChange={(e) => setPro(e.target.value)}><option value="">Todos</option>{pros.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>}</Field>
       </div>
 

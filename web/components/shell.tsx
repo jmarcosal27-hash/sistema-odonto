@@ -59,6 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const remote = useRemoteState();
   const [drawer, setDrawer] = useState(false);
   const [help, setHelp] = useState(false);
+  const [helpQ, setHelpQ] = useState<string>();
   const [onboard, setOnboard] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [search, setSearch] = useState(false);
@@ -188,9 +189,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </li>
         </ul>
       </nav>
-      <CommandPalette open={search} onClose={() => setSearch(false)} />
+      <CommandPalette open={search} onClose={() => setSearch(false)} onHelp={(q) => { setHelpQ(q); setHelp(true); }} />
       <ConfirmHost />
-      <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
+      <HelpModal open={help} question={helpQ} onClose={() => { setHelp(false); setHelpQ(undefined); }} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>
   );

@@ -1,20 +1,21 @@
 "use client";
 
-import { ask } from "./confirm";
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
 import { dateBR, todayISO } from "@/lib/format";
 import type { ClinicalNote, Db } from "@/lib/types";
 import { Badge, Button, Card, ErrorNote, Field, Modal, Select, Textarea, Input } from "./ui";
-import { useAction } from "./toast";
+import { useToast } from "./toast";
+import { removeWithUndo, usePendingRemoval } from "@/lib/undo";
 
 /** Evolução clínica do paciente: notas por consulta, ligadas (ou não) a um atendimento. */
 export function ClinicalNotes({ db, patientId }: { db: Db; patientId: string }) {
-  const run = useAction();
+  const toast = useToast();
+  const pending = usePendingRemoval();
   const [editing, setEditing] = useState<ClinicalNote | "new" | null>(null);
   const notes = db.clinicalNotes
-    .filter((n) => n.patientId === patientId)
+    .filter((n) => n.patientId === patientId && !pending.has(n.id))
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   const treatmentName = (id?: string) => db.treatments.find((t) => t.id === id)?.procedureName;
   const readOnly = isReadOnly(db);
@@ -39,7 +40,7 @@ export function ClinicalNotes({ db, patientId }: { db: Db; patientId: string }) 
                 <span className="flex items-center gap-1">
                   <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(n)} aria-label={`Editar nota de ${dateBR(n.date)}`}><Pencil className="size-3.5" />Editar</Button>
                   <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir nota de ${dateBR(n.date)}`}
-                    onClick={async () => { if (await ask({ title: "Excluir esta nota de evolução?", body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true })) void run(() => api.clinicalNotes.remove(n.id), "Nota excluída."); }}>
+                    onClick={() => removeWithUndo(n.id, "Nota excluída.", () => api.clinicalNotes.remove(n.id), toast)}>
                     <Trash2 className="size-3.5" />Excluir
                   </Button>
                 </span>

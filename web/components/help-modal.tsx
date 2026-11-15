@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { ChevronDown, MessageCircle, Mail, Smartphone } from "lucide-react";
 import { Modal, Button, cx } from "./ui";
 
-const FAQ: { group: string; items: [string, string][] }[] = [
+export const FAQ: { group: string; items: [string, string][] }[] = [
   {
     group: "Começando",
     items: [
@@ -50,8 +50,8 @@ const SHORTCUTS: [string, string][] = [
   ["S", "Caixa: lançar saída"],
 ];
 
-function Item({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
+function Item({ q, a, initial }: { q: string; a: string; initial?: boolean }) {
+  const [open, setOpen] = useState(!!initial);
   const id = useId();
   return (
     <div className="rounded-md bg-surface-300">
@@ -66,7 +66,7 @@ function Item({ q, a }: { q: string; a: string }) {
   );
 }
 
-export function HelpModal({ open, onClose, onStartTour }: { open: boolean; onClose: () => void; onStartTour: () => void }) {
+export function HelpModal({ open, onClose, onStartTour, question }: { open: boolean; onClose: () => void; onStartTour: () => void; question?: string }) {
   return (
     <Modal open={open} onClose={onClose} title="Ajuda" subtitle="Respostas rápidas e contato direto.">
       <div className="space-y-5">
@@ -92,7 +92,7 @@ export function HelpModal({ open, onClose, onStartTour }: { open: boolean; onClo
         {FAQ.map((g) => (
           <section key={g.group} className="space-y-2">
             <h3 className="text-sm font-semibold text-ink-muted">{g.group}</h3>
-            {g.items.map(([q, a]) => <Item key={q} q={q} a={a} />)}
+            {g.items.map(([q, a]) => <Item key={q + (q === question ? "-open" : "")} q={q} a={a} initial={q === question} />)}
           </section>
         ))}
       </div>

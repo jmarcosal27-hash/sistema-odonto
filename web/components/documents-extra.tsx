@@ -1,13 +1,13 @@
 "use client";
 
-import { ask } from "./confirm";
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/store";
 import { todayISO } from "@/lib/format";
 import type { CustomDocument, Db, Medication } from "@/lib/types";
 import { Badge, Button, ErrorNote, Field, Input, Modal, Segmented, Textarea, Toggle } from "./ui";
-import { useAction } from "./toast";
+import { useAction, useToast } from "./toast";
+import { removeWithUndo, usePendingRemoval } from "@/lib/undo";
 import { DOCUMENT_NOTICE } from "./documents";
 
 /** Documento de texto livre: título e corpo próprios, impresso como minuta. */
@@ -52,7 +52,8 @@ export function CustomDocumentForm({ patientId, doc, onClose }: { patientId: str
 
 /** Editar e excluir medicamentos e modelos de receita da clínica. A permissão final é do banco (dono ou autor). */
 export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly: boolean; onClose: () => void }) {
-  const run = useAction();
+  const toast = useToast();
+  const pending = usePendingRemoval();
   const [editing, setEditing] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
 
@@ -64,7 +65,7 @@ export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly
           <h3 id="meds-h" className="font-semibold">Medicamentos da clínica</h3>
           {!db.medications.length ? <p className="mt-2 text-sm text-ink-muted">Nenhum ainda. Os nomes que você usar numa receita aparecem aqui.</p> : (
             <ul className="mt-2 divide-y divide-border">
-              {db.medications.map((m) => editing === m.id
+              {db.medications.filter((m) => !pending.has(m.id)).map((m) => editing === m.id
                 ? <li key={m.id} className="py-3"><MedicationEdit med={m} onDone={() => setEditing(null)} /></li>
                 : (
                   <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
@@ -76,7 +77,7 @@ export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly
                     <span className="flex gap-1">
                       <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(m.id)} aria-label={`Editar ${m.name}`}><Pencil className="size-3.5" />Editar</Button>
                       <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir ${m.name}`}
-                        onClick={() => void ask({ title: `Excluir "${m.name}"?`, body: "O medicamento sai da lista. Receitas já emitidas não mudam.", confirmLabel: "Excluir", danger: true }).then((ok) => { if (ok) void run(() => api.medications.remove(m.id), "Medicamento excluído."); })}><Trash2 className="size-3.5" />Excluir</Button>
+                        onClick={() => removeWithUndo(m.id, `"${m.name}" excluído.`, () => api.medications.remove(m.id), toast)}><Trash2 className="size-3.5" />Excluir</Button>
                     </span>
                   </li>
                 ))}
@@ -88,7 +89,7 @@ export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly
           <h3 id="tpl-h" className="font-semibold">Modelos de receita</h3>
           {!db.prescriptionTemplates.length ? <p className="mt-2 text-sm text-ink-muted">Nenhum modelo. Salve um pela tela de nova receita.</p> : (
             <ul className="mt-2 divide-y divide-border">
-              {db.prescriptionTemplates.map((t) => renaming === t.id
+              {db.prescriptionTemplates.filter((t) => !pending.has(t.id)).map((t) => renaming === t.id
                 ? <li key={t.id} className="py-3"><TemplateRename id={t.id} name={t.name} onDone={() => setRenaming(null)} /></li>
                 : (
                   <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
@@ -96,7 +97,7 @@ export function MedicationsManager({ db, readOnly, onClose }: { db: Db; readOnly
                     <span className="flex gap-1">
                       <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setRenaming(t.id)} aria-label={`Renomear ${t.name}`}><Pencil className="size-3.5" />Renomear</Button>
                       <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir modelo ${t.name}`}
-                        onClick={() => void ask({ title: `Excluir o modelo "${t.name}"?`, body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true }).then((ok) => { if (ok) void run(() => api.prescriptionTemplates.remove(t.id), "Modelo excluído."); })}><Trash2 className="size-3.5" />Excluir</Button>
+                        onClick={() => removeWithUndo(t.id, `Modelo "${t.name}" excluído.`, () => api.prescriptionTemplates.remove(t.id), toast)}><Trash2 className="size-3.5" />Excluir</Button>
                     </span>
                   </li>
                 ))}
