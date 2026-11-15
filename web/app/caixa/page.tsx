@@ -277,8 +277,15 @@ function Commission({ db, readOnly, staff }: { db: Db; readOnly: boolean; staff:
               <ul className="mt-3 divide-y divide-border text-sm">
                 {mine.map((l) => (
                   <li key={l.entry.key} className="py-2 flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="min-w-0">{dateBR(l.entry.date)} · {patientName(db, l.entry.patientId) ?? "Paciente"}{l.entry.procedure ? ` · ${l.entry.procedure}` : ""}</span>
-                    <span className="tabular-nums text-ink-muted">{money(l.entry.amountCents)} × {pct(l.percent)}{l.labCostPercent ? ` (−${pct(l.labCostPercent)} custo)` : ""} = <b className="text-ink">{money(l.cents)}</b> {l.paid ? <Badge tone="success">Paga</Badge> : <Badge tone="warning">Pendente</Badge>}</span>
+                    <span className="min-w-0">{dateBR(l.entry.date)} · {patientName(db, l.entry.patientId) ?? "Paciente"}{l.entry.parts ? ` · ${l.entry.parts.map((p) => p.procedure).join(", ")}` : l.entry.procedure ? ` · ${l.entry.procedure}` : ""}</span>
+                    {l.parts ? (
+                      // Procedimentos com regras diferentes: parte de cada um (proporcional ao preço) × a regra dele.
+                      <span className="tabular-nums text-ink-muted">
+                        {l.parts.map((p) => `${p.procedure ?? "Outros"}: ${money(p.amountCents)} × ${pct(p.percent)}${p.labCostPercent ? ` (−${pct(p.labCostPercent)} custo)` : ""}`).join(" + ")} = <b className="text-ink">{money(l.cents)}</b> {l.paid ? <Badge tone="success">Paga</Badge> : <Badge tone="warning">Pendente</Badge>}
+                      </span>
+                    ) : (
+                      <span className="tabular-nums text-ink-muted">{money(l.entry.amountCents)} × {pct(l.percent)}{l.labCostPercent ? ` (−${pct(l.labCostPercent)} custo)` : ""} = <b className="text-ink">{money(l.cents)}</b> {l.paid ? <Badge tone="success">Paga</Badge> : <Badge tone="warning">Pendente</Badge>}</span>
+                    )}
                   </li>
                 ))}
               </ul>

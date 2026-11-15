@@ -17,10 +17,25 @@ export function periodFor(kind: "month" | "30d" | "year", ref = todayISO()): [st
   return [`${y}-${m}-01`, `${y}-${m}-${last}`, "Este mês"];
 }
 
-/** Dinheiro que entrou: atendimentos avulsos recebidos + parcelas pagas. */
+/** Recebimentos estornados no Caixa (o estorno marca cashReceipts, não apaga a parcela nem o atendimento). */
+function reversedKeys(db: Pick<Db, "cashReceipts">) {
+  return new Set((db.cashReceipts ?? []).filter((m) => m.reversedAt).map((m) => `${m.sourceType}:${m.sourceId}`));
+}
+/** Parcelas pagas que valem como dinheiro recebido (sem as estornadas). Mesma regra do Caixa. */
+export function paidInstallments(db: Pick<Db, "installments" | "cashReceipts">) {
+  const rev = reversedKeys(db);
+  return db.installments.filter((i) => !!i.paidAt && !rev.has(`installment:${i.id}`));
+}
+/** Atendimentos avulsos recebidos que valem como dinheiro recebido (sem os estornados). */
+export function receivedTreatments(db: Pick<Db, "treatments" | "cashReceipts">) {
+  const rev = reversedKeys(db);
+  return db.treatments.filter((t) => t.paymentStatus === "received" && !rev.has(`treatment:${t.id}`));
+}
+
+/** Dinheiro que entrou: atendimentos avulsos recebidos + parcelas pagas, sem os estornados no Caixa. */
 export function received(db: Db, from: string, to: string) {
-  const loose = db.treatments.filter((t) => t.paymentStatus === "received" && inPeriod(t.performedAt, from, to)).reduce((s, t) => s + t.priceCents, 0);
-  const inst = db.installments.filter((i) => inPeriod(i.paidAt, from, to)).reduce((s, i) => s + i.amountCents, 0);
+  const loose = receivedTreatments(db).filter((t) => inPeriod(t.performedAt, from, to)).reduce((s, t) => s + t.priceCents, 0);
+  const inst = paidInstallments(db).filter((i) => inPeriod(i.paidAt, from, to)).reduce((s, i) => s + i.amountCents, 0);
   return loose + inst;
 }
 
@@ -57,8 +72,8 @@ export function monthSummary(db: Db, ym: string) {
 export function indicators(db: Db, from: string, to: string) {
   const rec = received(db, from, to);
   const payers = new Set([
-    ...db.treatments.filter((t) => t.paymentStatus === "received" && inPeriod(t.performedAt, from, to)).map((t) => t.patientId),
-    ...db.installments.filter((i) => inPeriod(i.paidAt, from, to)).map((i) => i.patientId),
+    ...receivedTreatments(db).filter((t) => inPeriod(t.performedAt, from, to)).map((t) => t.patientId),
+    ...paidInstallments(db).filter((i) => inPeriod(i.paidAt, from, to)).map((i) => i.patientId),
   ]);
   const appts = db.appointments.filter((a) => a.patientId && inPeriod(a.date, from, to) && a.date <= todayISO());
   const done = appts.filter((a) => a.status === "done").length;

@@ -56,6 +56,13 @@ function mapProcedures(v: unknown): AppointmentProcedure[] | undefined {
   return v.map((p: Row) => ({ name: p.name as string, priceCents: p.price_cents as number, durationMinutes: p.duration_minutes as number, procedureId: s(p.procedure_id) }));
 }
 
+/** Tabela inexistente (migration não aplicada): PostgREST devolve PGRST205; o Postgres, 42P01. */
+export function isMissingTable(e: { code?: string; raw?: string; message?: string } | null | undefined) {
+  if (!e) return false;
+  if (e.code === "PGRST205" || e.code === "42P01") return true;
+  return /could not find the table|relation .* does not exist/i.test(e.raw ?? e.message ?? "");
+}
+
 const PAGE = 1000;
 const NO_ROWS = "Sem permissão para isso, ou o item já não existe. Só o dono ou quem criou pode alterar ou excluir.";
 
@@ -66,7 +73,7 @@ async function loadAll(sb: SupabaseClient, table: string, clinicId: string, orde
     const base = sb.from(table).select("*").eq("clinic_id", clinicId);
     const ordered = order.reduce((b, [col, asc]) => b.order(col, { ascending: asc }), base);
     const { data, error } = await ordered.range(from, from + PAGE - 1);
-    if (error) throw friendly(error);
+    if (error) throw Object.assign(friendly(error), { code: error.code, raw: error.message });
     out.push(...((data ?? []) as Row[]));
     if (!data || data.length < PAGE) return out;
   }
@@ -83,8 +90,12 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const c = m.clinic_id as string;
   const by = (t: string, order?: [string, boolean][]) => loadAll(sb, t, c, order);
 
-  // Funil de vendas: se a migration de vendas ainda não foi aplicada, o resto do app segue funcionando e /vendas avisa.
-  const optional = (t: string, order?: [string, boolean][]) => by(t, order).catch(() => [] as Row[]);
+  // Módulos da Onda C: se a migration ainda não foi aplicada (tabela não existe), o resto do app segue funcionando
+  // e a tela do módulo avisa. Qualquer outro erro (rede, permissão, coluna) sobe: lista vazia esconderia saldo errado.
+  const optional = (t: string, order?: [string, boolean][]) => by(t, order).catch((e: { code?: string; raw?: string }) => {
+    if (isMissingTable(e)) return [] as Row[];
+    throw e;
+  });
 
   const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files, stages, opps, oppEvents, goals, labs, pjobs, pevents, pros, tblocks, cmov, crec, cdays, crules, cpay, cpitems, insR, insPR, bbR, biR] =
     await Promise.all([
@@ -185,7 +196,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
     cashMovements: (cmov as Row[]).map((r): CashMovement => ({
       id: r.id as string, kind: r.kind as CashMovement["kind"], date: r.occurred_on as string, amountCents: r.amount_cents as number, method: r.method as CashMethod,
       category: r.category as string, description: s(r.description), patientId: s(r.patient_id), professionalId: s(r.professional_id), payoutId: s(r.payout_id),
-      reversedAt: s(r.reversed_at), reversalReason: s(r.reversal_reason),
+      billingBatchId: s(r.billing_batch_id), reversedAt: s(r.reversed_at), reversalReason: s(r.reversal_reason),
     })),
     cashReceipts: (crec as Row[]).map((r): CashReceiptMeta => ({
       id: r.id as string, sourceType: r.source_type as CashReceiptMeta["sourceType"], sourceId: r.source_id as string, professionalId: s(r.professional_id),
@@ -573,12 +584,15 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         const b = db.billingBatches.find((x) => x.id === it.batchId);
         if (!b?.sentOn) throw new Error("Marque o lote como enviado antes de registrar pagamento.");
         const status = itemStatus(it.billedCents, f.paidCents, f.glossCents);
+        // O banco recalcula o status do item e do lote (gatilhos), enxergando todos os itens mesmo no modo dividido.
         const rows = await q(sb.from("billing_items").update({ paid_cents: f.paidCents, gloss_cents: f.glossCents, gloss_reason: f.glossCents > 0 ? f.glossReason?.trim().slice(0, 300) : null, status }).eq("id", id).select("id"));
         if (!rows?.length) throw new Error("Sem permissão para isso.");
-        const items = db.billingItems.filter((i) => i.batchId === b.id).map((i) => (i.id === id ? { ...i, status } : i));
-        await q(sb.from("billing_batches").update({ status: batchStatus(b.sentOn, items) }).eq("id", b.id));
       }),
-      setCashed: (id: string, cashedCents: number) => run(async () => { await q(ctx().sb.from("billing_batches").update({ cashed_cents: cashedCents }).eq("id", id)); }),
+      /** Lança no caixa o que o convênio pagou e ainda não entrou. O banco trava o lote e calcula o valor: nunca duplica. */
+      cashBatch: (id: string) => run(async () => {
+        const { sb } = ctx();
+        return (await q(sb.rpc("cash_billing_batch", { p_batch: id, p_on: todayISO() }))) as number;
+      }),
       removeBatch: (id: string) => run(async () => {
         const rows = await q(ctx().sb.from("billing_batches").delete().eq("id", id).select("id"));
         if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica exclui lotes.");
@@ -630,22 +644,15 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
           { onConflict: "clinic_id,professional_id,procedure_key" }));
       }),
       removeRule: (id: string) => run(async () => { await q(ctx().sb.from("commission_rules").delete().eq("id", id)); }),
-      // Três gravações em sequência (pagamento, itens, saída). Os itens têm índice único: um recebimento nunca entra em dois pagamentos.
+      // Uma transação no banco (RPC pay_commission): pagamento, itens e saída do caixa entram juntos ou nada entra.
+      // Os itens têm índice único: um recebimento nunca entra em dois pagamentos.
       payCommission: (p: { professionalId: string; periodFrom: string; periodTo: string; paidOn: string; method: CashMethod; items: CommissionPayoutItem[] }) => run(async () => {
         const { sb, session, db } = ctx();
         const total = p.items.reduce((t, i) => t + i.amountCents, 0);
         if (!p.items.length || total <= 0) throw new Error("Nada a pagar.");
-        const pro = db.professionals.find((x) => x.id === p.professionalId);
-        if (!pro) throw new Error("Dentista não encontrado.");
-        const payout = (await q(sb.from("commission_payouts").insert({ clinic_id: session.clinicId, professional_id: pro.id, professional_name: pro.name, period_from: p.periodFrom, period_to: p.periodTo, amount_cents: total, paid_on: p.paidOn }).select("id").single())) as Row;
-        const pid = payout.id as string;
-        try {
-          await q(sb.from("commission_payout_items").insert(p.items.map((i) => ({ clinic_id: session.clinicId, payout_id: pid, source_type: i.sourceType, source_id: i.sourceId, amount_cents: i.amountCents }))));
-        } catch (e) {
-          throw new Error(/duplicate|já existe|Esse registro/i.test((e as Error).message) ? "Algum recebimento já teve a comissão paga. Atualize a tela." : (e as Error).message);
-        }
-        await q(sb.from("cash_movements").insert({ clinic_id: session.clinicId, kind: "out", occurred_on: p.paidOn, amount_cents: total, method: p.method, category: "Comissão",
-          description: `Comissão de ${pro.name} (${p.periodFrom} a ${p.periodTo})`, professional_id: pro.id, payout_id: pid }));
+        if (!db.professionals.some((x) => x.id === p.professionalId)) throw new Error("Dentista não encontrado.");
+        await q(sb.rpc("pay_commission", { p_clinic: session.clinicId, p_professional: p.professionalId, p_period_from: p.periodFrom, p_period_to: p.periodTo,
+          p_paid_on: p.paidOn, p_method: p.method, p_items: p.items.map((i) => ({ source_type: i.sourceType, source_id: i.sourceId, amount_cents: i.amountCents })) }));
       }),
     },
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plus, Archive, Hourglass } from "lucide-react";
 import { useDb, api, patientStatus, PAYMENT_METHODS } from "@/lib/store";
 import { age, dateBR, dateShort, money, todayISO, whatsappLink } from "@/lib/format";
+import { paidInstallments, receivedTreatments } from "@/lib/finance";
 import { Avatar, Badge, Button, Card, Empty, Kpi, PageSkeleton, Toggle } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
 import { AppointmentForm } from "@/components/appointment-form";
@@ -34,7 +35,9 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const upcoming = db.appointments.filter((a) => a.patientId === id && a.date >= todayISO() && a.status !== "cancelled").sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
   const events = db.events.filter((e) => e.patientId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const installments = db.installments.filter((i) => i.patientId === id).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const paid = treatments.filter((t) => t.paymentStatus === "received").reduce((s, t) => s + t.priceCents, 0) + installments.filter((i) => i.paidAt).reduce((s, i) => s + i.amountCents, 0);
+  // Pago = sem os recebimentos estornados no Caixa (mesma regra de Financeiro e Indicadores).
+  const paid = receivedTreatments({ treatments, cashReceipts: db.cashReceipts }).reduce((s, t) => s + t.priceCents, 0)
+    + paidInstallments({ installments, cashReceipts: db.cashReceipts }).reduce((s, i) => s + i.amountCents, 0);
   const due = treatments.filter((t) => t.paymentStatus === "pending").reduce((s, t) => s + t.priceCents, 0) + installments.filter((i) => !i.paidAt).reduce((s, i) => s + i.amountCents, 0);
   const inWaitlist = db.waitlist.some((w) => w.patientId === id && (w.status === "waiting" || w.status === "contacted"));
   const waiting = budgets.filter((b) => b.status === "presented").reduce((s, b) => s + b.totalCents, 0);

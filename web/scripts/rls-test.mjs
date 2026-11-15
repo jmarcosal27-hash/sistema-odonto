@@ -1036,6 +1036,32 @@ check(!cpiE2, "comissão: item de recebimento real entra no pagamento");
 const { error: cpiE3 } = await a.from("commission_payout_items").insert({ clinic_id: clinicA, payout_id: cpo.id, source_type: "installment", source_id: instRows[0].id, amount_cents: 100 });
 check(!!cpiE3, "comissão: o mesmo recebimento NÃO entra em dois pagamentos");
 
+// Pagamento de comissão numa transação só (migration 20261117000001, RPC pay_commission)
+// parcelas do orçamento que ainda não entraram em nenhum pagamento de comissão (o bloco acima já usou uma)
+const { data: usedSrc } = await admin.from("commission_payout_items").select("source_id").eq("clinic_id", clinicA);
+const { data: instAllRaw } = await a.from("installments").select("id").eq("budget_id", budgetId).order("number");
+const instAll = [null, ...instAllRaw.filter((i) => !usedSrc.some((u) => u.source_id === i.id))]; // instAll[1] e [2] livres
+const payArgs = (items, o = {}) => ({ p_clinic: clinicA, p_professional: pro1.id, p_period_from: "2026-12-01", p_period_to: "2026-12-31", p_paid_on: "2026-12-05", p_method: "pix",
+  p_items: items.map((id) => ({ source_type: "installment", source_id: id, amount_cents: 700 })), ...o });
+const countPayouts = async () => (await admin.from("commission_payouts").select("id", { count: "exact", head: true }).eq("clinic_id", clinicA)).count;
+const before = await countPayouts();
+const { data: rpcPid, error: rpcE1 } = await a.rpc("pay_commission", payArgs([instAll[1].id]));
+check(!rpcE1 && !!rpcPid, "comissão (RPC): dono paga comissão de uma parcela");
+const { data: rpcMov } = await admin.from("cash_movements").select("kind,amount_cents,category").eq("payout_id", rpcPid);
+const { data: rpcItems } = await admin.from("commission_payout_items").select("id").eq("payout_id", rpcPid);
+check(rpcMov?.length === 1 && rpcMov[0].kind === "out" && rpcMov[0].amount_cents === 700 && rpcItems?.length === 1, "comissão (RPC): pagamento, item e saída do caixa gravados juntos");
+const { error: rpcE2 } = await a.rpc("pay_commission", payArgs([instAll[2].id, instAll[1].id]));
+const { data: inst2Paid } = await admin.from("commission_payout_items").select("id").eq("source_id", instAll[2].id);
+check(!!rpcE2 && (await countPayouts()) === before + 1 && (inst2Paid?.length ?? 0) === 0,
+  "comissão (RPC): recebimento já pago faz TUDO voltar (sem pagamento órfão, sem item da outra parcela)");
+const { error: rpcE3 } = await rcp.rpc("pay_commission", payArgs([instAll[2].id]));
+check(!!rpcE3, "comissão (RPC): recepção NÃO paga comissão");
+const { error: rpcE4 } = await b.rpc("pay_commission", payArgs([instAll[2].id]));
+check(!!rpcE4, "comissão (RPC): B NÃO paga comissão na clínica A");
+const { error: rpcE5 } = await a.rpc("pay_commission", payArgs([instAll[2].id], { p_items: [{ source_type: "installment", source_id: instAll[2].id, amount_cents: -5 }] }));
+check(!!rpcE5, "comissão (RPC): valor negativo é recusado");
+check((await countPayouts()) === before + 1, "comissão (RPC): tentativas recusadas não deixam nada gravado");
+
 }
 // Convênios e faturamento (migration 20261116000007): isolamento entre clínicas, integridade e só-dono-apaga
 const { data: insA, error: insE1 } = await a.from("insurers").insert({ clinic_id: clinicA, name: "Convênio A" }).select("id").single();
@@ -1078,6 +1104,56 @@ check((bbSee?.length ?? 0) === 0 && (biSee?.length ?? 0) === 0, "B NÃO enxerga 
 const { data: insMove } = await a.from("insurers").update({ clinic_id: clinicB }).eq("id", insA.id).select("id");
 check(!insMove || insMove.length === 0, "A NÃO move convênio para a clínica B");
 // Papel que não é dono (dentista/recepção) lê e escreve, mas não apaga: coberto pelo teste de papéis do bloco de prótese (mesma regra has_role owner).
+
+// Correções financeiras (migration 20261117000001): status no banco, caixa do convênio uma vez só, modo dividido
+{
+  const { data: biForge } = await a.from("billing_items").update({ status: "paid" }).eq("id", bi1.id).select("status").single();
+  check(biForge?.status === "partial", `status do item é calculado no banco (ignora o enviado) → ${biForge?.status}`);
+  const { error: ccE1 } = await a.from("billing_batches").update({ cashed_cents: 999999 }).eq("id", bb1.id);
+  check(!!ccE1, "valor lançado no caixa NÃO muda por update direto no lote");
+  const { error: ccE2 } = await a.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-10" });
+  check(!!ccE2, "lote não enviado NÃO vai para o caixa");
+  const { data: bbSent } = await a.from("billing_batches").update({ sent_on: "2026-12-05", status: "draft" }).eq("id", bb1.id).select("status").single();
+  check(bbSent?.status === "partial", `status do lote é calculado no banco a partir dos itens → ${bbSent?.status}`);
+  const { error: ccE3 } = await rcp.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-10" });
+  check(!!ccE3, "recepção NÃO lança repasse de convênio no caixa");
+  const { error: ccE4 } = await b.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-10" });
+  check(!!ccE4, "B NÃO lança repasse de lote da clínica A");
+  const { data: cashed1, error: ccE5 } = await a.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-10" });
+  check(!ccE5 && cashed1 === 6000, `dono lança no caixa o que o convênio pagou → ${cashed1}`);
+  const { error: ccE6 } = await a.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-10" });
+  check(!!ccE6, "lançar de novo sem valor novo é recusado (não duplica)");
+  const { error: ccE7 } = await a.from("cash_movements").insert({ clinic_id: clinicA, kind: "in", amount_cents: 100, method: "insurance", category: "Convênio", billing_batch_id: bb1.id });
+  check(!!ccE7, "entrada ligada a lote NÃO é criada direto (só pela função)");
+  // duas chamadas ao mesmo tempo: só uma lança
+  const { data: bi2 } = await a.from("billing_items").insert({ clinic_id: clinicA, batch_id: bb1.id, patient_id: pat.id, procedure_name: "Consulta", performed_on: "2026-11-12", billed_cents: 5000 }).select("id").single();
+  await a.from("billing_items").update({ paid_cents: 5000, gloss_cents: 0 }).eq("id", bi2.id);
+  const both = await Promise.all([a.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-11" }), a.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-11" })]);
+  const { data: bbMov } = await admin.from("cash_movements").select("id,amount_cents,reversed_at").eq("billing_batch_id", bb1.id);
+  check(both.filter((r) => !r.error).length === 1 && bbMov?.reduce((s, m) => s + m.amount_cents, 0) === 11000, "duas chamadas simultâneas: só uma lança, total 11000 no caixa");
+  const { data: bbNow } = await a.from("billing_batches").select("cashed_cents").eq("id", bb1.id).single();
+  check(bbNow?.cashed_cents === 11000, `lote registra o total lançado → ${bbNow?.cashed_cents}`);
+  const last = bbMov.find((m) => m.amount_cents === 5000);
+  await a.from("cash_movements").update({ reversed_at: new Date().toISOString(), reversal_reason: "Repasse devolvido" }).eq("id", last.id);
+  const { data: bbRev } = await a.from("billing_batches").select("cashed_cents").eq("id", bb1.id).single();
+  check(bbRev?.cashed_cents === 6000, `estornar a entrada devolve o valor ao "a lançar" do lote → ${bbRev?.cashed_cents}`);
+  const { data: cashed2, error: ccE8 } = await a.rpc("cash_billing_batch", { p_batch: bb1.id, p_on: "2026-12-12" });
+  check(!ccE8 && cashed2 === 5000, "depois do estorno, o valor pode ser lançado de novo");
+
+  // modo dividido: C (dentista) não vê nem fatura paciente de outro dentista
+  await a.from("clinics").update({ practice_mode: "split" }).eq("id", clinicA);
+  const { data: cBi } = await c.from("billing_items").select("id").eq("batch_id", bb1.id);
+  check((cBi?.length ?? 0) === 0, "split: C NÃO vê itens de faturamento de paciente de outro dentista");
+  const { error: cBiIns } = await c.from("billing_items").insert({ clinic_id: clinicA, batch_id: bb1.id, patient_id: pat.id, procedure_name: "X", performed_on: "2026-11-10", billed_cents: 100 });
+  check(!!cBiIns, "split: C NÃO fatura paciente de outro dentista");
+  const { data: cBiUp } = await c.from("billing_items").update({ paid_cents: 0, gloss_cents: 0 }).eq("id", bi1.id).select("id");
+  check(!cBiUp || cBiUp.length === 0, "split: C NÃO altera item de paciente de outro dentista");
+  const { data: cOwnBi, error: cBiOwn } = await c.from("billing_items").insert({ clinic_id: clinicA, batch_id: bb1.id, patient_id: cPat.id, procedure_name: "Consulta C", performed_on: "2026-11-11", billed_cents: 3000 }).select("id").single();
+  check(!cBiOwn && !!cOwnBi, "split: C fatura o próprio paciente");
+  const { data: bbSplit } = await a.from("billing_batches").select("status").eq("id", bb1.id).single();
+  check(bbSplit?.status === "partial", `status do lote considera todos os itens, mesmo com item novo do C → ${bbSplit?.status}`);
+  await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
+}
 
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);

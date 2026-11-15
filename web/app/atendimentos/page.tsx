@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useDb, api, stalledTreatments } from "@/lib/store";
 import { dateBR, money, todayISO } from "@/lib/format";
+import { receivedTreatments } from "@/lib/finance";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Select } from "@/components/ui";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useAction } from "@/components/toast";
@@ -37,7 +38,8 @@ export default function Page() {
   }, [db, year, month, allTime, clinical, pay, q]);
 
   if (!db) return <PageSkeleton />;
-  const received = rows.filter((r) => r.t.paymentStatus === "received").reduce((s, r) => s + r.t.priceCents, 0);
+  const ok = new Set(receivedTreatments(db).map((t) => t.id)); // sem os estornados no Caixa
+  const received = rows.filter((r) => ok.has(r.t.id)).reduce((s, r) => s + r.t.priceCents, 0);
   const pending = rows.filter((r) => r.t.paymentStatus === "pending").reduce((s, r) => s + r.t.priceCents, 0);
   const stalled = stalledTreatments(db).length;
   const inProgress = db.treatments.filter((t) => t.clinicalStatus === "in_progress").length;

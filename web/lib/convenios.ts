@@ -34,6 +34,16 @@ export function batchTotals(items: BillingItem[]) {
   return { billed, paid, gloss, open: Math.max(0, billed - paid - gloss) };
 }
 
+/**
+ * Quanto do lote já entrou no caixa: soma das entradas ligadas a ele e não estornadas.
+ * Lote antigo (antes do vínculo billingBatchId) não tem entrada ligada: vale o cashedCents gravado.
+ */
+export function batchCashed(db: Pick<Db, "cashMovements" | "billingBatches">, batchId: string) {
+  const linked = db.cashMovements.filter((m) => m.billingBatchId === batchId && m.kind === "in");
+  if (!linked.length) return db.billingBatches.find((b) => b.id === batchId)?.cashedCents ?? 0;
+  return linked.filter((m) => !m.reversedAt).reduce((s, m) => s + m.amountCents, 0);
+}
+
 export function monthEnd(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
 }

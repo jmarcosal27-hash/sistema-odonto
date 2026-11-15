@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, Send, Trash2, Wallet } from "lucide-react";
 import { api } from "@/lib/store";
-import { batchCsv, batchTotals, BATCH_STATUS_LABEL, eligibleTreatments, insurerPriceFor, ITEM_STATUS_LABEL } from "@/lib/convenios";
+import { batchCashed, batchCsv, batchTotals, BATCH_STATUS_LABEL, eligibleTreatments, insurerPriceFor, ITEM_STATUS_LABEL } from "@/lib/convenios";
 import { dateBR, money, parseMoney, todayISO } from "@/lib/format";
 import type { BillingBatch, BillingBatchStatus, BillingItem, Db } from "@/lib/types";
 import { Badge, Button, Card, Empty, Field, Input, Kpi, Select } from "./ui";
@@ -143,7 +143,8 @@ function BatchDetail({ db, batch, run, onClose }: { db: Db; batch: BillingBatch;
   const t = batchTotals(items);
   const [protocol, setProtocol] = useState(batch.protocol ?? "");
   const [sentOn, setSentOn] = useState(batch.sentOn ?? todayISO());
-  const pendingCash = t.paid - batch.cashedCents;
+  const pendingCash = t.paid - batchCashed(db, batch.id);
+  const [cashing, setCashing] = useState(false);
 
   const download = () => {
     const url = URL.createObjectURL(new Blob([batchCsv(db, batch)], { type: "text/csv;charset=utf-8" }));
@@ -151,12 +152,12 @@ function BatchDetail({ db, batch, run, onClose }: { db: Db; batch: BillingBatch;
     a.href = url; a.download = `faturamento-${(ins?.name ?? "convenio").toLowerCase().replace(/\W+/g, "-")}-${batch.year}-${String(batch.month).padStart(2, "0")}.csv`;
     a.click(); URL.revokeObjectURL(url);
   };
-  const toCash = () => run(async () => {
-    if (!api.cash) throw new Error("O Caixa não está disponível.");
-    await api.cash.addMovement({ kind: "in", date: todayISO(), amountCents: pendingCash, method: "insurance", category: "Convênio",
-      description: `${ins?.name ?? "Convênio"} — lote ${String(batch.month).padStart(2, "0")}/${batch.year}${batch.protocol ? ` (protocolo ${batch.protocol})` : ""}` });
-    await api.insurance.setCashed(batch.id, t.paid);
-  }, "Entrada lançada no caixa.");
+  // Uma chamada só: o valor é calculado e travado no banco (não duplica com clique duplo ou duas abas).
+  const toCash = async () => {
+    if (cashing) return;
+    setCashing(true);
+    try { await run(() => api.insurance.cashBatch(batch.id), "Entrada lançada no caixa."); } finally { setCashing(false); }
+  };
   const payAll = () => run(async () => {
     for (const i of items) if (i.status === "pending") await api.insurance.updateItem(i.id, { paidCents: i.billedCents, glossCents: 0 });
   }, "Tudo marcado como pago.");
@@ -178,7 +179,7 @@ function BatchDetail({ db, batch, run, onClose }: { db: Db; batch: BillingBatch;
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={download}><Download aria-hidden className="size-4" />Exportar CSV</Button>
         {batch.sentOn && items.some((i) => i.status === "pending") && <Button variant="secondary" onClick={payAll}>Marcar tudo como pago</Button>}
-        <Button variant="secondary" disabled={pendingCash <= 0} onClick={toCash}><Wallet aria-hidden className="size-4" />Lançar {money(Math.max(0, pendingCash))} no caixa</Button>
+        <Button variant="secondary" disabled={pendingCash <= 0 || cashing || !batch.sentOn} onClick={toCash}><Wallet aria-hidden className="size-4" />Lançar {money(Math.max(0, pendingCash))} no caixa</Button>
         <Button variant="ghost" onClick={() => { if (confirm("Excluir este lote? Os atendimentos voltam a poder ser faturados.")) run(async () => { await api.insurance.removeBatch(batch.id); onClose(); }, "Lote excluído."); }}><Trash2 aria-hidden className="size-4" />Excluir lote</Button>
       </div>
       {!batch.sentOn && <p className="text-sm text-ink-muted">Marque o lote como enviado para registrar pagamentos e glosas.</p>}
