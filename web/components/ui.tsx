@@ -9,12 +9,12 @@ export { cx };
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "soft";
 const variants: Record<ButtonVariant, string> = {
   primary: "bg-brand text-on-brand hover:bg-brand-hover",
-  secondary: "bg-transparent text-brand border-border-strong hover:bg-brand-soft",
+  secondary: "bg-surface-100 text-ink border-border-strong hover:bg-surface-300",
   ghost: "text-brand hover:bg-brand-soft",
   danger: "bg-danger text-on-brand hover:brightness-95",
   soft: "bg-brand-soft text-ink hover:bg-surface-300",
 };
-// Alturas do design system: md 44px (toque), sm 36px (tabelas), lg 48px.
+// Alturas do design system: md 44px (toque), sm 36px (tabelas), lg 48px. Botão de ação é retangular, como o bloco; pill fica para filtros.
 const sizes = { sm: "h-9 px-4 text-sm", md: "h-11 px-5 text-[15px]", lg: "h-12 px-6 text-base" };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -25,7 +25,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       aria-busy={loading || undefined}
       disabled={disabled || loading}
-      className={cx("inline-flex items-center justify-center gap-2 border-2 border-transparent font-semibold whitespace-nowrap transition-colors duration-150 disabled:bg-surface-300 disabled:text-ink-muted disabled:border-transparent disabled:hover:bg-surface-300 disabled:cursor-not-allowed", pill ? "rounded-pill" : "rounded-md", variants[variant], sizes[size], className)}
+      className={cx("inline-flex items-center justify-center gap-2 border-[1.5px] border-transparent font-semibold whitespace-nowrap transition-[background-color,color,transform] duration-150 ease-out active:translate-y-px disabled:bg-surface-300 disabled:text-ink-muted disabled:border-transparent disabled:hover:bg-surface-300 disabled:cursor-not-allowed", pill ? "rounded-pill" : "rounded-md", variants[variant], sizes[size], className)}
       {...rest}
     >
       {loading && <span aria-hidden className="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />}
@@ -39,7 +39,7 @@ export function Field({ label, error, hint, children, className }: { label: stri
   const descId = error || hint ? `${id}-desc` : undefined;
   return (
     <div className={cx("flex flex-col gap-2", className)}>
-      <label htmlFor={id} className="text-sm font-semibold text-ink">{label}</label>
+      <label htmlFor={id} className="text-[13px] font-semibold text-ink">{label}</label>
       {children(id, descId)}
       {error ? <p id={descId} className="flex items-start gap-1.5 text-sm font-semibold text-danger"><CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />{error}</p>
         : hint && <p id={descId} className="text-sm text-ink-muted">{hint}</p>}
@@ -65,15 +65,16 @@ export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLText
 }
 
 export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "success" | "warning" | "danger" | "info" | "accent"; children: ReactNode }) {
+  // Carimbo: contorno na cor do estado, versalete espaçado, leve inclinação (.so-stamp em globals.css).
   const tones = {
-    neutral: "bg-surface-300 text-ink-muted",
-    success: "bg-success-soft text-success",
-    warning: "bg-warning-soft text-warning",
-    danger: "bg-danger-soft text-danger",
-    info: "bg-brand-soft text-ink",
-    accent: "bg-brand-soft text-brand",
+    neutral: "text-ink-muted",
+    success: "text-success",
+    warning: "text-warning",
+    danger: "text-danger",
+    info: "text-ink",
+    accent: "text-brand",
   };
-  return <span className={cx("inline-flex items-center gap-1 rounded-pill px-3 h-6 text-xs font-semibold tracking-[0.04em] whitespace-nowrap", tones[tone])}>{children}</span>;
+  return <span className={cx("so-stamp inline-flex items-center gap-1 rounded-sm border-[1.5px] border-current px-1.5 h-[22px] text-[11px] leading-none font-bold uppercase tracking-[0.08em] whitespace-nowrap [&_svg]:size-3", tones[tone])}>{children}</span>;
 }
 
 export function Toggle({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean }) {
@@ -111,15 +112,16 @@ export function Segmented<T extends string>({ value, onChange, options, label, s
 }
 
 export function Card({ className, children, as: As = "section" }: { className?: string; children: ReactNode; as?: "section" | "div" | "article" }) {
-  return <As className={cx("rounded-lg border border-border bg-surface-200 p-5 shadow-sm", className)}>{children}</As>;
+  return <As className={cx("rounded-lg border border-border bg-surface-200 p-5", className)}>{children}</As>;
 }
 
 export function Kpi({ label, value, sub, tone = "surface", valueClass }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "surface" | "success" | "info" | "warning" | "accent"; valueClass?: string }) {
-  const bg = { surface: "border border-border bg-surface-200 shadow-sm", success: "bg-success-soft", info: "bg-brand-soft", warning: "bg-warning-soft", accent: "bg-brand-soft" }[tone];
+  // Valor de folha de caixa: filete de tinta no topo, rótulo em versalete; o tom só colore o valor.
+  const ink = { surface: "", success: "text-success", info: "", warning: "text-warning", accent: "text-brand" }[tone];
   return (
-    <div className={cx("rounded-lg p-4 min-w-0", bg)}>
-      <p className="text-xs text-ink-muted">{label}</p>
-      <p className={cx("mt-1 text-[22px] leading-7 font-bold truncate", valueClass)}>{value}</p>
+    <div className="min-w-0 border border-border border-t-2 border-t-rule bg-surface-200 px-4 pb-4 pt-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">{label}</p>
+      <p className={cx("mt-1.5 text-[22px] leading-7 font-bold tracking-[-0.01em] truncate", ink, valueClass)}>{value}</p>
       {sub && <p className="mt-0.5 text-xs text-ink-muted">{sub}</p>}
     </div>
   );
@@ -175,12 +177,12 @@ export function Modal({ open, onClose, title, subtitle, children, footer, wide }
   }, [open]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-brand-ink/60 p-0 sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-brand-ink/55 p-0 sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId}
         className={cx("w-full max-h-[92vh] flex flex-col rounded-t-lg sm:rounded-lg border border-border bg-surface-200 shadow-md", wide ? "sm:max-w-2xl" : "sm:max-w-lg")}>
-        <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+        <header className="flex items-start justify-between gap-4 mx-5 pt-4 pb-3 border-b-[3px] border-rule shadow-[0_3px_0_var(--surface-200),0_4px_0_var(--rule)] mb-1">
           <div>
-            <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
+            <h2 id={titleId} className="text-lg font-bold tracking-[-0.01em]">{title}</h2>
             {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
           </div>
           <button data-close type="button" onClick={onClose} aria-label="Fechar" className="grid size-11 shrink-0 place-items-center rounded-pill text-ink-muted transition-colors duration-150 hover:bg-surface-300"><X aria-hidden className="size-5" /></button>
@@ -195,10 +197,27 @@ export function Modal({ open, onClose, title, subtitle, children, footer, wide }
 export function Avatar({ name }: { name: string }) {
   const parts = name.trim().split(/\s+/);
   const ini = ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
-  return <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-bold text-brand">{ini}</span>;
+  return <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full border-[1.5px] border-brand/40 bg-brand-soft text-sm font-bold text-brand">{ini}</span>;
 }
 
 export function ErrorNote({ message }: { message?: string | null }) {
   if (!message) return null;
   return <p role="alert" className="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-sm font-semibold text-danger"><CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />{message}</p>;
+}
+
+/** Número de série do bloco: "Nº 000123", em algarismos tabulares. */
+export function Serial({ n, className }: { n: number | string; className?: string }) {
+  const digits = typeof n === "number" ? String(n).padStart(6, "0") : n;
+  return <span className={cx("text-[11px] font-semibold tracking-[0.08em] text-ink-muted tabular-nums whitespace-nowrap", className)}>Nº {digits}</span>;
+}
+
+/** Título de folha: cabeçalho de seção com ação opcional à direita. */
+export function SheetTitle({ id, children, aside, action }: { id?: string; children: ReactNode; aside?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h3 id={id} className="text-base font-bold tracking-[-0.005em]">{children}</h3>
+      {aside && <span className="text-xs text-ink-muted">{aside}</span>}
+      {action && <span className="ml-auto text-sm font-semibold text-brand">{action}</span>}
+    </div>
+  );
 }

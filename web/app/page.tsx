@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, UserPlus } from "lucide-react";
 import { useDb, recallInfo, activePatients, stalledTreatments } from "@/lib/store";
 import { monthSummary, overdue } from "@/lib/finance";
 import { addDays, dateLong, dateShort, fromISODate, money, todayISO } from "@/lib/format";
-import type { Appointment } from "@/lib/types";
-import { Card, PageSkeleton, cx } from "@/components/ui";
+import type { Appointment, AppointmentStatus } from "@/lib/types";
+import { STATUS_LABEL } from "@/lib/agenda";
+import { Badge, Card, PageSkeleton, SheetTitle, cx } from "@/components/ui";
+
+const STATUS_TONE: Record<AppointmentStatus, "neutral" | "success" | "warning" | "danger" | "info" | "accent"> = {
+  to_confirm: "warning", confirmed: "info", waiting: "accent", in_service: "accent", done: "success", no_show: "danger", cancelled: "neutral",
+};
 
 const DAY_START = 7 * 60, DAY_END = 20 * 60;
 const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
@@ -20,14 +25,14 @@ function DayTimeline({ list, name }: { list: Appointment[]; name: (a: Appointmen
   const timed = list.filter((a) => a.time);
   return (
     <div>
-      <div className="relative h-10 rounded-md bg-surface-200/60" role="list" aria-label="Consultas de hoje ao longo do dia">
+      <div className="relative h-10 rounded-md border border-border bg-surface-300/50" role="list" aria-label="Consultas de hoje ao longo do dia">
         {timed.map((a) => {
           const s = toMin(a.time!), e = s + a.durationMinutes;
           const past = e <= nowMin;
           return (
             <Link key={a.id} role="listitem" href="/agenda" title={`${a.time} · ${name(a)}`} aria-label={`${a.time} ${name(a)}`}
               className={cx("absolute top-1 bottom-1 rounded-sm",
-                past ? "bg-ink/20" : a.status === "to_confirm" ? "border-2 border-dashed border-brand bg-surface-200" : "bg-brand")}
+                past ? "bg-ink/20" : a.status === "to_confirm" ? "border-[1.5px] border-dashed border-brand bg-surface-100" : "bg-brand")}
               style={{ left: pos(s), width: `max(6px, calc(${pos(e)} - ${pos(s)}))` }} />
           );
         })}
@@ -36,7 +41,7 @@ function DayTimeline({ list, name }: { list: Appointment[]; name: (a: Appointmen
       <div className="mt-1 flex justify-between text-[11px] text-ink-muted tabular-nums" aria-hidden>{["7h", "10h", "13h", "16h", "20h"].map((h) => <span key={h}>{h}</span>)}</div>
       <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-muted">
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-ink/20" />já passou</li>
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border-2 border-dashed border-brand" />falta confirmar</li>
+        <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border-[1.5px] border-dashed border-brand" />falta confirmar</li>
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-brand" />confirmada</li>
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-0.5 bg-danger" />agora</li>
       </ul>
@@ -74,48 +79,77 @@ export default function Home() {
     { n: openBudgets.length, text: "orçamento(s) esperando resposta", link: "Ver orçamentos", href: "/orcamentos" },
   ];
 
+  const profName = (id?: string) => db.professionals.find((p) => p.id === id)?.name;
+  const dentists = new Set(todays.map((a) => a.professionalId).filter(Boolean)).size;
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold">Olá{first ? `, ${first}` : ""}!</h2>
-        <p className="text-sm text-ink-muted first-letter:uppercase">{dateLong(today)}</p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h2 className="text-xl font-bold tracking-[-0.01em]">Olá{first ? `, ${first}` : ""}!</h2>
+        <div className="flex gap-2">
+          <Link href="/pacientes?novo=1" className="inline-flex h-11 items-center gap-2 rounded-md border-[1.5px] border-border-strong bg-surface-100 px-4 text-sm font-semibold transition-colors duration-150 hover:bg-surface-300"><UserPlus aria-hidden className="size-4" />Novo paciente</Link>
+          <Link href="/agenda" className="inline-flex h-11 items-center gap-2 rounded-md bg-brand px-4 text-sm font-semibold text-on-brand transition-colors duration-150 hover:bg-brand-hover"><Plus aria-hidden className="size-4" />Marcar consulta</Link>
+        </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <section className="rounded-lg bg-brand-soft p-5 space-y-4" aria-labelledby="hoje">
-          <div className="flex items-baseline justify-between">
-            <h3 id="hoje" className="font-semibold"><span className="text-[22px]">{todays.length}</span> consulta(s) hoje</h3>
-            <Link href="/agenda" className="text-sm font-semibold">Abrir agenda</Link>
-          </div>
+      <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr] lg:items-start">
+        <Card as="section" className="space-y-4 min-w-0">
+          <SheetTitle id="hoje" aside={`${todays.length} consulta(s)${dentists > 1 ? ` · ${dentists} dentistas` : ""}`} action={<Link href="/agenda">Abrir agenda</Link>}>Agenda de hoje</SheetTitle>
           <DayTimeline list={todays} name={name} />
-          {nextPatient ? (
-            <Link href={`/pacientes/${nextPatient.id}`} className="block rounded-md hover:bg-surface-200/40 -mx-2 px-2 py-1">
-              <p className="text-xs text-ink-muted">Próximo paciente</p>
-              <p className="text-lg font-bold break-words">{nextPatient.fullName}</p>
-              <p className="text-sm text-ink-muted">{next!.date === today ? "Hoje" : dateShort(next!.date)} · {next!.time ?? "horário a definir"} · {next!.durationMinutes} min</p>
-            </Link>
-          ) : <p className="text-sm text-ink-muted">Nenhum paciente marcado daqui pra frente.</p>}
-          <ol className="grid grid-cols-7 gap-1 border-t border-ink/10 pt-3">
+          {todays.length ? (
+            <table className="w-full text-sm" aria-labelledby="hoje">
+              <thead>
+                <tr className="border-b border-rule text-left text-[11px] uppercase tracking-[0.08em] text-ink-muted">
+                  <th scope="col" className="pb-2 pr-3 font-semibold">Hora</th>
+                  <th scope="col" className="pb-2 pr-3 font-semibold">Paciente</th>
+                  <th scope="col" className="hidden pb-2 pr-3 font-semibold sm:table-cell">Dentista</th>
+                  <th scope="col" className="pb-2 text-right font-semibold">Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todays.map((a) => {
+                  const now = a.status === "in_service" || a.status === "waiting";
+                  return (
+                    <tr key={a.id} className={cx("border-b border-border last:border-0", now && "bg-brand-soft")}>
+                      <td className={cx("py-2.5 pr-3 font-bold align-top", now && "pl-2 shadow-[inset_2px_0_0_var(--brand)]")}>{a.time ?? "—"}</td>
+                      <td className="py-2.5 pr-3 align-top">
+                        {a.patientId ? <Link href={`/pacientes/${a.patientId}`} className="font-semibold break-words hover:text-brand">{name(a)}</Link> : <span className="font-semibold">{name(a)}</span>}
+                        {a.procedures?.length ? <span className="block text-xs text-ink-muted">{a.procedures.map((p) => p.name).join(" · ")}</span> : null}
+                      </td>
+                      <td className="hidden py-2.5 pr-3 align-top text-ink-muted sm:table-cell">{profName(a.professionalId) ?? "—"}</td>
+                      <td className="py-2.5 text-right align-top"><Badge tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status]}</Badge></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-sm text-ink-muted">
+              Nenhuma consulta hoje.{" "}
+              {nextPatient ? <>Próxima: <Link href={`/pacientes/${nextPatient.id}`} className="font-semibold text-ink hover:text-brand">{nextPatient.fullName}</Link>, {dateShort(next!.date)} · {next!.time ?? "horário a definir"}.</> : "Nenhum paciente marcado daqui pra frente."}
+            </p>
+          )}
+          <ol className="grid grid-cols-7 gap-1 border-t border-border pt-3">
             {week.map((d) => {
               const n = live.filter((a) => a.date === d).length;
+              const isToday = d === today;
               return (
                 <li key={d}>
-                  <Link href="/agenda" aria-label={`${dateLong(d)}: ${n ? `${n} compromisso(s)` : "livre"}`}
-                    className={cx("flex flex-col items-center rounded-md py-2 text-xs", d === today ? "bg-ink text-surface-100" : "hover:bg-surface-200/50")}>
+                  <Link href="/agenda" aria-label={`${dateLong(d)}: ${n ? `${n} compromisso(s)` : "livre"}`} aria-current={isToday ? "date" : undefined}
+                    className={cx("flex flex-col items-center rounded-md py-2 text-xs transition-colors duration-150", isToday ? "bg-ink text-paper" : "hover:bg-surface-300")}>
                     <span className="capitalize">{fromISODate(d).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
                     <span className="text-base font-bold">{Number(d.slice(8))}</span>
-                    <span>{n ? `${n} marc.` : "livre"}</span>
+                    <span className={isToday ? "text-paper/75" : "text-ink-muted"}><span className="sm:hidden">{n || "–"}</span><span className="hidden sm:inline">{n ? `${n} marc.` : "livre"}</span></span>
                   </Link>
                 </li>
               );
             })}
           </ol>
-          <Link href="/agenda" className="inline-flex items-center gap-1 text-sm font-semibold"><Plus className="size-4" />Marcar horário</Link>
-        </section>
+        </Card>
 
         <div className="space-y-4">
           <Card>
-            <h3 className="font-semibold mb-2">Para resolver</h3>
-            <ul className="divide-y divide-border">
+            <SheetTitle>Para resolver</SheetTitle>
+            <ul className="mt-2 divide-y divide-border">
               {todo.map((t) => (
                 <li key={t.href} className="flex items-center gap-3 py-2.5">
                   <span className={cx("w-7 text-lg font-bold tabular-nums", t.n ? "text-ink" : "text-ink-muted")}>{t.n}</span>
@@ -126,12 +160,12 @@ export default function Home() {
             </ul>
           </Card>
           <Card>
-            <div className="flex items-baseline justify-between"><h3 className="font-semibold first-letter:uppercase">{fromISODate(today).toLocaleDateString("pt-BR", { month: "long" })} em números</h3><Link href="/indicadores" className="text-sm font-semibold text-brand">Indicadores</Link></div>
-            <dl className="mt-3 grid grid-cols-2 gap-3">
-              <div><dt className="text-xs text-ink-muted">Entrou</dt><dd className="text-lg font-bold text-success tabular-nums">{money(s.received)}</dd></div>
-              <div><dt className="text-xs text-ink-muted">Saiu</dt><dd className="text-lg font-bold text-danger tabular-nums">{money(s.spent)}</dd></div>
-              <div><dt className="text-xs text-ink-muted">Sobrou</dt><dd className={cx("text-lg font-bold tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
-              <div><dt className="text-xs text-ink-muted">A receber</dt><dd className="text-lg font-bold tabular-nums">{money(s.receivable)}</dd></div>
+            <SheetTitle action={<Link href="/indicadores">Indicadores</Link>}><span className="inline-block first-letter:uppercase">{fromISODate(today).toLocaleDateString("pt-BR", { month: "long" })} em números</span></SheetTitle>
+            <dl className="mt-3 grid grid-cols-2 border-t border-rule [&>div]:border-b [&>div]:border-border [&>div]:py-3 [&>div:nth-child(odd)]:border-r [&>div:nth-child(odd)]:pr-3 [&>div:nth-child(even)]:pl-3">
+              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Entrou</dt><dd className="mt-0.5 text-[22px] leading-7 font-bold text-success tabular-nums">{money(s.received)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Saiu</dt><dd className="mt-0.5 text-[22px] leading-7 font-bold text-danger tabular-nums">{money(s.spent)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Sobrou</dt><dd className={cx("mt-0.5 text-[22px] leading-7 font-bold tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">A receber</dt><dd className="mt-0.5 text-[22px] leading-7 font-bold tabular-nums">{money(s.receivable)}</dd></div>
             </dl>
           </Card>
         </div>

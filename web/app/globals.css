@@ -22,14 +22,16 @@
 
   --radius-icon: 22%;
 
-  /* Tema claro */
+  /* Tema claro: "Receituário" — papel, tinta da marca e carimbo */
+  --paper: #f6f4fa;
   --surface-100: #ffffff;
-  --surface-200: #f8f6fe;
-  --surface-300: #efeafc;
+  --surface-200: #ffffff;
+  --surface-300: #eeeaf7;
   --ink: #1f1b2e;
-  --ink-muted: #6b6683;
-  --border: #ddd6f3;
+  --ink-muted: #625c78;
+  --border: #e3deef;
   --border-strong: #8e88a8;
+  --rule: #1f1b2e;
   --brand: #6d4fd8;
   --brand-hover: #5a3ec0;
   --on-brand: #ffffff;
@@ -41,8 +43,15 @@
   --warning-soft: #fdf0d2;
   --danger: #b42318;
   --danger-soft: #fce8e6;
-  --so-shadow-sm: 0 1px 2px rgba(31, 27, 46, 0.08);
-  --so-shadow-md: 0 8px 24px rgba(31, 27, 46, 0.12);
+  --so-shadow-sm: 0 1px 2px rgba(31, 27, 46, 0.05);
+  --so-shadow-md: 0 12px 32px -8px rgba(31, 27, 46, 0.22);
+  /* Barra lateral: campo chapado na tinta da marca, nos dois temas */
+  --rail: #1f1b2e;
+  --rail-ink: #ece8f8;
+  --rail-muted: #b3abcf;
+  --rail-hover: #2e2843;
+  --rail-line: #3a3358;
+  --rail-mark: #bba8f5;
   /* Cores de etapa dos kanbans (vendas e prótese) */
   --stage-blue: #1a6fd1;
   --stage-teal: #0e9f8e;
@@ -55,17 +64,19 @@
 /* Tema escuro do sistema, quando o usuário não escolheu um tema no app */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --surface-100: #1f1b2e;
-    --surface-200: #29243d;
-    --surface-300: #352f4f;
-    --ink: #f4f1fc;
-    --ink-muted: #b9b3d0;
-    --border: #4a4468;
-    --border-strong: #8a83aa;
+    --paper: #15121c;
+    --surface-100: #221e2e;
+    --surface-200: #1c1926;
+    --surface-300: #2c2740;
+    --ink: #f2effa;
+    --ink-muted: #b6aecb;
+    --border: #353049;
+    --border-strong: #847ca0;
+    --rule: #b6aecb;
     --brand: #bba8f5;
     --brand-hover: #cdbff8;
     --on-brand: #1f1b2e;
-    --brand-soft: #3a3358;
+    --brand-soft: #332c4f;
     --focus-ring: #bba8f5;
     --success: #5eead4;
     --success-soft: #123b3a;
@@ -74,7 +85,10 @@
     --danger: #ffa59b;
     --danger-soft: #4a1f2a;
     --so-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --so-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --so-shadow-md: 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+    --rail: #1f1b2e;
+    --rail-hover: #2c2740;
+    --rail-line: #353049;
     --stage-blue: #7db4f5;
     --stage-teal: #5eead4;
     --stage-amber: #f5c451;
@@ -86,17 +100,19 @@
 
 /* Seletor de tema do app: shell.tsx grava data-theme="dark" no <html> */
 :root[data-theme="dark"] {
-  --surface-100: #1f1b2e;
-  --surface-200: #29243d;
-  --surface-300: #352f4f;
-  --ink: #f4f1fc;
-  --ink-muted: #b9b3d0;
-  --border: #4a4468;
-  --border-strong: #8a83aa;
+  --paper: #15121c;
+  --surface-100: #221e2e;
+  --surface-200: #1c1926;
+  --surface-300: #2c2740;
+  --ink: #f2effa;
+  --ink-muted: #b6aecb;
+  --border: #353049;
+  --border-strong: #847ca0;
+  --rule: #b6aecb;
   --brand: #bba8f5;
   --brand-hover: #cdbff8;
   --on-brand: #1f1b2e;
-  --brand-soft: #3a3358;
+  --brand-soft: #332c4f;
   --focus-ring: #bba8f5;
   --success: #5eead4;
   --success-soft: #123b3a;
@@ -105,7 +121,10 @@
   --danger: #ffa59b;
   --danger-soft: #4a1f2a;
   --so-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --so-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --so-shadow-md: 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+  --rail: #1f1b2e;
+  --rail-hover: #2c2740;
+  --rail-line: #353049;
   --stage-blue: #7db4f5;
   --stage-teal: #5eead4;
   --stage-amber: #f5c451;
@@ -115,6 +134,14 @@
 }
 
 @theme inline {
+  --color-paper: var(--paper);
+  --color-rule: var(--rule);
+  --color-rail: var(--rail);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-muted: var(--rail-muted);
+  --color-rail-hover: var(--rail-hover);
+  --color-rail-line: var(--rail-line);
+  --color-rail-mark: var(--rail-mark);
   --color-surface-100: var(--surface-100);
   --color-surface-200: var(--surface-200);
   --color-surface-300: var(--surface-300);
@@ -144,7 +171,7 @@
   --color-stage-gray: var(--stage-gray);
   --color-stage-blue-soft: var(--stage-blue-soft);
 
-  --font-sans: var(--font-jakarta), "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: var(--font-public), "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Tipografia: body-sm, body, body-lg e títulos do design system */
   --text-xs: 12px;
@@ -165,9 +192,9 @@
   --text-display-xl--line-height: 60px;
   --text-display-xl--letter-spacing: -0.02em;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
 
   --shadow-sm: var(--so-shadow-sm);
@@ -175,9 +202,19 @@
 }
 
 body {
-  background: var(--surface-100);
+  background: var(--paper);
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  accent-color: var(--brand);
+  caret-color: var(--brand);
 }
+
+::selection { background: var(--brand-soft); color: var(--ink); }
+:root { scrollbar-color: var(--border-strong) transparent; }
+
+/* Carimbo: status batido como carimbo de borracha (Badge em components/ui.tsx) */
+.so-stamp { transform: rotate(-1deg); }
+@media print { .so-stamp { transform: none; } }
 
 /* Anel de foco sólido de 3px em todo controle (design system) */
 :focus-visible {
