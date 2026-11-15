@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Plus, Percent } from "lucide-react";
 import { useDb, api, allProcedures, DEFAULT_RECALL_MONTHS } from "@/lib/store";
-import { SPECIALTIES } from "@/lib/catalog";
+import { HOF_SPECIALTY_ID, SPECIALTIES } from "@/lib/catalog";
+import { HOF_SUGGESTED_PRICES } from "@/lib/hof";
 import { money, parseMoney } from "@/lib/format";
 import { Badge, Button, Card, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle, cx } from "@/components/ui";
 import { useAction } from "@/components/toast";
@@ -27,6 +28,8 @@ export default function Page() {
   const groups = shown.reduce<Record<string, typeof shown>>((acc, p) => { (acc[p.group] ??= []).push(p); return acc; }, {});
   const priced = procs.filter((p) => db.prices[p.id] !== undefined).length;
 
+  // Preço sugerido de HOF: vale até a clínica definir o próprio.
+  const suggested = (p: (typeof procs)[number]) => (p.specialtyId === HOF_SPECIALTY_ID && db.prices[p.id] === undefined ? HOF_SUGGESTED_PRICES[p.name] : undefined);
   const savePrice = async (id: string) => {
     await run(() => api.catalog.setPrice(id, draft.trim() ? parseMoney(draft) : undefined));
     setEditing(null);
@@ -97,9 +100,9 @@ export default function Page() {
                             <Button size="sm" variant="ghost" type="button" onClick={() => setEditing(null)}>Cancelar</Button>
                           </form>
                         ) : (
-                          <button type="button" onClick={() => { setEditing(p.id); setDraft(db.prices[p.id] !== undefined ? (db.prices[p.id] / 100).toFixed(2).replace(".", ",") : ""); }}
+                          <button type="button" onClick={() => { setEditing(p.id); const cur = db.prices[p.id] ?? suggested(p); setDraft(cur !== undefined ? (cur / 100).toFixed(2).replace(".", ",") : ""); }}
                             className={cx("text-sm font-semibold tabular-nums", db.prices[p.id] !== undefined ? "text-ink" : "text-brand")}>
-                            {db.prices[p.id] !== undefined ? money(db.prices[p.id]) : "+ Definir preço"}
+                            {db.prices[p.id] !== undefined ? money(db.prices[p.id]) : suggested(p) !== undefined ? <>{money(suggested(p)!)} <span className="text-xs font-normal text-ink-muted">(sugerido)</span></> : "+ Definir preço"}
                           </button>
                         )}
                         </span>

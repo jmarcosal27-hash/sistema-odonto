@@ -51,8 +51,26 @@ export interface Procedure {
 
 export type Region = "upper" | "lower" | "both";
 
+/** Anotação desenhada no faceograma. Coordenadas no viewBox 0 0 300 400 (ponto = 1 par, seta e linha = 2). */
+export interface HofShape {
+  id: string;
+  kind: "point" | "arrow" | "line";
+  points: [number, number][];
+}
+
+export type HofUnit = "U" | "mL" | "seringa";
+export type HofFace = "female" | "male";
+
 export interface PlanItem {
   id: string;
+  /** Item de harmonização orofacial: usa os campos hof* e product*. Fichas antigas não têm nenhum deles. */
+  hof?: boolean;
+  hofFace?: HofFace;
+  hofRegions?: string[]; // ids de HOF_REGIONS
+  hofMarks?: HofShape[];
+  productAmount?: number;
+  productUnit?: HofUnit;
+  dentistName?: string;
   tooth?: number; // FDI
   region?: Region; // item de arcada, sem dente específico
   conditions: ToothCondition[];

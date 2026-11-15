@@ -18,6 +18,7 @@ import type {
 import { supabaseBrowser } from "./supabase/client";
 import { todayISO } from "./format";
 import { hasUnanswered } from "./catalog";
+import { checkHofItem } from "./hof";
 import { EXT, MAX_FILE_BYTES, checkFile } from "./files";
 
 export interface Session { userId: string; email: string; clinicId: string; role: "owner" | "dentist" | "receptionist" | "finance"; memberId: string }
@@ -90,6 +91,11 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       id: r.id as string, tooth: (r.tooth_fdi as number) ?? undefined, region: (r.region as PlanItem["region"]) ?? undefined,
       conditions: (r.conditions as PlanItem["conditions"]) ?? [], procedureId: s(r.procedure_id), procedureName: s(r.procedure_name),
       phase: r.phase as PlanItem["phase"], priceCents: (r.price_cents as number) ?? undefined, quantity: r.quantity as number,
+      ...(r.hof ? {
+        hof: true, hofFace: (r.hof_face as PlanItem["hofFace"]) ?? undefined, hofRegions: (r.hof_regions as string[]) ?? [],
+        hofMarks: (r.hof_marks as PlanItem["hofMarks"]) ?? [], productAmount: r.product_amount === null ? undefined : Number(r.product_amount),
+        productUnit: (r.product_unit as PlanItem["productUnit"]) ?? undefined, dentistName: s(r.dentist_name),
+      } : {}),
     });
     itemsByPlan.set(r.plan_id as string, list);
   }
@@ -106,7 +112,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const snap = (r: Row) => ({ professionalName: s(r.professional_name), professionalCro: s(r.professional_cro), professionalCroUf: s(r.professional_cro_uf) });
 
   const db: Db = {
-    version: 6,
+    version: 7,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -256,8 +262,10 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         return (await q(sb.rpc("create_budget", {
           p_clinic: session.clinicId, p_patient: p.patientId, p_kind: p.kind, p_validity: p.validityDays,
           p_discount: p.discountCents ?? 0, p_methods: p.paymentMethods ?? [], p_notes: p.notes ?? null,
-          p_items: p.items.map((i) => ({ tooth: i.tooth ?? null, region: i.region ?? null, conditions: i.conditions, procedure_id: i.procedureId ?? null,
-            procedure_name: i.procedureName ?? null, phase: i.phase, price_cents: i.priceCents ?? null, quantity: i.quantity ?? 1 })),
+          p_items: p.items.map(checkHofItem).map((i) => ({ tooth: i.tooth ?? null, region: i.region ?? null, conditions: i.conditions, procedure_id: i.procedureId ?? null,
+            procedure_name: i.procedureName ?? null, phase: i.phase, price_cents: i.priceCents ?? null, quantity: i.quantity ?? 1,
+            ...(i.hof ? { hof: true, hof_face: i.hofFace, hof_regions: i.hofRegions, hof_marks: i.hofMarks, product_amount: i.productAmount ?? null,
+              product_unit: i.productUnit ?? null, dentist_name: i.dentistName ?? null } : {}) })),
         }))) as string;
       }),
     },

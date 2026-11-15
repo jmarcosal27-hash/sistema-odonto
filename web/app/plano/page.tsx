@@ -6,10 +6,13 @@ import { Trash2, Plus } from "lucide-react";
 import { useDb, api, planTotal, itemTotal, activePatients, PAYMENT_METHODS, regionLabel } from "@/lib/store";
 import { ADULT_LOWER, ADULT_UPPER, CHILD_LOWER, CHILD_UPPER, PHASES } from "@/lib/catalog";
 import { money, parseMoney, age, dateBR } from "@/lib/format";
-import type { PlanItem, ToothCondition, Phase, PaymentMethod } from "@/lib/types";
+import type { PlanItem, ToothCondition, Phase, PaymentMethod, HofFace, HofShape } from "@/lib/types";
 import { Button, Card, Segmented, PageSkeleton, Select, Input, Empty, Field, Textarea, cx } from "@/components/ui";
 import { Odontogram } from "@/components/odontogram";
 import { ToothDialog } from "@/components/tooth-dialog";
+import { HofFaceogram } from "@/components/hof-faceogram";
+import { HofDialog } from "@/components/hof-dialog";
+import { hofRegionLabel, productText } from "@/lib/hof";
 import { PatientPicker } from "@/components/patient-picker";
 import { PatientForm } from "@/components/patient-form";
 import { useAction } from "@/components/toast";
@@ -39,6 +42,11 @@ function PlanEditor() {
   const [discountMode, setDiscountMode] = useState<"brl" | "pct">("brl");
   const [methods, setMethods] = useState<PaymentMethod[]>(["pix", "credit", "debit", "cash"]);
   const [notes, setNotes] = useState("");
+  const [hofTab, setHofTab] = useState(false);
+  const [hofFace, setHofFace] = useState<HofFace>("female");
+  const [hofRegions, setHofRegions] = useState<string[]>([]);
+  const [hofShapes, setHofShapes] = useState<HofShape[]>([]);
+  const [hofDialog, setHofDialog] = useState(false);
   const dirty = items.length > 0 || Object.keys(marks).length > 0;
 
   useEffect(() => {
@@ -84,13 +92,29 @@ function PlanEditor() {
       <Card className="grid gap-3 md:grid-cols-[auto_1fr_auto] md:items-end">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-ink-muted">Dentição</span>
-          <Segmented label="Dentição" value={kind} onChange={(v) => { setKind(v); setRegion("all"); }} options={[{ value: "adult", label: "Permanente" }, { value: "child", label: "Decídua" }]} />
+          <Segmented label="Dentição" value={hofTab ? "hof" : kind}
+            onChange={(v) => { if (v === "hof") { setHofTab(true); return; } setHofTab(false); setKind(v); setRegion("all"); }}
+            options={[{ value: "adult", label: "Permanentes" }, { value: "child", label: "Decíduos" }, { value: "hof", label: "HOF" }]} />
         </div>
         <PatientPicker patients={activePatients(db)} value={patientId} onChange={setPatientId} onCreate={(name) => setNewPatient(name)} invalid={tried && !patientId} />
         {patient && <p className="text-xs text-ink-muted md:pb-3">{age(patient.birthDate) !== undefined ? `${age(patient.birthDate)} anos · ` : ""}{patient.phone ?? "sem telefone"}</p>}
       </Card>
       {tried && !patientId && <p role="alert" className="text-sm text-danger">Escolha ou cadastre o paciente antes de gerar o orçamento.</p>}
 
+      {hofTab ? (
+        <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">Faceograma (HOF)</h2>
+              <p className="text-xs text-ink-muted">Escolha as regiões, desenhe os pontos de aplicação e adicione o procedimento.</p>
+            </div>
+            <Button size="sm" disabled={!hofRegions.length} onClick={() => setHofDialog(true)}><Plus className="size-4" />Adicionar procedimento</Button>
+          </div>
+          <HofFaceogram face={hofFace} onFace={setHofFace} regions={hofRegions} shapes={hofShapes} onShapes={setHofShapes}
+            onToggleRegion={(id) => setHofRegions((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]))}
+            placedRegions={items.filter((i) => i.hof).flatMap((i) => i.hofRegions ?? [])} placedShapes={items.filter((i) => i.hof).flatMap((i) => i.hofMarks ?? [])} />
+        </Card>
+      ) : (
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
@@ -102,6 +126,7 @@ function PlanEditor() {
         </div>
         <Odontogram upper={upper} lower={lower} marks={marks} selected={dialog ? tooth : undefined} onSelect={openTooth} />
       </Card>
+      )}
 
       <div className="sticky top-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-200 p-4 shadow-md">
         <div>
@@ -137,7 +162,7 @@ function PlanEditor() {
                   <li key={it.id} className="grid gap-2 rounded-md bg-surface-200 p-3 sm:grid-cols-[1fr_120px_64px_150px_auto] sm:items-center">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{it.procedureName}</p>
-                      <p className="text-xs text-ink-muted first-letter:uppercase">{it.tooth ? `Dente ${it.tooth}` : it.region ? regionLabel(it.region) : "Geral"}{(it.quantity ?? 1) > 1 && it.priceCents !== undefined ? ` · ${money(itemTotal(it))}` : ""}</p>
+                      <p className="text-xs text-ink-muted first-letter:uppercase">{it.hof ? [(it.hofRegions ?? []).map(hofRegionLabel).join(", "), productText(it), it.hofMarks?.length ? `${it.hofMarks.length} marcação(ões)` : ""].filter(Boolean).join(" · ") : it.tooth ? `Dente ${it.tooth}` : it.region ? regionLabel(it.region) : "Geral"}{(it.quantity ?? 1) > 1 && it.priceCents !== undefined ? ` · ${money(itemTotal(it))}` : ""}</p>
                     </div>
                     <Input aria-label={`Valor unitário de ${it.procedureName}`} inputMode="decimal" placeholder="Valor"
                       defaultValue={it.priceCents !== undefined ? (it.priceCents / 100).toFixed(2).replace(".", ",") : ""}
@@ -193,6 +218,10 @@ function PlanEditor() {
         onConditions={(c) => tooth && setMarks((m) => ({ ...m, [tooth]: c }))}
         onAdd={(item) => { setItems((xs) => [...xs, item]); setDialog(false); }}
       />
+      {hofDialog && (
+        <HofDialog db={db} open onClose={() => setHofDialog(false)} face={hofFace} regions={hofRegions} marks={hofShapes}
+          onAdd={(item) => { setItems((xs) => [...xs, item]); setHofRegions([]); setHofShapes([]); setHofDialog(false); }} />
+      )}
       {newPatient !== null && (
         <PatientForm open initial={{ fullName: newPatient }} onClose={() => setNewPatient(null)} onSaved={(id) => setPatientId(id)} />
       )}

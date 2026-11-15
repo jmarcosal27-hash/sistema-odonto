@@ -12,13 +12,14 @@ import type {
 } from "./types";
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES, hasUnanswered } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
+import { checkHofItem } from "./hof";
 import { buildSeed } from "./seed";
 import { MAX_DEMO_FILE_BYTES, checkFile, readAsDataUrl } from "./files";
 import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 6;
+const VERSION = 7;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -60,6 +61,7 @@ function migrate(db: Db): Db {
   db.patientFiles ??= [];
   // v6: fichas de anamnese antigas passam a concluídas (imutáveis); correção vira revisão
   db.anamnesisRecords.forEach((r) => { if (!r.status) { r.status = "completed"; r.completedAt ??= r.createdAt; } });
+  // v7: itens de HOF (campos opcionais em PlanItem); planos e orçamentos antigos seguem como estão, sem perda
   db.version = VERSION;
   return db;
 }
@@ -226,6 +228,7 @@ const localApi = {
   plans: {
     async save(plan: Omit<TreatmentPlan, "id" | "createdAt" | "status"> & { id?: string }) {
       const id = plan.id ?? uid();
+      plan = { ...plan, items: plan.items.map(checkHofItem) };
       commit((db) => {
         guard(db);
         const existing = db.plans.find((p) => p.id === id);

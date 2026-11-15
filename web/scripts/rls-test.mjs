@@ -545,6 +545,76 @@ const { data: cDraft } = await c.from("anamnesis_records").insert({ ...rec, answ
 const { data: cDone } = await c.from("anamnesis_records").update({ status: "completed" }).eq("id", cDraft.id).select("completed_by").single();
 check(cDone?.completed_by === cUser.id, "dentista conclui a ficha");
 
+// ===== HOF no plano e no orçamento (migration 20261116000001) =====
+const hofMarks = [{ id: "m1", kind: "point", points: [[150, 128]] }, { id: "m2", kind: "arrow", points: [[60, 60], [100, 110.5]] }];
+const hofItem = (extra = {}) => ({ procedure_name: "Toxina botulínica estética", procedure_id: "harmonizacao-procedimentos-1", phase: "esthetic", price_cents: 150000, quantity: 1, conditions: [],
+  hof: true, hof_face: "female", hof_regions: ["testa", "glabela"], hof_marks: hofMarks, product_amount: 20, product_unit: "U", dentist_name: "Dra. Teste", ...extra });
+const mkHof = (client, clinic, patient, item) => client.rpc("create_budget", { p_clinic: clinic, p_patient: patient, p_kind: "adult", p_validity: 30, p_discount: 0, p_methods: [], p_notes: null, p_items: [item] });
+const { data: hofBudget, error: hf1 } = await mkHof(a, clinicA, pat.id, hofItem());
+check(!hf1 && hofBudget, "A cria orçamento com item de HOF (região, produto e desenho)");
+const hofPlan = (await a.from("budgets").select("plan_id,subtotal_cents").eq("id", hofBudget).single()).data;
+const { data: hofRow } = await a.from("plan_items").select("*").eq("plan_id", hofPlan.plan_id).single();
+check(hofRow?.hof === true && hofRow.hof_regions?.join() === "testa,glabela" && Number(hofRow.product_amount) === 20 && hofRow.product_unit === "U" && hofRow.hof_face === "female" && hofRow.dentist_name === "Dra. Teste",
+  "item de HOF grava regiões, quantidade, unidade, rosto e dentista");
+check(hofRow?.hof_marks?.length === 2 && hofRow.hof_marks[1].points[1][1] === 110.5, "item de HOF grava as anotações do desenho");
+check(hofPlan.subtotal_cents === 150000, "valor do item de HOF entra no total em centavos");
+const { data: hofPlain } = await mkHof(a, clinicA, pat.id, { procedure_name: "Limpeza", phase: "oral_prep", price_cents: 100, quantity: 1, conditions: [], hof_regions: ["testa"], product_amount: 5, product_unit: "mL" });
+const hofPlainRow = (await a.from("plan_items").select("hof,hof_regions,product_amount").eq("plan_id", (await a.from("budgets").select("plan_id").eq("id", hofPlain).single()).data.plan_id).single()).data;
+check(hofPlainRow?.hof === false && hofPlainRow.hof_regions.length === 0 && hofPlainRow.product_amount === null, "item comum ignora campos de HOF enviados");
+
+// leitura por outro membro da mesma clínica
+const { data: cHof } = await c.from("plan_items").select("id,hof_regions").eq("plan_id", hofPlan.plan_id);
+check(cHof?.length === 1 && cHof[0].hof_regions.length === 2, "dentista C (outro membro) LÊ o item de HOF");
+
+// isolamento entre clínicas
+const { data: bHof } = await b.from("plan_items").select("id").eq("plan_id", hofPlan.plan_id);
+check(bHof?.length === 0, "B NÃO vê item de HOF da clínica A");
+const { error: hfB1 } = await mkHof(b, clinicA, pat.id, hofItem());
+check(!!hfB1, "B NÃO cria orçamento de HOF na clínica A");
+const { error: hfB2 } = await mkHof(b, clinicB, pat.id, hofItem());
+check(!!hfB2, "B NÃO cria orçamento de HOF na própria clínica para paciente de A");
+const { error: hfB3 } = await b.from("plan_items").insert({ clinic_id: clinicA, plan_id: hofPlan.plan_id, phase: "esthetic", hof: true, hof_regions: ["mento"] });
+check(!!hfB3, "B NÃO insere item de HOF no plano da clínica A");
+const { data: hfB4 } = await b.from("plan_items").update({ hof_regions: ["nariz"] }).eq("id", hofRow.id).select("id");
+check(!hfB4 || hfB4.length === 0, "B NÃO altera região de item de HOF de A");
+const { data: hfB5 } = await b.from("plan_items").delete().eq("id", hofRow.id).select("id");
+check(!hfB5 || hfB5.length === 0, "B NÃO exclui item de HOF de A");
+
+// sem acesso: dentista de outro paciente em modo dividido não lê nem cria
+await a.from("clinics").update({ practice_mode: "split" }).eq("id", clinicA);
+const { data: hfSp } = await c.from("plan_items").select("id").eq("plan_id", hofPlan.plan_id);
+check(hfSp?.length === 0, "split: C NÃO vê item de HOF de paciente de outro dentista");
+const { error: hfSp2 } = await mkHof(c, clinicA, pat.id, hofItem());
+check(!!hfSp2, "split: C NÃO cria orçamento de HOF para paciente de outro dentista");
+await a.from("clinics").update({ practice_mode: "shared" }).eq("id", clinicA);
+
+// CHECKs
+for (const [label, extra] of [
+  ["região inexistente", { hof_regions: ["joelho"] }], ["HOF sem região", { hof_regions: [] }],
+  ["unidade inválida", { product_unit: "gotas" }], ["quantidade sem unidade", { product_unit: null }], ["unidade sem quantidade", { product_amount: null }],
+  ["quantidade zero", { product_amount: 0 }], ["quantidade acima de 9999", { product_amount: 10000 }],
+  ["rosto inválido", { hof_face: "outro" }], ["marcações não são lista", { hof_marks: { nao: "lista" } }],
+  ["forma desconhecida", { hof_marks: [{ id: "x", kind: "circulo", points: [[1, 1]] }] }],
+  ["seta com um ponto só", { hof_marks: [{ id: "x", kind: "arrow", points: [[1, 1]] }] }],
+  ["ponto fora do viewBox (x)", { hof_marks: [{ id: "x", kind: "point", points: [[301, 1]] }] }],
+  ["ponto fora do viewBox (y)", { hof_marks: [{ id: "x", kind: "point", points: [[1, -1]] }] }],
+  ["coordenada não numérica", { hof_marks: [{ id: "x", kind: "point", points: [["1", 1]] }] }],
+  ["mais de 100 marcações", { hof_marks: Array.from({ length: 101 }, (_, i) => ({ id: `m${i}`, kind: "point", points: [[1, 1]] })) }],
+  ["dentista com mais de 120 caracteres", { dentist_name: "x".repeat(121) }],
+]) {
+  const { error } = await mkHof(a, clinicA, pat.id, hofItem(extra));
+  check(!!error, `CHECK HOF: ${label} é recusado`);
+}
+const { error: hfCk } = await a.from("plan_items").update({ hof: false }).eq("id", hofRow.id);
+check(!!hfCk, "CHECK HOF: item deixa de ser HOF só se limpar regiões e produto");
+const { data: hfOwnEdit } = await a.from("plan_items").update({ hof_regions: ["mento"], product_amount: 1, product_unit: "seringa" }).eq("id", hofRow.id).select("id");
+check(hfOwnEdit?.length === 1, "A edita região e produto do item de HOF");
+// o total e o status do orçamento seguem protegidos (budgets_guard)
+const { error: hfGuard } = await a.from("budgets").update({ total_cents: 1 }).eq("id", hofBudget);
+check(!!hfGuard, "budgets_guard continua valendo: total do orçamento de HOF NÃO muda por update");
+const { error: hfAuth } = await a.rpc("authorize_budget", { p_budget: hofBudget, p_item_ids: [hofRow.id], p_installments: 1, p_first_due: "2026-12-01", p_method: "pix", p_paid_now: false });
+check(!hfAuth, "A aprova orçamento com item de HOF");
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
@@ -586,6 +656,13 @@ const { error: xd5 } = await a.from("medications").insert({ clinic_id: clinicA, 
 check(!!xd5, "acesso vencido: A NÃO cria medicamento");
 const { error: xd6 } = await a.from("prescription_templates").insert({ clinic_id: clinicA, name: "Após vencer", items: [item("x")] });
 check(!!xd6, "acesso vencido: A NÃO cria modelo de receita");
+
+const { error: xh1 } = await mkHof(a, clinicA, pat.id, hofItem());
+check(!!xh1, "acesso vencido: A NÃO cria orçamento de HOF");
+const { data: expHof } = await a.from("plan_items").select("id").eq("id", hofRow.id);
+check(expHof?.length === 1, "acesso vencido: A ainda LÊ o item de HOF");
+const { data: xh2 } = await a.from("plan_items").update({ hof_regions: ["nariz"] }).eq("id", hofRow.id).select("id");
+check(!xh2 || xh2.length === 0, "acesso vencido: A NÃO altera item de HOF");
 
 // Extras da B1 com acesso vencido
 const { error: xe1 } = await a.from("custom_documents").insert(doc);

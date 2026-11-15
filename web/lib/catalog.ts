@@ -80,8 +80,13 @@ const raw: Record<string, { name: string; groups: Record<string, string[]> }> = 
     },
   },
   harmonizacao: {
-    name: "Harmonização orofacial",
-    groups: { "Procedimentos": ["Preenchimento labial", "Toxina botulínica estética", "Bioestimulador"] },
+    name: "Harmonização orofacial (HOF)",
+    // Os 3 primeiros mantêm a posição (os ids derivam dela); o resto é acrescentado ao fim.
+    groups: { "Procedimentos": [
+      "Preenchimento labial", "Toxina botulínica estética", "Bioestimulador de colágeno",
+      "Preenchimento malar", "Preenchimento mandibular", "Preenchimento de mento", "Preenchimento de olheiras", "Preenchimento de têmporas",
+      "Fios de PDO", "Peeling", "Skinbooster", "Lipo de papada enzimática", "Rinomodelação",
+    ] },
   },
   odontogeriatria: {
     name: "Odontogeriatria",
@@ -93,8 +98,10 @@ export const SPECIALTIES: Specialty[] = Object.entries(raw).map(([id, s]) => ({ 
 
 export const DEFAULT_ACTIVE_SPECIALTIES = [
   "geral", "dentistica", "endo", "perio", "cirurgia", "protese",
-  "implante", "orto", "odontoped", "radio", "dtm", "estomato",
+  "implante", "orto", "odontoped", "radio", "dtm", "estomato", "harmonizacao",
 ];
+
+export const HOF_SPECIALTY_ID = "harmonizacao";
 
 export const BASE_PROCEDURES: Procedure[] = Object.entries(raw).flatMap(([sid, s]) =>
   Object.entries(s.groups).flatMap(([group, names]) =>
