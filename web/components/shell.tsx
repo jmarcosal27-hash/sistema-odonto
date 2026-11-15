@@ -62,25 +62,26 @@ export function Shell({ children }: { children: ReactNode }) {
   if (path.endsWith("/imprimir") || path.startsWith("/entrar") || path.startsWith("/auth") || path === "/privacidade" || path === "/termos") return <ToastProvider>{children}</ToastProvider>;
   if (remote?.status === "no-clinic") return <ToastProvider><CreateClinic email={remote.email} /></ToastProvider>;
   if (remote?.status === "error") return <ToastProvider><main className="grid min-h-dvh place-items-center p-6 text-center"><div className="space-y-3"><p className="font-semibold">{remote.message}</p><a href="/entrar" className="font-semibold text-brand">Entrar de novo</a></div></main></ToastProvider>;
+  const todayLong = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const title = TITLES.find(([p]) => path.startsWith(p))?.[1] ?? "Início";
   const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
 
   const nav = (
     <nav aria-label="Principal" className="flex flex-col h-full">
-      <div className="px-2 py-3"><Logo width={144} /></div>
+      <div className="px-3 pt-4 pb-3"><Logo width={136} onDark /></div>
       <div className="flex-1 overflow-y-auto px-2">
         <ul className="space-y-0.5 py-2">
           {NAV.map((it) => <li key={it.href}><NavLink it={it} path={path} /></li>)}
         </ul>
       </div>
-      <div className="px-2 py-3 border-t border-border space-y-0.5">
+      <div className="mx-2 px-0 py-3 border-t border-rail-line space-y-0.5">
         <NavLink it={{ href: "/ajustes", label: "Ajustes", icon: Settings }} path={path} />
         <NavLink it={{ href: "/tabela", label: "Tabela de preços", icon: Tags, sub: true }} path={path} />
-        <button type="button" onClick={() => { setDrawer(false); setHelp(true); }} className="flex w-full items-center gap-3 rounded-md px-3 h-11 text-sm hover:bg-surface-200/60">
+        <button type="button" onClick={() => { setDrawer(false); setHelp(true); }} className="flex w-full items-center gap-3 rounded-md px-3 h-11 text-sm text-rail-ink transition-colors duration-150 hover:bg-rail-hover">
           <CircleHelp aria-hidden className="size-[18px]" />Como funciona
         </button>
-        <button type="button" onClick={() => logout()} className="flex w-full items-center gap-3 rounded-md px-3 h-11 text-sm text-ink-muted hover:bg-surface-200/60">
+        <button type="button" onClick={() => logout()} className="flex w-full items-center gap-3 rounded-md px-3 h-11 text-sm text-rail-muted transition-colors duration-150 hover:bg-rail-hover hover:text-rail-ink">
           <LogOut aria-hidden className="size-[18px]" />Sair
         </button>
       </div>
@@ -91,11 +92,11 @@ export function Shell({ children }: { children: ReactNode }) {
     <ToastProvider>
       <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[70] focus:rounded-md focus:bg-surface-200 focus:px-4 focus:py-3 focus:font-semibold focus:text-ink focus:shadow-md">Pular para o conteúdo</a>
       <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
-        <aside className="hidden lg:block sticky top-0 h-dvh bg-surface-300">{nav}</aside>
+        <aside className="hidden lg:block sticky top-0 h-dvh bg-rail text-rail-ink">{nav}</aside>
 
         {drawer && (
           <div className="lg:hidden fixed inset-0 z-40 bg-brand-ink/60" onClick={() => setDrawer(false)}>
-            <aside className="h-full w-72 max-w-[85vw] bg-surface-300" onClick={(e) => e.stopPropagation()}>
+            <aside className="h-full w-72 max-w-[85vw] bg-rail text-rail-ink" onClick={(e) => e.stopPropagation()}>
               <button type="button" aria-label="Fechar menu" onClick={() => setDrawer(false)} className="absolute left-[min(18rem,85vw)] top-3 ml-2 grid size-11 place-items-center rounded-pill bg-surface-200 shadow-sm"><X aria-hidden className="size-5" /></button>
               {nav}
             </aside>
@@ -103,33 +104,38 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
 
         <div className="min-w-0 flex flex-col">
-          <header className="sticky top-0 z-30 flex items-center gap-2 bg-surface-100/90 backdrop-blur px-4 lg:px-8 h-16">
+          <header className="sticky top-0 z-30 bg-paper px-4 lg:px-8">
+            <div className="mx-auto flex max-w-[68rem] items-end gap-2 pt-3 pb-2 border-b-[3px] border-rule shadow-[0_3px_0_var(--paper),0_4px_0_var(--rule)]">
             <button type="button" aria-label="Abrir menu" onClick={() => setDrawer(true)} className="lg:hidden grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Menu aria-hidden className="size-5" /></button>
             <LogoIcon size={32} className="lg:hidden shrink-0 rounded-md" />
-            <h1 className="text-lg font-semibold truncate flex-1">{title}</h1>
+            <div className="min-w-0 flex-1 self-center lg:self-end">
+              <p className="hidden sm:block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted truncate">{[db?.profile.clinicName, todayLong].filter(Boolean).join(" · ")}</p>
+              <h1 className="text-xl lg:text-[26px] lg:leading-8 font-bold tracking-[-0.015em] truncate">{title}</h1>
+            </div>
             <IconBtn label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
               onClick={() => db && api.account.updateProfile({ theme: nextTheme })}><ThemeIcon className="size-5" /></IconBtn>
             <IconBtn label="Ajuda" onClick={() => setHelp(true)}><CircleHelp className="size-5" /></IconBtn>
             <Link href="/ajustes" aria-label="Ajustes" className="grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Settings className="size-5" /></Link>
+            </div>
           </header>
 
           {db && isReadOnly(db) && (
-            <div role="status" className="mx-4 lg:mx-8 mb-2 rounded-md bg-warning-soft px-4 py-2 text-sm">
+            <div role="status" className="mx-4 lg:mx-auto lg:w-[calc(100%-4rem)] lg:max-w-[68rem] mt-4 rounded-md bg-warning-soft px-4 py-2 text-sm">
               Seu acesso venceu. Tudo continua visível, mas para registrar algo novo é preciso <Link href="/ajustes/conta" className="font-semibold underline">renovar</Link>.
             </div>
           )}
           {db && !db.profile.onboardingDone && path === "/" && (
-            <div className="mx-4 lg:mx-8 mb-2 flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-200 px-4 py-3">
+            <div className="mx-4 lg:mx-auto lg:w-[calc(100%-4rem)] lg:max-w-[68rem] mt-4 relative flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-200 py-3 pl-4 pr-14">
               <div className="flex-1 min-w-48">
                 <p className="text-sm font-semibold">Deixe o sistema com a sua cara</p>
                 <p className="text-xs text-ink-muted">Quatro perguntas rápidas e você já sai montando o primeiro plano.</p>
               </div>
-              <button type="button" onClick={() => setOnboard(true)} className="rounded-pill bg-brand text-on-brand h-11 px-5 text-sm font-semibold transition-colors duration-150 hover:bg-brand-hover">Começar</button>
-              <button type="button" aria-label="Dispensar" onClick={() => api.account.updateProfile({ onboardingDone: true })} className="grid size-11 place-items-center rounded-pill text-ink-muted transition-colors duration-150 hover:bg-surface-300"><X aria-hidden className="size-4" /></button>
+              <button type="button" onClick={() => setOnboard(true)} className="rounded-md bg-brand text-on-brand h-11 px-5 text-sm font-semibold transition-colors duration-150 hover:bg-brand-hover">Começar</button>
+              <button type="button" aria-label="Dispensar" onClick={() => api.account.updateProfile({ onboardingDone: true })} className="absolute right-1.5 top-1.5 sm:top-1/2 sm:-translate-y-1/2 grid size-11 place-items-center rounded-pill text-ink-muted transition-colors duration-150 hover:bg-surface-300"><X aria-hidden className="size-4" /></button>
             </div>
           )}
 
-          <main id="conteudo" className="flex-1 px-4 lg:px-8 pb-12 pt-2 w-full max-w-6xl mx-auto">{children}</main>
+          <main id="conteudo" className="flex-1 px-4 lg:px-8 pb-12 pt-6 w-full max-w-6xl mx-auto">{children}</main>
         </div>
       </div>
       <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
@@ -143,9 +149,9 @@ function NavLink({ it, path }: { it: NavItem; path: string }) {
   const Icon = it.icon;
   return (
     <Link href={it.href} aria-current={active ? "page" : undefined}
-      className={cx("flex items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150", it.sub ? "ml-6 h-10" : "h-11",
-        active ? "bg-stage-blue-soft font-semibold text-stage-blue" : "hover:bg-surface-200/60")}>
-      <Icon aria-hidden className="size-[18px]" />{it.label}
+      className={cx("flex items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150", it.sub ? "ml-6 h-10 text-[13px]" : "h-11",
+        active ? "bg-paper font-semibold text-ink shadow-[inset_3px_0_0_var(--rail-mark)]" : it.sub ? "text-rail-muted hover:bg-rail-hover hover:text-rail-ink" : "text-rail-ink hover:bg-rail-hover")}>
+      {!it.sub && <Icon aria-hidden className={cx("size-[18px]", active ? "text-brand" : "text-rail-muted")} />}{it.label}
     </Link>
   );
 }

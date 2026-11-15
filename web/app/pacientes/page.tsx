@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Plus, Upload, Download, Cake } from "lucide-react";
 import { useDb, api, patientStatus, isBirthdayMonth } from "@/lib/store";
@@ -27,6 +27,8 @@ export default function Page() {
   const [sort, setSort] = useState<"recent" | "az">("recent");
   const [archived, setArchived] = useState(false);
   const [form, setForm] = useState(false);
+  // "/pacientes?novo=1" (atalho do Início) já abre o cadastro.
+  useEffect(() => { if (new URLSearchParams(window.location.search).has("novo")) setForm(true); }, []);
   const file = useRef<HTMLInputElement>(null);
 
   const list = useMemo(() => {
