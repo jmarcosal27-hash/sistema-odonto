@@ -953,8 +953,144 @@ const apTmpAfter = (await a.from("appointments").select("id,professional_id").eq
 const blTmpAfter = (await a.from("time_blocks").select("id").eq("id", blTmp.id).maybeSingle()).data;
 check(proDel?.length === 1 && apTmpAfter?.id === apTmp.id && apTmpAfter.professional_id === null && !blTmpAfter, "excluir profissional NÃO apaga o agendamento (fica sem profissional) e remove os bloqueios dele");
 
+// Caixa e comissão (migration 20261116000006): só dono/financeiro; nada é apagado; estorno é permanente
+{
+const cmv = (o = {}) => ({ clinic_id: clinicA, kind: "in", occurred_on: "2026-12-01", amount_cents: 5000, method: "cash", category: "Outras entradas", ...o });
+const { data: cm1, error: cmE1 } = await a.from("cash_movements").insert(cmv({ patient_id: pat.id, professional_id: pro1.id })).select("id").single();
+check(!cmE1 && cm1, "caixa: dono A lança entrada manual ligada a paciente e dentista");
+const { data: cmB } = await b.from("cash_movements").select("id").eq("clinic_id", clinicA);
+check((cmB?.length ?? 0) === 0, "caixa: B NÃO vê lançamentos da clínica A");
+const { error: cmE2 } = await b.from("cash_movements").insert(cmv());
+check(!!cmE2, "caixa: B NÃO lança no caixa da clínica A");
+const { data: cmR } = await rcp.from("cash_movements").select("id").eq("clinic_id", clinicA);
+check((cmR?.length ?? 0) === 0, "caixa: recepção NÃO lê o caixa");
+const { error: cmE3 } = await rcp.from("cash_movements").insert(cmv());
+check(!!cmE3, "caixa: recepção NÃO lança no caixa");
+const { error: cmE4 } = await a.from("cash_movements").insert(cmv({ amount_cents: 0 }));
+check(!!cmE4, "caixa: valor zero é recusado");
+const { error: cmE5 } = await a.from("cash_movements").insert(cmv({ method: "cheque" }));
+check(!!cmE5, "caixa: forma de pagamento inválida é recusada");
+const { data: patB } = await b.from("patients").insert({ clinic_id: clinicB, full_name: "Paciente B caixa" }).select("id").single();
+const { error: cmE6 } = await a.from("cash_movements").insert(cmv({ patient_id: patB.id }));
+check(!!cmE6, "caixa: paciente de outra clínica é recusado");
+const { data: cmDel } = await a.from("cash_movements").delete().eq("id", cm1.id).select("id");
+check(!cmDel || cmDel.length === 0, "caixa: NINGUÉM apaga lançamento (nem o dono)");
+const { error: cmE7 } = await a.from("cash_movements").update({ amount_cents: 9999 }).eq("id", cm1.id);
+check(!!cmE7, "caixa: valor do lançamento não pode ser alterado");
+const { error: cmE8 } = await a.from("cash_movements").update({ reversed_at: new Date().toISOString() }).eq("id", cm1.id);
+check(!!cmE8, "caixa: estorno exige motivo");
+const { error: cmE9 } = await a.from("cash_movements").update({ reversed_at: new Date().toISOString(), reversal_reason: "Lançado errado" }).eq("id", cm1.id);
+check(!cmE9, "caixa: dono estorna com motivo");
+const { error: cmE10 } = await a.from("cash_movements").update({ reversed_at: null, reversal_reason: null }).eq("id", cm1.id);
+check(!!cmE10, "caixa: estorno não volta atrás");
+
+const { error: cdE1 } = await a.from("cash_days").insert({ clinic_id: clinicA, day: "2026-12-01", opening_cents: 10000 });
+check(!cdE1, "caixa: dono abre o caixa do dia");
+const { error: cdE2 } = await a.from("cash_days").insert({ clinic_id: clinicA, day: "2026-12-01", opening_cents: 0 });
+check(!!cdE2, "caixa: um registro por dia");
+const { error: cdE3 } = await a.from("cash_days").update({ counted_cents: 10000, closed_at: new Date().toISOString() }).eq("clinic_id", clinicA).eq("day", "2026-12-01");
+check(!cdE3, "caixa: dono fecha o dia");
+const { error: cdE4 } = await a.from("cash_days").update({ opening_cents: 1 }).eq("clinic_id", clinicA).eq("day", "2026-12-01");
+check(!!cdE4, "caixa: dia fechado não muda");
+const { data: cdB } = await b.from("cash_days").select("id").eq("clinic_id", clinicA);
+check((cdB?.length ?? 0) === 0, "caixa: B NÃO vê fechamentos da clínica A");
+
+const { data: instRows } = await a.from("installments").select("id").eq("budget_id", budgetId).limit(1);
+const { data: cr1, error: crE1 } = await a.from("cash_receipts").insert({ clinic_id: clinicA, source_type: "installment", source_id: instRows[0].id, professional_id: pro1.id }).select("id").single();
+check(!crE1 && cr1, "caixa: dono liga dentista a uma parcela existente");
+const { error: crE2 } = await a.from("cash_receipts").insert({ clinic_id: clinicA, source_type: "treatment", source_id: crypto.randomUUID() });
+check(!!crE2, "caixa: recebimento com origem inexistente é recusado");
+const { error: crE3 } = await b.from("cash_receipts").insert({ clinic_id: clinicB, source_type: "installment", source_id: instRows[0].id });
+check(!!crE3, "caixa: B NÃO liga recebimento de parcela da clínica A");
+
+const { data: cru1, error: cruE1 } = await a.from("commission_rules").insert({ clinic_id: clinicA, professional_id: pro1.id, procedure_key: "", percent: 30.5, lab_cost_percent: 10 }).select("id").single();
+check(!cruE1 && cru1, "comissão: dono define % padrão do dentista (2 casas)");
+const { error: cruE2 } = await a.from("commission_rules").insert({ clinic_id: clinicA, professional_id: pro1.id, procedure_key: "", percent: 20 });
+check(!!cruE2, "comissão: regra padrão é única por dentista");
+const { error: cruE3 } = await a.from("commission_rules").insert({ clinic_id: clinicA, professional_id: pro1.id, procedure_key: "Implante", percent: 101 });
+check(!!cruE3, "comissão: % acima de 100 é recusado");
+const { error: cruE4 } = await a.from("commission_rules").insert({ clinic_id: clinicA, professional_id: pro1.id, procedure_key: "Implante", percent: 40 });
+check(!cruE4, "comissão: override por procedimento");
+const { data: cruB } = await b.from("commission_rules").select("id").eq("clinic_id", clinicA);
+check((cruB?.length ?? 0) === 0, "comissão: B NÃO vê regras da clínica A");
+const { error: cruE5 } = await b.from("commission_rules").insert({ clinic_id: clinicA, professional_id: pro1.id, procedure_key: "X", percent: 10 });
+check(!!cruE5, "comissão: B NÃO cria regra na clínica A");
+const { data: cruR } = await rcp.from("commission_rules").select("id").eq("clinic_id", clinicA);
+check((cruR?.length ?? 0) === 0, "comissão: recepção NÃO lê regras");
+const { error: cruE6 } = await a.from("commission_rules").insert({ clinic_id: clinicB, professional_id: pro1.id, procedure_key: "Y", percent: 10 });
+check(!!cruE6, "comissão: dono A NÃO cria regra na clínica B");
+
+const { data: cpo, error: cpoE1 } = await a.from("commission_payouts").insert({ clinic_id: clinicA, professional_id: pro1.id, professional_name: "Dra. Agenda", period_from: "2026-12-01", period_to: "2026-12-31", amount_cents: 1500 }).select("id").single();
+check(!cpoE1 && cpo, "comissão: dono registra pagamento");
+const { data: cpoUp } = await a.from("commission_payouts").update({ amount_cents: 1 }).eq("id", cpo.id).select("id");
+const { data: cpoNow } = await a.from("commission_payouts").select("amount_cents").eq("id", cpo.id).single();
+check((cpoUp?.length ?? 0) === 0 && cpoNow?.amount_cents === 1500, "comissão: pagamento não pode ser alterado");
+const { data: cpoDel } = await a.from("commission_payouts").delete().eq("id", cpo.id).select("id");
+check(!cpoDel || cpoDel.length === 0, "comissão: NINGUÉM apaga pagamento");
+const { data: cpoB } = await b.from("commission_payouts").select("id").eq("clinic_id", clinicA);
+check((cpoB?.length ?? 0) === 0, "comissão: B NÃO vê pagamentos da clínica A");
+const { error: cpiE1 } = await a.from("commission_payout_items").insert({ clinic_id: clinicA, payout_id: cpo.id, source_type: "installment", source_id: crypto.randomUUID(), amount_cents: 100 });
+check(!!cpiE1, "comissão: item com recebimento inexistente é recusado");
+const { error: cpiE2 } = await a.from("commission_payout_items").insert({ clinic_id: clinicA, payout_id: cpo.id, source_type: "installment", source_id: instRows[0].id, amount_cents: 100 });
+check(!cpiE2, "comissão: item de recebimento real entra no pagamento");
+const { error: cpiE3 } = await a.from("commission_payout_items").insert({ clinic_id: clinicA, payout_id: cpo.id, source_type: "installment", source_id: instRows[0].id, amount_cents: 100 });
+check(!!cpiE3, "comissão: o mesmo recebimento NÃO entra em dois pagamentos");
+
+}
+// Convênios e faturamento (migration 20261116000007): isolamento entre clínicas, integridade e só-dono-apaga
+const { data: insA, error: insE1 } = await a.from("insurers").insert({ clinic_id: clinicA, name: "Convênio A" }).select("id").single();
+check(!insE1 && insA, "A cadastra convênio na clínica A");
+const { data: insB } = await b.from("insurers").insert({ clinic_id: clinicB, name: "Convênio B" }).select("id").single();
+const { data: insSee } = await b.from("insurers").select("id").eq("clinic_id", clinicA);
+check((insSee?.length ?? 0) === 0, "B NÃO enxerga convênios da clínica A");
+const { error: insDup } = await a.from("insurers").insert({ clinic_id: clinicA, name: "  convênio a " });
+check(!!insDup, "nome de convênio repetido na mesma clínica é recusado");
+const { error: insBad } = await a.from("insurers").insert({ clinic_id: clinicA, name: "Prazo ruim", payment_days: 999 });
+check(!!insBad, "prazo de pagamento fora de 0 a 365 é recusado");
+const { error: insX } = await a.from("insurer_prices").insert({ clinic_id: clinicA, insurer_id: insB.id, procedure_key: "x", procedure_name: "X", price_cents: 100 });
+check(!!insX, "A NÃO cria valor de repasse apontando para convênio da clínica B");
+const { error: insP } = await a.from("insurer_prices").insert({ clinic_id: clinicA, insurer_id: insA.id, procedure_key: "limpeza", procedure_name: "Limpeza", price_cents: 8000 });
+check(!insP, "A cria valor de repasse no próprio convênio");
+const { error: insPn } = await a.from("insurer_prices").insert({ clinic_id: clinicA, insurer_id: insA.id, procedure_key: "neg", procedure_name: "Negativo", price_cents: -1 });
+check(!!insPn, "valor de repasse negativo é recusado");
+const { error: patIns } = await a.from("patients").update({ insurer_id: insB.id }).eq("id", pat.id);
+check(!!patIns, "A NÃO vincula paciente a convênio da clínica B");
+const { error: patIns2 } = await a.from("patients").update({ insurer_id: insA.id, insurance_card: "123456" }).eq("id", pat.id);
+check(!patIns2, "A vincula o paciente ao próprio convênio, com carteirinha");
+const { data: bb1, error: bbE } = await a.from("billing_batches").insert({ clinic_id: clinicA, insurer_id: insA.id, year: 2026, month: 11 }).select("id").single();
+check(!bbE && bb1, "A cria lote de faturamento");
+const { error: bbX } = await a.from("billing_batches").insert({ clinic_id: clinicA, insurer_id: insB.id, year: 2026, month: 11 });
+check(!!bbX, "A NÃO cria lote para convênio da clínica B");
+const { error: bbM } = await a.from("billing_batches").insert({ clinic_id: clinicA, insurer_id: insA.id, year: 2026, month: 13 });
+check(!!bbM, "mês fora de 1 a 12 é recusado");
+const { data: bi1, error: biE } = await a.from("billing_items").insert({ clinic_id: clinicA, batch_id: bb1.id, patient_id: pat.id, procedure_name: "Limpeza", performed_on: "2026-11-10", billed_cents: 8000 }).select("id").single();
+check(!biE && bi1, "A cria item no lote");
+const { error: biOver } = await a.from("billing_items").update({ paid_cents: 7000, gloss_cents: 2000 }).eq("id", bi1.id);
+check(!!biOver, "pago + glosa acima do faturado é recusado");
+const { error: biOk } = await a.from("billing_items").update({ paid_cents: 6000, gloss_cents: 2000, gloss_reason: "Sem cobertura", status: "partial" }).eq("id", bi1.id);
+check(!biOk, "A registra pagamento parcial com glosa e motivo");
+const { data: convPatB } = await b.from("patients").insert({ clinic_id: clinicB, full_name: "Paciente B" }).select("id").single();
+const { error: biPat } = await a.from("billing_items").insert({ clinic_id: clinicA, batch_id: bb1.id, patient_id: convPatB.id, procedure_name: "X", performed_on: "2026-11-10", billed_cents: 100 });
+check(!!biPat, "A NÃO fatura paciente da clínica B");
+const { data: bbSee } = await b.from("billing_batches").select("id").eq("clinic_id", clinicA);
+const { data: biSee } = await b.from("billing_items").select("id").eq("clinic_id", clinicA);
+check((bbSee?.length ?? 0) === 0 && (biSee?.length ?? 0) === 0, "B NÃO enxerga lotes nem itens da clínica A");
+const { data: insMove } = await a.from("insurers").update({ clinic_id: clinicB }).eq("id", insA.id).select("id");
+check(!insMove || insMove.length === 0, "A NÃO move convênio para a clínica B");
+// Papel que não é dono (dentista/recepção) lê e escreve, mas não apaga: coberto pelo teste de papéis do bloco de prótese (mesma regra has_role owner).
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
+{
+  const { data: vIns } = await a.from("insurers").select("id").eq("clinic_id", clinicA);
+  check((vIns?.length ?? 0) >= 1, "acesso vencido: A ainda LÊ convênios");
+  const { error: vE1 } = await a.from("insurers").insert({ clinic_id: clinicA, name: "Após vencer" });
+  check(!!vE1, "acesso vencido: A NÃO cadastra convênio");
+  const { data: vU } = await a.from("billing_items").update({ paid_cents: 0, gloss_cents: 0, status: "pending" }).eq("id", bi1.id).select("id");
+  check(!vU || vU.length === 0, "acesso vencido: A NÃO altera item de faturamento");
+  const { data: vD } = await a.from("billing_batches").delete().eq("id", bb1.id).select("id");
+  check(!vD || vD.length === 0, "acesso vencido: A NÃO exclui lote");
+}
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
 check(readOk?.length === 2, "acesso vencido: A ainda LÊ os pacientes");
 const { error: e9 } = await a.from("patients").insert({ clinic_id: clinicA, full_name: "Novo após vencer" });

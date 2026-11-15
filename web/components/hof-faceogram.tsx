@@ -17,7 +17,7 @@ const TOOLS: { id: Tool; label: string; Icon: typeof Eraser }[] = [
 const SHAPE_NAME = { point: "Ponto", arrow: "Seta", line: "Linha" } as const;
 
 // Visual minimalista: traço fino, sem contorno escuro. Cor própria da marcação (padrão ciano).
-const INK = "#00e5ff", AIM = "#ffd400", PLACED = "#ffffff", REGION_ON = "#ff4d8d";
+const INK = "#00e5ff", AIM = "#ffd400", PLACED = "#ffffff", REGION_OFF = "#2f7dff", REGION_ON = "#1456e0";
 
 const clampPt = ([x, y]: Pt): Pt => [Math.min(HOF_VIEW.w, Math.max(0, Math.round(x * 10) / 10)), Math.min(HOF_VIEW.h, Math.max(0, Math.round(y * 10) / 10))];
 
@@ -164,10 +164,12 @@ export function FaceStage({ face, regions = [], placedRegions = [], shapes = [],
                 } : { style: { pointerEvents: "none" } })}
                 className="outline-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#ff3d00]"
               >
-                {!on && <path d={r.d} fill="none" stroke="#000" strokeOpacity={0.22} strokeWidth={1.5} strokeLinejoin="round" />}
+                {/* traço branco fino por baixo garante contraste em pele clara, escura e fundo cinza */}
+                <path d={r.d} fill="none" stroke="#fff" strokeOpacity={on ? 0.75 : 0.5} strokeWidth={on ? 3 : 2.2} strokeLinecap="round" strokeLinejoin="round" />
                 <path
-                  d={r.d} fillRule="evenodd" strokeLinejoin="round" fill={on ? REGION_ON : placed ? INK : "#fff"} fillOpacity={on ? 0.35 : placed ? 0.2 : lit ? 0.15 : 0.02}
-                  stroke={on ? REGION_ON : "#fff"} strokeWidth={on ? 0.8 : 0.75} strokeOpacity={on ? 0.95 : 0.9} strokeDasharray={on ? undefined : "2.5 2.5"}
+                  d={r.d} fillRule="evenodd" strokeLinejoin="round" strokeLinecap="round"
+                  fill={r.line ? "none" : on ? REGION_ON : placed ? INK : "#fff"} fillOpacity={on ? 0.08 : placed ? 0.2 : lit ? 0.12 : 0.02}
+                  stroke={on ? REGION_ON : placed ? INK : REGION_OFF} strokeWidth={on ? 1.4 : lit ? 1.3 : 1} strokeDasharray={on ? undefined : "3 2.5"}
                 />
                 {interaction && <path d={r.d} fill="none" stroke="transparent" strokeWidth={8} strokeLinejoin="round" />}
               </g>

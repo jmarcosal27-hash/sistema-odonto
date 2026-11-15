@@ -4,11 +4,12 @@ import type { HofFace, HofShape, HofUnit, PlanItem } from "./types";
 
 export const HOF_VIEW = { w: 300, h: 400 } as const;
 
-export interface HofRegion { id: string; label: string; d: string; mirror?: boolean }
+/** `line`: traço aberto (sem preenchimento), como mandíbula e pescoço. */
+export interface HofRegion { id: string; label: string; d: string; mirror?: boolean; line?: boolean }
 
 /** Rótulos únicos (mesmos ids nos dois rostos). */
 const REGION_LABELS: Record<string, string> = {
-  testa: "Testa", perioral: "Região perioral", mandibula_d: "Mandíbula direita", mandibula_e: "Mandíbula esquerda", pescoco: "Platisma e pescoço",
+  testa: "Testa", perioral: "Região perioral", mandibula_d: "Mandíbula direita", mandibula_e: "Mandíbula esquerda", pescoco: "Pescoço", platisma: "Platisma",
   tempora_d: "Têmpora direita", tempora_e: "Têmpora esquerda", malar_d: "Malar direito", malar_e: "Malar esquerdo",
   olheira_d: "Olheira direita", olheira_e: "Olheira esquerda", nasogeniano_d: "Sulco nasogeniano direito", nasogeniano_e: "Sulco nasogeniano esquerdo",
   nariz: "Nariz", glabela: "Glabela", labio_superior: "Lábio superior", labio_inferior: "Lábio inferior", mento: "Mento",
@@ -52,24 +53,42 @@ const mirrorX = (pts: P[]): P[] => pts.map(([x, y]) => [300 - x, y]);
 // Geometria por rosto, ajustada às feições de cada foto. Nos pares (_d/_e) o caminho fica no lado
 // direito do paciente (esquerda da imagem) e o lado esquerdo é o espelho em x = 150.
 // Banco restringe hof_regions a 18 ids: regiões do Simples sem id próprio viram sub-formas de um id existente
-// (malar inclui a bochecha; olheira = periorbital; mandibula = linha do ângulo ao mento; pescoco = arco + platisma).
+// (malar inclui a bochecha; olheira = periorbital; mandibula = linha do ângulo ao mento; pescoco = arco + linha média; platisma = faixas laterais).
 const PAIRED = ["mandibula", "tempora", "malar", "olheira", "nasogeniano"];
+const LINES = ["mandibula", "pescoco", "platisma"];
 type Geo = Record<string, string>;
 
 function build(g: Geo): HofRegion[] {
   return Object.entries(REGION_LABELS).map(([id, label]) => {
     const base = id.replace(/_[de]$/, "");
     const paired = PAIRED.includes(base);
-    return { id, label, d: g[paired ? base : id], ...(paired && id.endsWith("_e") ? { mirror: true } : {}) };
+    return { id, label, d: g[paired ? base : id], ...(LINES.includes(base) ? { line: true } : {}), ...(paired && id.endsWith("_e") ? { mirror: true } : {}) };
   });
 }
 
-/** Pescoço: arco submentoniano + 3 faixas de platisma (laterais simétricas e central). */
-const neck = (archY: number, sideTop: P, sideBot: P, half: number) => [
-  band([[150 - half, archY - 6], [150 - half / 2, archY + 2], [150, archY + 5], [150 + half / 2, archY + 2], [150 + half, archY - 6]], 3.2),
-  band([sideTop, sideBot], 3.4), band(mirrorX([sideTop, sideBot]), 3.4),
-  band([[150, sideTop[1]], [150, sideBot[1]]], 3),
-].join(" ");
+/** Curva suave (Catmull-Rom para Bézier) aberta pelos pontos: usada nos traços de mandíbula e pescoço. */
+function curve(pts: P[]): string {
+  let d = `M${f1(pts[0][0])} ${f1(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    d += ` C${f1(p1[0] + (p2[0] - p0[0]) / 6)} ${f1(p1[1] + (p2[1] - p0[1]) / 6)} ${f1(p2[0] - (p3[0] - p1[0]) / 6)} ${f1(p2[1] - (p3[1] - p1[1]) / 6)} ${f1(p2[0])} ${f1(p2[1])}`;
+  }
+  return d;
+}
+
+/** Pescoço = arco submentoniano + linha média; platisma = faixas laterais (esq. e dir.) pela borda do pescoço. */
+const neckArc = (arc: P[], mid: P[]) => `${curve(arc)} ${curve(mid)}`;
+const platisma = (side: P[]) => `${curve(side)} ${curve(mirrorX(side))}`;
+
+// Traços ajustados às fotos (viewBox = foto 600x800 / 2). J = mandíbula (lado direito do paciente), A = arco, M = linha média, P = faixa lateral.
+const FJ: P[] = [[62, 238], [70, 262], [84, 284], [102, 300], [122, 312], [141, 318]];
+const FA: P[] = [[100, 326], [122, 338], [150, 343], [178, 338], [200, 326]];
+const FM: P[] = [[150, 358], [150, 396]];
+const FP: P[] = [[103, 345], [97, 368], [90, 395]];
+const MJ: P[] = [[62, 232], [70, 262], [85, 286], [104, 302], [125, 314], [141, 319]];
+const MA: P[] = [[98, 326], [122, 338], [150, 343], [178, 338], [202, 326]];
+const MM: P[] = [[150, 358], [150, 396]];
+const MP: P[] = [[94, 345], [86, 368], [78, 395]];
 
 export const HOF_REGIONS_BY_FACE: Record<HofFace, HofRegion[]> = {
   female: build({
@@ -84,8 +103,9 @@ export const HOF_REGIONS_BY_FACE: Record<HofFace, HofRegion[]> = {
     labio_superior: "M114 262 Q130 249 142 247 Q150 252 158 247 Q170 249 187 262 Q150 267 114 262 Z",
     labio_inferior: "M116 263 Q150 269 186 263 Q172 282 150 282 Q130 282 116 263 Z",
     mento: ell(150, 303, 21, 9),
-    mandibula: band([[76, 238], [90, 268], [106, 290], [127, 304], [141, 309]], 5, 4),
-    pescoco: neck(341, [118, 352], [108, 396], 42),
+    mandibula: curve(FJ),
+    pescoco: neckArc(FA, FM),
+    platisma: platisma(FP),
   }),
   male: build({
     testa: poly([[118, 90], [182, 90], [206, 137], [94, 137]]),
@@ -99,8 +119,9 @@ export const HOF_REGIONS_BY_FACE: Record<HofFace, HofRegion[]> = {
     labio_superior: "M118 258 Q132 250 143 251 Q150 254 158 251 Q170 250 184 258 Q150 262 118 258 Z",
     labio_inferior: "M120 259 Q150 263 183 259 Q170 277 151 277 Q133 277 120 259 Z",
     mento: ell(150, 303, 21, 9),
-    mandibula: band([[77, 238], [91, 268], [107, 290], [127, 304], [141, 309]], 5, 4),
-    pescoco: neck(343, [120, 354], [110, 396], 40),
+    mandibula: curve(MJ),
+    pescoco: neckArc(MA, MM),
+    platisma: platisma(MP),
   }),
 };
 

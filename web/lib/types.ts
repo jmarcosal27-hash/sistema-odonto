@@ -25,6 +25,10 @@ export interface Patient {
   referralSource?: string;
   notes?: string;
   recallEnabled: boolean;
+  /** Convênio do paciente (vazio = particular), número da carteirinha e validade. */
+  insurerId?: string;
+  insuranceCard?: string;
+  insuranceValidUntil?: string; // yyyy-mm-dd
   archived?: boolean;
   lastVisitAt?: string; // ISO
   createdAt: string;
@@ -442,8 +446,56 @@ export interface ProsthesisEvent {
   createdAt: string;
 }
 
+/** Forma de pagamento no caixa: as de PaymentMethod mais convênio. */
+export type CashMethod = PaymentMethod | "insurance";
+/** Lançamento manual do caixa (entrada ou saída) ou saída de comissão paga. Nunca é apagado: só estornado. */
+export interface CashMovement {
+  id: string;
+  kind: "in" | "out";
+  date: string; // yyyy-mm-dd
+  amountCents: number;
+  method: CashMethod;
+  category: string;
+  description?: string;
+  patientId?: string;
+  professionalId?: string;
+  payoutId?: string;
+  reversedAt?: string;
+  reversalReason?: string;
+}
+/** Dados extras de um recebimento que já existe (parcela paga ou atendimento recebido): dentista, forma e estorno. */
+export interface CashReceiptMeta {
+  id: string;
+  sourceType: "installment" | "treatment";
+  sourceId: string;
+  professionalId?: string;
+  method?: CashMethod;
+  reversedAt?: string;
+  reversalReason?: string;
+}
+/** Abertura e fechamento do caixa de um dia. Fechado = fixo. */
+export interface CashDay { id: string; day: string; openingCents: number; countedCents?: number; closedAt?: string; notes?: string }
+/** procedureKey "" = regra padrão do dentista; senão, override para aquele procedimento. Percentuais 0 a 100. */
+export interface CommissionRule { id: string; professionalId: string; procedureKey: string; percent: number; labCostPercent: number }
+export interface CommissionPayoutItem { sourceType: "installment" | "treatment"; sourceId: string; amountCents: number }
+export interface CommissionPayout {
+  id: string;
+  professionalId?: string;
+  professionalName: string;
+  periodFrom: string;
+  periodTo: string;
+  amountCents: number;
+  paidOn: string;
+  items: CommissionPayoutItem[];
+}
+
 export interface Db {
   version: number;
+  cashMovements: CashMovement[];
+  cashReceipts: CashReceiptMeta[];
+  cashDays: CashDay[];
+  commissionRules: CommissionRule[];
+  commissionPayouts: CommissionPayout[];
   patients: Patient[];
   events: PatientEvent[];
   customProcedures: Procedure[];
@@ -479,4 +531,59 @@ export interface Db {
   prosthesisEvents: ProsthesisEvent[];
   professionals: Professional[];
   timeBlocks: TimeBlock[];
+  insurers: Insurer[];
+  insurerPrices: InsurerPrice[];
+  billingBatches: BillingBatch[];
+  billingItems: BillingItem[];
+}
+
+/** Convênios: cadastro da clínica, tabela de repasse e faturamento por lote. Valores em centavos. */
+export interface Insurer {
+  id: string;
+  name: string;
+  type: "odonto" | "saude_odonto" | "autogestao";
+  ansCode?: string;
+  active: boolean;
+  /** Dias entre o envio do lote e o pagamento. */
+  paymentDays: number;
+  /** Dia do mês em que o lote fecha (1 a 31). */
+  closingDay: number;
+  /** Glosa média esperada, em % (0 a 100). */
+  defaultGlossPercent: number;
+  contact?: string;
+  notes?: string;
+  /** Veio da lista sugerida e ainda não foi revisado. */
+  suggested?: boolean;
+}
+/** Repasse por procedimento. procedureKey = id do procedimento do catálogo ou o nome normalizado. */
+export interface InsurerPrice { id: string; insurerId: string; procedureKey: string; procedureName: string; priceCents: number }
+export type BillingBatchStatus = "draft" | "sent" | "paid" | "partial" | "glossed";
+export interface BillingBatch {
+  id: string;
+  insurerId: string;
+  year: number;
+  month: number; // 1..12
+  status: BillingBatchStatus;
+  protocol?: string;
+  sentOn?: string;
+  expectedOn?: string;
+  /** Quanto do valor pago já virou entrada no caixa. */
+  cashedCents: number;
+  createdAt: string;
+}
+export type BillingItemStatus = "pending" | "paid" | "partial" | "glossed";
+export interface BillingItem {
+  id: string;
+  batchId: string;
+  treatmentId?: string;
+  patientId: string;
+  cardNumber?: string;
+  procedureName: string;
+  professionalName?: string;
+  performedAt: string;
+  billedCents: number;
+  paidCents: number;
+  glossCents: number;
+  glossReason?: string;
+  status: BillingItemStatus;
 }

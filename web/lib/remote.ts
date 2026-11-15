@@ -14,6 +14,7 @@ import type {
   AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Certificate, ClinicalNote, CustomDocument, Medication, PatientFile, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Budget, Db, Expense, Installment, MessageTemplate, Patient, PatientEvent, PaymentMethod,
   PlanItem, Procedure, Profile, RecallState, RecallStatus, Treatment, TreatmentPlan, WaitlistEntry,
+  CashMethod, CashMovement, CashReceiptMeta, CashDay, CommissionRule, CommissionPayout, CommissionPayoutItem,
   Opportunity, OpportunityEvent, SalesStage, Laboratory, ProsthesisEvent, ProsthesisJob, Professional, TimeBlock, AppointmentProcedure,
 } from "./types";
 import { MAX_COMMENT } from "./types";
@@ -22,6 +23,10 @@ import { todayISO } from "./format";
 import { hasUnanswered } from "./catalog";
 import { normalizeJob, normalizeLab, type JobInput } from "./prosthesis";
 import { checkHofItem } from "./hof";
+import { checkMovement, checkRule } from "./cash";
+import { batchStatus, checkItemAmounts, itemStatus, itemsFromTreatments, expectedPayment, normalizeInsurer, eligibleTreatments, type InsurerInput } from "./convenios";
+import { normName } from "./convenios-presets";
+import type { BillingBatch, BillingItem, Insurer, InsurerPrice } from "./types";
 import { MAX_BLOCK_DAYS, prepareAppointment, toMin } from "./agenda";
 import { EXT, MAX_FILE_BYTES, checkFile } from "./files";
 
@@ -81,7 +86,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   // Funil de vendas: se a migration de vendas ainda não foi aplicada, o resto do app segue funcionando e /vendas avisa.
   const optional = (t: string, order?: [string, boolean][]) => by(t, order).catch(() => [] as Row[]);
 
-  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files, stages, opps, oppEvents, goals, labs, pjobs, pevents, pros, tblocks] =
+  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files, stages, opps, oppEvents, goals, labs, pjobs, pevents, pros, tblocks, cmov, crec, cdays, crules, cpay, cpitems, insR, insPR, bbR, biR] =
     await Promise.all([
       q(sb.from("clinics").select("*").eq("id", c).single()), by("access_grants", [["expires_at", false], ["id", true]]),
       by("patients"), by("patient_events"), by("custom_procedures"), by("procedure_settings", [["procedure_id", true]]),
@@ -99,6 +104,12 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       optional("laboratories", [["name", true], ["id", true]]), optional("prosthesis_jobs", [["created_at", false], ["id", true]]),
       optional("prosthesis_events", [["created_at", true], ["id", true]]),
       optional("professionals", [["name", true], ["id", true]]), optional("time_blocks", [["date", true], ["start_time", true], ["id", true]]),
+      // Caixa e comissões: o banco só devolve o que o papel pode ver (dono/financeiro tudo; dentista vinculado, a própria comissão).
+      optional("cash_movements", [["occurred_on", true], ["id", true]]), optional("cash_receipts", [["id", true]]), optional("cash_days", [["day", true], ["id", true]]),
+      optional("commission_rules", [["id", true]]), optional("commission_payouts", [["paid_on", true], ["id", true]]), optional("commission_payout_items", [["id", true]]),
+      // Convênios e faturamento (migration 20261116000007); se ainda não aplicada, as listas vêm vazias.
+      optional("insurers", [["name", true], ["id", true]]), optional("insurer_prices", [["procedure_name", true], ["id", true]]),
+      optional("billing_batches", [["year", false], ["month", false], ["id", true]]), optional("billing_items", [["performed_on", true], ["id", true]]),
     ]);
   const cl = clinic as Row;
   const g = (grants as Row[])[0];
@@ -135,7 +146,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
       guardian: (r.guardian as Patient["guardian"]) ?? undefined, referralSource: s(r.referral_source), notes: s(r.notes),
-      recallEnabled: r.recall_enabled as boolean, archived: !!r.archived_at || undefined, lastVisitAt: s(r.last_visit_at), createdAt: r.created_at as string,
+      recallEnabled: r.recall_enabled as boolean, insurerId: s(r.insurer_id), insuranceCard: s(r.insurance_card), insuranceValidUntil: s(r.insurance_valid_until), archived: !!r.archived_at || undefined, lastVisitAt: s(r.last_visit_at), createdAt: r.created_at as string,
     })),
     events: (events as Row[]).map((r): PatientEvent => ({ id: r.id as string, patientId: r.patient_id as string, kind: r.kind as PatientEvent["kind"], label: r.label as string, createdAt: r.created_at as string })),
     customProcedures: (custom as Row[]).map((r): Procedure => ({ id: r.id as string, specialtyId: r.specialty_id as string, group: "Meus procedimentos", name: r.name as string, custom: true })),
@@ -171,6 +182,42 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       professionalId: s(r.professional_id), procedures: mapProcedures(r.procedures), label: s(r.label), forced: r.forced ? true : undefined,
     })),
     professionals: (pros as Row[]).map((r): Professional => ({ id: r.id as string, name: r.name as string, color: r.color as string, active: r.active as boolean })),
+    cashMovements: (cmov as Row[]).map((r): CashMovement => ({
+      id: r.id as string, kind: r.kind as CashMovement["kind"], date: r.occurred_on as string, amountCents: r.amount_cents as number, method: r.method as CashMethod,
+      category: r.category as string, description: s(r.description), patientId: s(r.patient_id), professionalId: s(r.professional_id), payoutId: s(r.payout_id),
+      reversedAt: s(r.reversed_at), reversalReason: s(r.reversal_reason),
+    })),
+    cashReceipts: (crec as Row[]).map((r): CashReceiptMeta => ({
+      id: r.id as string, sourceType: r.source_type as CashReceiptMeta["sourceType"], sourceId: r.source_id as string, professionalId: s(r.professional_id),
+      method: (s(r.method) as CashMethod | undefined), reversedAt: s(r.reversed_at), reversalReason: s(r.reversal_reason),
+    })),
+    cashDays: (cdays as Row[]).map((r): CashDay => ({
+      id: r.id as string, day: r.day as string, openingCents: r.opening_cents as number,
+      countedCents: r.counted_cents === null || r.counted_cents === undefined ? undefined : (r.counted_cents as number), closedAt: s(r.closed_at), notes: s(r.notes),
+    })),
+    commissionRules: (crules as Row[]).map((r): CommissionRule => ({
+      id: r.id as string, professionalId: r.professional_id as string, procedureKey: r.procedure_key as string, percent: Number(r.percent), labCostPercent: Number(r.lab_cost_percent),
+    })),
+    commissionPayouts: (cpay as Row[]).map((r): CommissionPayout => ({
+      id: r.id as string, professionalId: s(r.professional_id), professionalName: r.professional_name as string, periodFrom: r.period_from as string, periodTo: r.period_to as string,
+      amountCents: r.amount_cents as number, paidOn: r.paid_on as string,
+      items: (cpitems as Row[]).filter((i) => i.payout_id === r.id).map((i): CommissionPayoutItem => ({ sourceType: i.source_type as CommissionPayoutItem["sourceType"], sourceId: i.source_id as string, amountCents: i.amount_cents as number })),
+    })),
+    insurers: (insR as Row[]).map((r): Insurer => ({
+      id: r.id as string, name: r.name as string, type: r.type as Insurer["type"], ansCode: s(r.ans_code), active: r.active as boolean,
+      paymentDays: r.payment_days as number, closingDay: r.closing_day as number, defaultGlossPercent: Number(r.default_gloss_percent),
+      contact: s(r.contact), notes: s(r.notes), suggested: (r.suggested as boolean) || undefined,
+    })),
+    insurerPrices: (insPR as Row[]).map((r): InsurerPrice => ({ id: r.id as string, insurerId: r.insurer_id as string, procedureKey: r.procedure_key as string, procedureName: r.procedure_name as string, priceCents: r.price_cents as number })),
+    billingBatches: (bbR as Row[]).map((r): BillingBatch => ({
+      id: r.id as string, insurerId: r.insurer_id as string, year: r.year as number, month: r.month as number, status: r.status as BillingBatch["status"],
+      protocol: s(r.protocol), sentOn: s(r.sent_on), expectedOn: s(r.expected_on), cashedCents: r.cashed_cents as number, createdAt: r.created_at as string,
+    })),
+    billingItems: (biR as Row[]).map((r): BillingItem => ({
+      id: r.id as string, batchId: r.batch_id as string, treatmentId: s(r.treatment_id), patientId: r.patient_id as string, cardNumber: s(r.card_number),
+      procedureName: r.procedure_name as string, professionalName: s(r.professional_name), performedAt: r.performed_on as string, billedCents: r.billed_cents as number,
+      paidCents: r.paid_cents as number, glossCents: r.gloss_cents as number, glossReason: s(r.gloss_reason), status: r.status as BillingItem["status"],
+    })),
     timeBlocks: (tblocks as Row[]).map((r): TimeBlock => ({
       id: r.id as string, professionalId: s(r.professional_id), date: r.date as string,
       startTime: String(r.start_time).slice(0, 5), endTime: String(r.end_time).slice(0, 5), reason: r.reason as string,
@@ -268,7 +315,8 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
   const patientRow = (p: Partial<Patient>) => {
     const out: Row = {};
     const map: [keyof Patient, string][] = [["fullName", "full_name"], ["birthDate", "birth_date"], ["sex", "sex"], ["cpf", "cpf"], ["phone", "phone"],
-      ["email", "email"], ["address", "address"], ["guardian", "guardian"], ["referralSource", "referral_source"], ["notes", "notes"], ["recallEnabled", "recall_enabled"]];
+      ["email", "email"], ["address", "address"], ["guardian", "guardian"], ["referralSource", "referral_source"], ["notes", "notes"], ["recallEnabled", "recall_enabled"],
+      ["insurerId", "insurer_id"], ["insuranceCard", "insurance_card"], ["insuranceValidUntil", "insurance_valid_until"]];
     for (const [k, col] of map) if (k in p) out[col] = p[k] ?? null;
     return out;
   };
@@ -454,6 +502,151 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
       }),
       setPaid: (id: string, paid: boolean) => run(async () => { await q(ctx().sb.from("expenses").update({ paid }).eq("id", id)); }),
       remove: (id: string) => run(async () => { await q(ctx().sb.from("expenses").delete().eq("id", id)); }),
+    },
+
+    // Convênios: mesmas regras da camada local (./convenios); o banco repete os limites e o isolamento entre clínicas.
+    insurance: {
+      saveInsurer: (f: InsurerInput) => run(async () => {
+        const { sb, session, db } = ctx();
+        const r = normalizeInsurer(f);
+        if (db.insurers.some((x) => x.id !== f.id && normName(x.name) === normName(r.name))) throw new Error("Já existe um convênio com esse nome.");
+        const row = { name: r.name, type: r.type, ans_code: r.ansCode ?? null, active: r.active, payment_days: r.paymentDays, closing_day: r.closingDay,
+          default_gloss_percent: r.defaultGlossPercent, contact: r.contact ?? null, notes: r.notes ?? null, suggested: !!f.suggested };
+        if (f.id) {
+          const rows = await q(sb.from("insurers").update(row).eq("id", f.id).select("id"));
+          if (!rows?.length) throw new Error("Sem permissão para isso.");
+        } else await q(sb.from("insurers").insert({ ...row, clinic_id: session.clinicId }));
+      }),
+      importPreset: (list: { name: string; type: InsurerInput["type"]; ans?: string }[]) => run(async () => {
+        const { sb, session, db } = ctx();
+        const have = new Set(db.insurers.map((x) => normName(x.name)));
+        const rows = list.filter((p) => !have.has(normName(p.name)) && have.add(normName(p.name)))
+          .map((p) => ({ clinic_id: session.clinicId, name: p.name, type: p.type, ans_code: p.ans || null, active: false, suggested: true }));
+        if (rows.length) await q(sb.from("insurers").insert(rows));
+        return rows.length;
+      }),
+      removeInsurer: (id: string) => run(async () => {
+        const { sb, db } = ctx();
+        if (db.billingBatches.some((b) => b.insurerId === id)) throw new Error("Este convênio tem lotes de faturamento. Desative em vez de excluir.");
+        const rows = await q(sb.from("insurers").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica exclui convênios.");
+      }),
+      savePrice: (insurerId: string, procedureKey: string, procedureName: string, priceCents: number) => run(async () => {
+        if (!Number.isInteger(priceCents) || priceCents < 0) throw new Error("Informe um valor válido.");
+        const { sb, session } = ctx();
+        await q(sb.from("insurer_prices").upsert({ clinic_id: session.clinicId, insurer_id: insurerId, procedure_key: procedureKey, procedure_name: procedureName, price_cents: priceCents }, { onConflict: "insurer_id,procedure_key" }));
+      }),
+      removePrice: (insurerId: string, procedureKey: string) => run(async () => {
+        const rows = await q(ctx().sb.from("insurer_prices").delete().eq("insurer_id", insurerId).eq("procedure_key", procedureKey).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica remove valores.");
+      }),
+      createBatch: (insurerId: string, year: number, month: number, treatmentIds: string[], professionalName?: string) => run(async () => {
+        const { sb, session, db } = ctx();
+        const ins = db.insurers.find((x) => x.id === insurerId);
+        if (!ins) throw new Error("Convênio não encontrado.");
+        const ok = new Set(treatmentIds);
+        const list = eligibleTreatments(db, insurerId, year, month).filter((t) => ok.has(t.id));
+        if (!list.length) throw new Error("Escolha ao menos um atendimento para faturar.");
+        const b = (await q(sb.from("billing_batches").insert({ clinic_id: session.clinicId, insurer_id: insurerId, year, month }).select("id").single())) as Row;
+        try {
+          await q(sb.from("billing_items").insert(itemsFromTreatments(db, ins, list, professionalName).map((i) => ({
+            clinic_id: session.clinicId, batch_id: b.id, treatment_id: i.treatmentId ?? null, patient_id: i.patientId, card_number: i.cardNumber ?? null,
+            procedure_name: i.procedureName, professional_name: i.professionalName ?? null, performed_on: i.performedAt, billed_cents: i.billedCents }))));
+        } catch (e) { await sb.from("billing_batches").delete().eq("id", b.id as string); throw e; } // dono apaga; se não puder, sobra lote vazio em rascunho
+        return b.id as string;
+      }),
+      submitBatch: (id: string, protocol: string, sentOn: string) => run(async () => {
+        const { sb, db } = ctx();
+        const b = db.billingBatches.find((x) => x.id === id);
+        if (!b) throw new Error("Lote não encontrado.");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(sentOn)) throw new Error("Informe a data de envio.");
+        const ins = db.insurers.find((x) => x.id === b.insurerId);
+        const rows = await q(sb.from("billing_batches").update({ protocol: protocol.trim().slice(0, 60) || null, sent_on: sentOn, expected_on: expectedPayment(sentOn, ins?.paymentDays ?? 30),
+          status: batchStatus(sentOn, db.billingItems.filter((i) => i.batchId === id)) }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso.");
+      }),
+      updateItem: (id: string, f: { paidCents: number; glossCents: number; glossReason?: string }) => run(async () => {
+        const { sb, db } = ctx();
+        const it = db.billingItems.find((x) => x.id === id);
+        if (!it) throw new Error("Item não encontrado.");
+        checkItemAmounts(it.billedCents, f.paidCents, f.glossCents, f.glossReason);
+        const b = db.billingBatches.find((x) => x.id === it.batchId);
+        if (!b?.sentOn) throw new Error("Marque o lote como enviado antes de registrar pagamento.");
+        const status = itemStatus(it.billedCents, f.paidCents, f.glossCents);
+        const rows = await q(sb.from("billing_items").update({ paid_cents: f.paidCents, gloss_cents: f.glossCents, gloss_reason: f.glossCents > 0 ? f.glossReason?.trim().slice(0, 300) : null, status }).eq("id", id).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso.");
+        const items = db.billingItems.filter((i) => i.batchId === b.id).map((i) => (i.id === id ? { ...i, status } : i));
+        await q(sb.from("billing_batches").update({ status: batchStatus(b.sentOn, items) }).eq("id", b.id));
+      }),
+      setCashed: (id: string, cashedCents: number) => run(async () => { await q(ctx().sb.from("billing_batches").update({ cashed_cents: cashedCents }).eq("id", id)); }),
+      removeBatch: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("billing_batches").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica exclui lotes.");
+      }),
+    },
+
+    // Caixa: lê de parcelas/atendimentos/despesas; aqui só o que é do caixa. Estorno marca o registro, nunca apaga.
+    cash: {
+      addMovement: (m: Omit<CashMovement, "id" | "reversedAt" | "reversalReason">) => run(async () => {
+        const bad = checkMovement(m); if (bad) throw new Error(bad);
+        await q(ctx().sb.from("cash_movements").insert({ clinic_id: ctx().session.clinicId, kind: m.kind, occurred_on: m.date, amount_cents: m.amountCents, method: m.method,
+          category: m.category.trim(), description: m.description?.trim() || null, patient_id: m.patientId ?? null, professional_id: m.professionalId ?? null }));
+      }),
+      reverse: (source: "installment" | "treatment" | "movement", id: string, reason: string) => run(async () => {
+        const r = reason.trim(); if (r.length < 3) throw new Error("Diga o motivo do estorno.");
+        const at = new Date().toISOString();
+        if (source === "movement") {
+          const rows = await q(ctx().sb.from("cash_movements").update({ reversed_at: at, reversal_reason: r }).eq("id", id).is("reversed_at", null).select("id"));
+          if (!(rows as Row[]).length) throw new Error("Lançamento não encontrado ou já estornado.");
+          return;
+        }
+        const { sb, session } = ctx();
+        const ex = ((await q(sb.from("cash_receipts").select("id,reversed_at").eq("source_type", source).eq("source_id", id))) as Row[])[0];
+        if (ex?.reversed_at) throw new Error("Recebimento já estornado.");
+        if (ex) await q(sb.from("cash_receipts").update({ reversed_at: at, reversal_reason: r }).eq("id", ex.id as string));
+        else await q(sb.from("cash_receipts").insert({ clinic_id: session.clinicId, source_type: source, source_id: id, reversed_at: at, reversal_reason: r }));
+      }),
+      setReceipt: (sourceType: "installment" | "treatment", sourceId: string, patch: { professionalId?: string; method?: CashMethod }) => run(async () => {
+        const { sb, session } = ctx();
+        const row: Row = {};
+        if ("professionalId" in patch) row.professional_id = patch.professionalId || null;
+        if ("method" in patch) row.method = patch.method ?? null;
+        const ex = ((await q(sb.from("cash_receipts").select("id,reversed_at").eq("source_type", sourceType).eq("source_id", sourceId))) as Row[])[0];
+        if (ex?.reversed_at) throw new Error("Recebimento estornado não pode ser alterado.");
+        if (ex) await q(sb.from("cash_receipts").update(row).eq("id", ex.id as string));
+        else await q(sb.from("cash_receipts").insert({ clinic_id: session.clinicId, source_type: sourceType, source_id: sourceId, ...row }));
+      }),
+      openDay: (day: string, openingCents: number) => run(async () => {
+        if (!Number.isInteger(openingCents) || openingCents < 0) throw new Error("Valor de abertura inválido.");
+        await q(ctx().sb.from("cash_days").upsert({ clinic_id: ctx().session.clinicId, day, opening_cents: openingCents }, { onConflict: "clinic_id,day" }));
+      }),
+      closeDay: (day: string, countedCents: number, notes?: string) => run(async () => {
+        if (!Number.isInteger(countedCents) || countedCents < 0) throw new Error("Valor contado inválido.");
+        await q(ctx().sb.from("cash_days").upsert({ clinic_id: ctx().session.clinicId, day, counted_cents: countedCents, closed_at: new Date().toISOString(), notes: notes?.trim() || null }, { onConflict: "clinic_id,day" }));
+      }),
+      saveRule: (r: Omit<CommissionRule, "id">) => run(async () => {
+        const bad = checkRule(r); if (bad) throw new Error(bad);
+        await q(ctx().sb.from("commission_rules").upsert({ clinic_id: ctx().session.clinicId, professional_id: r.professionalId, procedure_key: r.procedureKey.trim(), percent: r.percent, lab_cost_percent: r.labCostPercent },
+          { onConflict: "clinic_id,professional_id,procedure_key" }));
+      }),
+      removeRule: (id: string) => run(async () => { await q(ctx().sb.from("commission_rules").delete().eq("id", id)); }),
+      // Três gravações em sequência (pagamento, itens, saída). Os itens têm índice único: um recebimento nunca entra em dois pagamentos.
+      payCommission: (p: { professionalId: string; periodFrom: string; periodTo: string; paidOn: string; method: CashMethod; items: CommissionPayoutItem[] }) => run(async () => {
+        const { sb, session, db } = ctx();
+        const total = p.items.reduce((t, i) => t + i.amountCents, 0);
+        if (!p.items.length || total <= 0) throw new Error("Nada a pagar.");
+        const pro = db.professionals.find((x) => x.id === p.professionalId);
+        if (!pro) throw new Error("Dentista não encontrado.");
+        const payout = (await q(sb.from("commission_payouts").insert({ clinic_id: session.clinicId, professional_id: pro.id, professional_name: pro.name, period_from: p.periodFrom, period_to: p.periodTo, amount_cents: total, paid_on: p.paidOn }).select("id").single())) as Row;
+        const pid = payout.id as string;
+        try {
+          await q(sb.from("commission_payout_items").insert(p.items.map((i) => ({ clinic_id: session.clinicId, payout_id: pid, source_type: i.sourceType, source_id: i.sourceId, amount_cents: i.amountCents }))));
+        } catch (e) {
+          throw new Error(/duplicate|já existe|Esse registro/i.test((e as Error).message) ? "Algum recebimento já teve a comissão paga. Atualize a tela." : (e as Error).message);
+        }
+        await q(sb.from("cash_movements").insert({ clinic_id: session.clinicId, kind: "out", occurred_on: p.paidOn, amount_cents: total, method: p.method, category: "Comissão",
+          description: `Comissão de ${pro.name} (${p.periodFrom} a ${p.periodTo})`, professional_id: pro.id, payout_id: pid }));
+      }),
     },
 
     // Criar e mover oportunidade por orçamento é feito por gatilhos no banco; aqui só o que a pessoa faz no funil.

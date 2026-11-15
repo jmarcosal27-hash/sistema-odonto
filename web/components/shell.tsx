@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutGrid, Stethoscope, FileText, ClipboardCheck, Users, CalendarDays, BarChart3, Tags,
-  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp, Handshake, FlaskConical,
+  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp, Handshake, FlaskConical, Wallet, IdCard,
 } from "lucide-react";
 import { cx } from "./ui";
 import { ToastProvider } from "./toast";
@@ -28,12 +28,14 @@ const NAV: NavItem[] = [
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/vendas", label: "Vendas", icon: Handshake },
   { href: "/financeiro", label: "Financeiro", icon: BarChart3 },
+  { href: "/caixa", label: "Caixa", icon: Wallet },
+  { href: "/convenios", label: "Convênios", icon: IdCard },
   { href: "/protese", label: "Controle de prótese", icon: FlaskConical },
 ];
 
 const TITLES: [string, string][] = [
   ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Controle de prótese"], ["/atendimentos", "Atendimentos"],
-  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"],
+  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"], ["/caixa", "Caixa e comissões"], ["/convenios", "Convênios"],
   ["/tabela", "Tabela de preços"], ["/ajustes/conta", "Sua assinatura"], ["/ajustes", "Ajustes"],
 ];
 
