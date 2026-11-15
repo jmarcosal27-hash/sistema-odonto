@@ -121,7 +121,7 @@ export function Kpi({ label, value, sub, tone = "surface", valueClass }: { label
   return (
     <div className="min-w-0 rounded-lg border border-border bg-surface-200 px-4 pb-4 pt-3.5">
       <p className="text-[13px] font-medium text-ink-muted truncate">{label}</p>
-      <p className={cx("mt-1 text-2xl leading-8 font-semibold tracking-[-0.02em] truncate", ink, valueClass)}>{value}</p>
+      <p className={cx("mt-1 whitespace-nowrap text-lg leading-7 sm:text-2xl sm:leading-8 font-semibold tracking-[-0.02em] tabular-nums", ink, valueClass)}>{value}</p>
       {sub && <p className="mt-0.5 text-xs text-ink-muted">{sub}</p>}
     </div>
   );

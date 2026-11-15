@@ -76,7 +76,7 @@ export default function Page() {
                 {months.map((x) => (
                   <div key={x.m} className="flex flex-1 flex-col items-center gap-1 h-full justify-end">
                     <div className="flex w-full items-end justify-center gap-0.5 h-full">
-                      <div className="w-1/3 rounded-t-sm bg-border-strong" style={{ height: `${(x.billed / max) * 100}%` }} title={`Faturado ${money(x.billed)}`} />
+                      <div className="w-1/3 rounded-t-sm bg-brand/35" style={{ height: `${(x.billed / max) * 100}%` }} title={`Faturado ${money(x.billed)}`} />
                       <div className="w-1/3 rounded-t-sm bg-success" style={{ height: `${(x.received / max) * 100}%` }} title={`Recebido ${money(x.received)}`} />
                     </div>
                   </div>
@@ -87,7 +87,7 @@ export default function Page() {
               </div>
               </div>
               </div>
-              <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-border-strong" />Faturado</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span></figcaption>
+              <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand/35" />Faturado</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span></figcaption>
             </figure>
           )}
         </Card>

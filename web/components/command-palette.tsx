@@ -13,7 +13,7 @@ type Item = { id: string; label: string; hint?: string; href: string; icon: type
 const PAGES: [string, string][] = [
   ["Início", "/"], ["Agenda", "/agenda"], ["Confirmar consultas", "/agenda/confirmar"], ["Retornos", "/agenda/retornos"], ["Lista de espera", "/agenda/espera"],
   ["Pacientes", "/pacientes"], ["Plano de tratamento", "/plano"], ["Orçamentos", "/orcamentos"], ["Atendimentos", "/atendimentos"],
-  ["Vendas", "/vendas"], ["Financeiro", "/financeiro"], ["Caixa e comissões", "/caixa"], ["Convênios", "/convenios"],
+  ["Vendas", "/vendas"], ["Financeiro", "/financeiro"], ["Caixa", "/caixa"], ["Convênios", "/convenios"],
   ["Controle de prótese", "/protese"], ["Indicadores", "/indicadores"], ["Tabela de preços", "/tabela"], ["Ajustes", "/ajustes"],
 ];
 
@@ -68,7 +68,7 @@ export function CommandPalette({ open, onClose, onHelp }: { open: boolean; onClo
           <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
             role="combobox" aria-expanded aria-controls="busca-lista" aria-activedescendant={items[sel] ? `busca-${items[sel].id}` : undefined}
             placeholder="Paciente (nome, telefone ou CPF), tela ou ação" aria-label="Buscar paciente, tela ou ação"
-            className="h-14 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-muted" />
+            className="h-14 flex-1 bg-transparent text-base text-ink !outline-none focus-visible:!outline-none placeholder:text-ink-muted" />
           <kbd className="hidden sm:inline rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-ink-muted">Esc</kbd>
         </div>
         <ul id="busca-lista" role="listbox" className="max-h-[56vh] overflow-y-auto p-2">

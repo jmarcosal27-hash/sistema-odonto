@@ -45,7 +45,7 @@ const TABS: NavItem[] = [
 
 const TITLES: [string, string][] = [
   ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Controle de prótese"], ["/atendimentos", "Atendimentos"],
-  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"], ["/caixa", "Caixa e comissões"], ["/convenios", "Convênios"],
+  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"], ["/caixa", "Caixa"], ["/convenios", "Convênios"],
   ["/tabela", "Tabela de preços"], ["/ajustes/conta", "Sua assinatura"], ["/ajustes", "Ajustes"],
 ];
 

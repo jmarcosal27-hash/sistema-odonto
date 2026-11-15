@@ -108,8 +108,8 @@ export function SalesBoard({ stages, byStage, patientName, onOpen, onMove, onMan
                       <button id={oppButtonId(o.id)} type="button" onClick={() => onOpen(o)} onKeyDown={(e) => onKey(e, o)}
                         aria-keyshortcuts="Shift+ArrowLeft Shift+ArrowRight"
                         className="min-h-10 min-w-0 flex-1 rounded-sm text-left">
-                        <span className="block truncate font-semibold">{o.title}</span>
-                        <span className="block truncate text-sm">{patientName(o.patientId)}</span>
+                        <span className="block truncate font-semibold">{patientName(o.patientId)}</span>
+                        <span className="block truncate text-sm text-ink-muted">{o.title}</span>
                         <span className={cx("mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs", tone.meta)}>
                           <span className="font-bold tabular-nums text-ink">{money(o.valueCents)}</span>
                           <span>{dateBR(o.createdAt)}</span>
