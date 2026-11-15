@@ -98,7 +98,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
         <Kpi label="Saldo inicial" value={money(totals.opening)} sub="caixa até o dia anterior" />
         <Kpi tone="success" label="Entradas" value={money(sum("in"))} valueClass="text-success" sub={filtered ? "com os filtros" : undefined} />
         <Kpi label="Saídas do caixa" value={money(sum("out"))} sub={filtered ? "com os filtros" : undefined} />
-        <Kpi label="Saldo final" value={money(totals.closing)} valueClass={totals.closing < 0 ? "text-danger" : undefined} sub="dinheiro que passou pelo caixa" />
+        <Kpi label="Saldo final" value={money(totals.closing)} valueClass={totals.closing < 0 ? "text-danger" : undefined} sub={totals.closing < 0 ? "negativo: confira se alguma saída foi lançada a mais" : "dinheiro que passou pelo caixa"} />
       </div>
 
       <div className="flex flex-wrap gap-2">

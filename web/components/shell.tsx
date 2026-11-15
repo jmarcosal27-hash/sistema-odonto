@@ -45,7 +45,7 @@ const TABS: NavItem[] = [
 
 const TITLES: [string, string][] = [
   ["/indicadores", "Indicadores"], ["/atendimentos/parados", "Tratamentos parados"], ["/plano", "Plano de tratamento"], ["/orcamentos", "Orçamentos"], ["/vendas", "Vendas"], ["/protese", "Controle de prótese"], ["/atendimentos", "Atendimentos"],
-  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"], ["/caixa", "Caixa e comissões"], ["/convenios", "Convênios"],
+  ["/pacientes", "Pacientes"], ["/agenda", "Agenda"], ["/financeiro", "Financeiro"], ["/caixa", "Caixa"], ["/convenios", "Convênios"],
   ["/tabela", "Tabela de preços"], ["/ajustes/conta", "Sua assinatura"], ["/ajustes", "Ajustes"],
 ];
 
@@ -149,7 +149,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <Search aria-hidden className="size-4" /><span className="flex-1 text-left">Buscar paciente…</span><kbd className="rounded-sm border border-border px-1.5 text-[11px]">Ctrl K</kbd>
             </button>
             <button type="button" aria-label="Buscar" onClick={() => setSearch(true)} className="md:hidden grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Search aria-hidden className="size-5" /></button>
-            <IconBtn label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
+            <IconBtn className="hidden sm:grid" label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
               onClick={() => db && api.account.updateProfile({ theme: nextTheme })}><ThemeIcon className="size-5" /></IconBtn>
             <IconBtn label="Ajuda" onClick={() => setHelp(true)}><CircleHelp className="size-5" /></IconBtn>
             </div>
@@ -196,7 +196,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </nav>
       <CommandPalette open={search} onClose={() => setSearch(false)} onHelp={(q) => { setHelpQ(q); setHelp(true); }} />
       <ConfirmHost />
-      <HelpModal open={help} question={helpQ} onClose={() => { setHelp(false); setHelpQ(undefined); }} onStartTour={() => { setHelp(false); setOnboard(true); }} />
+      <HelpModal open={help} path={path} question={helpQ} onClose={() => { setHelp(false); setHelpQ(undefined); }} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>
   );
@@ -214,8 +214,8 @@ function NavLink({ it, path }: { it: NavItem; path: string }) {
   );
 }
 
-function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return <button type="button" aria-label={label} title={label} onClick={onClick} className="grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300">{children}</button>;
+function IconBtn({ label, onClick, children, className }: { label: string; onClick: () => void; children: ReactNode; className?: string }) {
+  return <button type="button" aria-label={label} title={label} onClick={onClick} className={`${className ?? "grid"} size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300`}>{children}</button>;
 }
 
 async function logout() {

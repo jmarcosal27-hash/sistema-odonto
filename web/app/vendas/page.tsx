@@ -6,7 +6,7 @@ import { api, useDb, useRemoteState } from "@/lib/store";
 import { addDays, money, todayISO } from "@/lib/format";
 import { goalProgress, sortedStages } from "@/lib/sales";
 import type { Opportunity } from "@/lib/types";
-import { Button, Card, Empty, Input, Select, Skeleton } from "@/components/ui";
+import { Button, Card, Empty, Input, Segmented, Skeleton } from "@/components/ui";
 import { SalesBoard } from "@/components/sales-board";
 import { CreateOpportunityDialog, GoalDialog, OpportunityDialog, StagesDialog } from "@/components/sales-dialogs";
 import { useAction } from "@/components/toast";
@@ -90,12 +90,8 @@ export default function Page() {
 
       <div className="flex flex-wrap items-center gap-3">
         <Input aria-label="Buscar paciente" placeholder="Buscar paciente" value={q} onChange={(e) => setQ(e.target.value)} className="min-w-48 flex-1" />
-        <Select aria-label="Período de criação" value={period} onChange={(e) => setPeriod(e.target.value as Period)} className="w-auto">
-          <option value="all">Todo o período</option>
-          <option value="month">Criadas neste mês</option>
-          <option value="30">Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-        </Select>
+        <Segmented size="sm" label="Período de criação" value={period} onChange={setPeriod}
+          options={[{ value: "month", label: "Este mês" }, { value: "30", label: "30 dias" }, { value: "90", label: "90 dias" }, { value: "all", label: "Todo o período" }]} />
         {canManage && <Button variant="secondary" onClick={() => setManaging(true)}><Settings2 aria-hidden className="size-4" />Etapas</Button>}
         <Button onClick={() => setCreating(true)}><Plus aria-hidden className="size-4" />Criar oportunidade</Button>
       </div>

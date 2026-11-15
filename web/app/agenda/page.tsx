@@ -63,8 +63,14 @@ export default function Page() {
   useEffect(() => {
     if (!ready || !scroller.current) return;
     const n = new Date(); const m = n.getHours() * 60 + n.getMinutes();
-    const at = m >= START * 60 && m <= END * 60 ? Math.max(0, m / 60 - START - 1) : 8 - START;
+    let at = m >= START * 60 && m <= END * 60 ? Math.max(0, m / 60 - START - 1) : 8 - START;
+    // Se há consulta hoje antes desse ponto, começa por ela: o dia não pode parecer vazio.
+    const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+    const first = (db?.appointments ?? []).filter((a) => a.date === today && a.time && a.status !== "cancelled")
+      .reduce<number | undefined>((acc, a) => { const [h, mm] = a.time!.split(":").map(Number); return Math.min(acc ?? Infinity, h + mm / 60); }, undefined);
+    if (first !== undefined) at = Math.max(0, Math.min(at, first - START - 0.25));
     scroller.current.scrollTop = at * hourPx;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só ao abrir a tela, não a cada mudança de dados
   }, [ready, hourPx]);
   useHotkeys({
     n: () => setForm({ preset: { date: day } }),

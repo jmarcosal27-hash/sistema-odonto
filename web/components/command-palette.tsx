@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { recentPatients } from "@/lib/recent";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarPlus, Search, UserPlus, UserRound, CircleHelp } from "lucide-react";
+import { ArrowRight, CalendarPlus, Search, UserPlus, UserRound, CircleHelp, History } from "lucide-react";
 import { FAQ } from "./help-modal";
 import { useDb } from "@/lib/store";
 import { cx } from "./ui";
@@ -12,7 +13,7 @@ type Item = { id: string; label: string; hint?: string; href: string; icon: type
 const PAGES: [string, string][] = [
   ["Início", "/"], ["Agenda", "/agenda"], ["Confirmar consultas", "/agenda/confirmar"], ["Retornos", "/agenda/retornos"], ["Lista de espera", "/agenda/espera"],
   ["Pacientes", "/pacientes"], ["Plano de tratamento", "/plano"], ["Orçamentos", "/orcamentos"], ["Atendimentos", "/atendimentos"],
-  ["Vendas", "/vendas"], ["Financeiro", "/financeiro"], ["Caixa e comissões", "/caixa"], ["Convênios", "/convenios"],
+  ["Vendas", "/vendas"], ["Financeiro", "/financeiro"], ["Caixa", "/caixa"], ["Convênios", "/convenios"],
   ["Controle de prótese", "/protese"], ["Indicadores", "/indicadores"], ["Tabela de preços", "/tabela"], ["Ajustes", "/ajustes"],
 ];
 
@@ -38,7 +39,9 @@ export function CommandPalette({ open, onClose, onHelp }: { open: boolean; onClo
     const patients: Item[] = n ? (db?.patients ?? [])
       .filter((p) => !p.archived && (norm(p.fullName).includes(n) || (digits.length >= 3 && (p.phone ?? "").replace(/\D/g, "").includes(digits)) || (digits.length >= 3 && (p.cpf ?? "").replace(/\D/g, "").includes(digits))))
       .slice(0, 6)
-      .map((p) => ({ id: p.id, label: p.fullName, hint: p.phone, href: `/pacientes/${p.id}`, icon: UserRound, group: "Pacientes" })) : [];
+      .map((p) => ({ id: p.id, label: p.fullName, hint: p.phone, href: `/pacientes/${p.id}`, icon: UserRound, group: "Pacientes" }))
+      : recentPatients().map((id) => db?.patients.find((p) => p.id === id && !p.archived)).filter((p) => !!p).slice(0, 4)
+        .map((p) => ({ id: p.id, label: p.fullName, hint: p.phone, href: `/pacientes/${p.id}`, icon: History, group: "Abertos recentemente" }));
     const pages: Item[] = PAGES.filter(([l]) => !n || norm(l).includes(n)).slice(0, n ? 5 : 8)
       .map(([label, href]) => ({ id: href, label, href, icon: ArrowRight, group: "Ir para" }));
     const help: Item[] = n.length >= 3 ? FAQ.flatMap((g) => g.items).filter(([qq, a]) => norm(qq).includes(n) || norm(a).includes(n)).slice(0, 4)
@@ -65,7 +68,7 @@ export function CommandPalette({ open, onClose, onHelp }: { open: boolean; onClo
           <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
             role="combobox" aria-expanded aria-controls="busca-lista" aria-activedescendant={items[sel] ? `busca-${items[sel].id}` : undefined}
             placeholder="Paciente (nome, telefone ou CPF), tela ou ação" aria-label="Buscar paciente, tela ou ação"
-            className="h-14 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-muted" />
+            className="h-14 flex-1 bg-transparent text-base text-ink !outline-none focus-visible:!outline-none placeholder:text-ink-muted" />
           <kbd className="hidden sm:inline rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-ink-muted">Esc</kbd>
         </div>
         <ul id="busca-lista" role="listbox" className="max-h-[56vh] overflow-y-auto p-2">

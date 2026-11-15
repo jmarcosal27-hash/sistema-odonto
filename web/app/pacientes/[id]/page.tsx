@@ -1,7 +1,6 @@
 "use client";
 
-import { ask } from "@/components/confirm";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { STATUS_LABEL } from "@/lib/agenda";
 import Link from "next/link";
 import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plus, Archive, Hourglass } from "lucide-react";
@@ -13,6 +12,7 @@ import { PatientForm } from "@/components/patient-form";
 import { AppointmentForm } from "@/components/appointment-form";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useToast } from "@/components/toast";
+import { rememberPatient } from "@/lib/recent";
 import { useHotkeys } from "@/lib/hotkeys";
 import { useRouter } from "next/navigation";
 import { ClinicalNotes } from "@/components/clinical-notes";
@@ -33,6 +33,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const toast = useToast();
   const router = useRouter();
   useHotkeys({ a: () => setSchedule(true), p: () => router.push(`/plano?paciente=${id}`) }, !!db);
+  const exists = !!db?.patients.some((x) => x.id === id);
+  useEffect(() => { if (exists) rememberPatient(id); }, [id, exists]);
   if (!db) return <PageSkeleton />;
   const p = db.patients.find((x) => x.id === id);
   if (!p) return <Card><Empty title="Paciente não encontrado" body="Ele pode ter sido removido ou o link está errado." action={<Link href="/pacientes" className="font-semibold text-brand">Voltar para pacientes</Link>} /></Card>;
@@ -80,10 +82,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="space-y-4 min-w-0">
           <Segmented label="Seção da ficha" value={tab} onChange={setTab}
-            options={[{ value: "resumo", label: "Resumo" }, { value: "clinico", label: "Clínico" }, { value: "financeiro", label: <>Financeiro{due ? <span className="ml-1.5 tabular-nums text-ink-muted">· {money(due)}</span> : null}</> }]} />
+            options={[{ value: "resumo", label: "Resumo" }, { value: "clinico", label: "Clínico" }, { value: "financeiro", label: <>Financeiro{due ? <><span className="ml-1.5 hidden tabular-nums text-ink-muted sm:inline">· {money(due)}</span><span aria-hidden className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle sm:hidden" /><span className="sr-only sm:hidden">, {money(due)} a receber</span></> : null}</> }]} />
           {tab === "resumo" && <>
           <Card>
-            <div className="flex items-center justify-between"><h3 className="font-semibold">Próximos horários</h3><span className="flex flex-wrap justify-end gap-1">{!inWaitlist && !p.archived && <Button size="sm" variant="ghost" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}<Button size="sm" variant="ghost" onClick={() => setSchedule(true)}><Plus className="size-4" />Agendar</Button></span></div>
+            <div className="flex items-center justify-between"><h3 className="font-semibold">Próximos horários</h3><span className="flex flex-wrap justify-end gap-1">{!inWaitlist && !p.archived && <Button size="sm" variant="ghost" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}</span></div>
             {!upcoming.length ? <p className="text-sm text-ink-muted mt-2">Nada marcado.</p> : (
               <ul className="mt-3 space-y-2">
                 {upcoming.map((ap) => (
@@ -199,8 +201,12 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       </div>
 
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={async () => {
-          if (p.archived || await ask({ title: "Arquivar este paciente?", body: "Ele some das listas, mas o histórico fica guardado e dá para desarquivar depois.", confirmLabel: "Arquivar" })) api.patients.archive(p.id, !p.archived).then(() => toast(p.archived ? "Paciente reativado." : "Paciente arquivado."));
+        <Button variant="ghost" size="sm" onClick={() => {
+          const archiving = !p.archived;
+          api.patients.archive(p.id, archiving).then(
+            () => toast(archiving ? "Paciente arquivado. Ele sai das listas, mas o histórico fica guardado." : "Paciente reativado.", "ok",
+              archiving ? { action: { label: "Desfazer", onClick: () => void api.patients.archive(p.id, false).then(() => toast("Paciente reativado.")) } } : undefined),
+            (e) => toast(e.message, "error"));
         }}><Archive className="size-4" />{p.archived ? "Desarquivar" : "Arquivar paciente"}</Button>
       </div>
 

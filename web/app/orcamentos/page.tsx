@@ -1,6 +1,5 @@
 "use client";
 
-import { ask } from "@/components/confirm";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -10,7 +9,8 @@ import { dateBR, plural, money, whatsappLink } from "@/lib/format";
 import type { Budget } from "@/lib/types";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Segmented } from "@/components/ui";
 import { AuthorizeDialog } from "@/components/authorize-dialog";
-import { useAction } from "@/components/toast";
+import { useToast } from "@/components/toast";
+import { removeWithUndo, usePendingRemoval } from "@/lib/undo";
 
 type Filter = "all" | "presented" | "authorized" | "declined";
 
@@ -21,7 +21,8 @@ export default function Page() {
 function Budgets() {
   const db = useDb();
   const params = useSearchParams();
-  const run = useAction();
+  const toast = useToast();
+  const pending = usePendingRemoval();
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [authorizing, setAuthorizing] = useState<Budget | null>(null);
@@ -36,12 +37,13 @@ function Budgets() {
     if (!db) return [];
     const n = q.trim().toLowerCase();
     return db.budgets
+      .filter((b) => !pending.has(b.id))
       .filter((b) => filter === "all" || b.status === filter)
       .filter((b) => !onlyPatient || b.patientId === onlyPatient)
       .map((b) => ({ b, p: db.patients.find((x) => x.id === b.patientId) }))
       .filter(({ p }) => !n || p?.fullName.toLowerCase().includes(n))
       .sort((a, z) => z.b.presentedAt.localeCompare(a.b.presentedAt));
-  }, [db, filter, q, onlyPatient]);
+  }, [db, filter, q, onlyPatient, pending]);
 
   if (!db) return <PageSkeleton />;
   const open = db.budgets.filter((b) => b.status === "presented");
@@ -103,7 +105,7 @@ function Budgets() {
                     {p?.phone && <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border-strong/70 bg-surface-100 px-3 text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-300"><MessageCircle className="size-4" />Enviar</a>}
                     {b.status === "presented" && <>
                       <Button size="sm" onClick={() => setAuthorizing(b)}>Aprovar</Button>
-                      <Button size="sm" variant="ghost" onClick={async () => { if (await ask({ title: "Marcar como recusado?", body: `O orçamento de ${p?.fullName ?? "este paciente"} (${money(b.totalCents)}) sai dos orçamentos em aberto.`, confirmLabel: "Marcar recusado" })) run(() => api.budgets.decline(b.id), "Marcado como recusado."); }}><XIcon className="size-4" />Recusou</Button>
+                      <Button size="sm" variant="ghost" onClick={() => removeWithUndo(b.id, `Orçamento de ${p?.fullName ?? "paciente"} marcado como recusado.`, () => api.budgets.decline(b.id), toast)}><XIcon className="size-4" />Recusou</Button>
                     </>}
                   </div>
                 </li>
