@@ -138,9 +138,13 @@ function subscribeRemote(l: () => void) {
 }
 const remoteDb = () => (remote.status === "ready" ? remote.db : null);
 const remoteState = () => remote;
+// Snapshot do servidor precisa ser sempre o mesmo objeto, senão o React avisa de loop infinito.
+const SERVER_REMOTE_STATE: RemoteState | null = REMOTE ? { status: "loading" } : null;
+const serverRemoteState = () => SERVER_REMOTE_STATE;
+const noRemoteState = () => null;
 /** Estado da sessão na nuvem (null no modo demonstração). */
 export function useRemoteState(): RemoteState | null {
-  return useSyncExternalStore(REMOTE ? subscribeRemote : subscribe, REMOTE ? remoteState : () => null, () => (REMOTE ? { status: "loading" } as RemoteState : null));
+  return useSyncExternalStore(REMOTE ? subscribeRemote : subscribe, REMOTE ? remoteState : noRemoteState, serverRemoteState);
 }
 export const reloadRemote = refreshRemote;
 
