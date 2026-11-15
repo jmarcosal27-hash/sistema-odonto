@@ -138,7 +138,10 @@ function PlanEditor() {
           {discountCents > 0 && <p className="text-xs text-ink-muted">{money(subtotal)} − desconto {money(discountCents)}</p>}
           {undefinedCount > 0 && <p className="text-xs text-warning">{undefinedCount} {undefinedCount === 1 ? "item" : "itens"} sem valor</p>}
         </div>
-        <Button size="lg" onClick={generate} loading={saving} disabled={!items.length}>Gerar orçamento</Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button size="lg" onClick={generate} loading={saving} disabled={!items.length} aria-describedby={items.length ? undefined : "gerar-dica"}>Gerar orçamento</Button>
+          {!items.length && <p id="gerar-dica" className="text-xs text-ink-muted">Clique num dente e escolha um procedimento para começar.</p>}
+        </div>
       </div>
 
       <section aria-labelledby="itens" className="space-y-3">

@@ -9,7 +9,7 @@ const TABS = [
   { href: "/agenda", label: "Calendário", icon: CalendarDays },
   { href: "/agenda/confirmar", label: "Confirmar", icon: CheckCheck },
   { href: "/agenda/retornos", label: "Retornos", icon: RotateCcw },
-  { href: "/agenda/espera", label: "Lista de espera", icon: Hourglass },
+  { href: "/agenda/espera", label: "Espera", icon: Hourglass },
 ];
 
 export function AgendaTabs() {

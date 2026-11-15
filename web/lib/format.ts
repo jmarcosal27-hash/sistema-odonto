@@ -106,3 +106,11 @@ export const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+/** Topo "redondo" de escala de gráfico (1, 2 ou 5 × 10^n reais), em centavos. */
+export const niceMaxCents = (peakCents: number) => {
+  const r = Math.max(1, peakCents) / 100; const p = 10 ** Math.floor(Math.log10(r));
+  return ([1, 2, 5, 10].find((k) => k * p >= r) ?? 10) * p * 100;
+};
+/** Valor curto para eixo de gráfico: "R$ 2,5 mil", "R$ 800". */
+export const moneyShort = (cents: number) => { const r = cents / 100; return r >= 1000 ? `R$ ${(r / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : `R$ ${Math.round(r)}`; };

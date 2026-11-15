@@ -13,6 +13,8 @@ import { PatientForm } from "@/components/patient-form";
 import { AppointmentForm } from "@/components/appointment-form";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useToast } from "@/components/toast";
+import { useHotkeys } from "@/lib/hotkeys";
+import { useRouter } from "next/navigation";
 import { ClinicalNotes } from "@/components/clinical-notes";
 import { Anamnesis } from "@/components/anamnesis";
 import { Documents } from "@/components/documents";
@@ -29,6 +31,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [treat, setTreat] = useState(false);
   const [tab, setTab] = useState<Tab>("resumo");
   const toast = useToast();
+  const router = useRouter();
+  useHotkeys({ a: () => setSchedule(true), p: () => router.push(`/plano?paciente=${id}`) }, !!db);
   if (!db) return <PageSkeleton />;
   const p = db.patients.find((x) => x.id === id);
   if (!p) return <Card><Empty title="Paciente não encontrado" body="Ele pode ter sido removido ou o link está errado." action={<Link href="/pacientes" className="font-semibold text-brand">Voltar para pacientes</Link>} /></Card>;
@@ -68,8 +72,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           {actions.map(({ label, icon: Icon, href }) => (
             <a key={label} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong/70 bg-surface-100 px-4 text-sm font-semibold transition-colors duration-150 hover:bg-surface-300"><Icon className="size-4" />{label}</a>
           ))}
-          <Button variant="secondary" size="sm" className="!h-10" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar</Button>
-          <Link href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-md bg-brand px-4 text-sm font-semibold text-on-brand transition-colors duration-150 hover:bg-brand-hover"><Stethoscope className="size-4" />Novo plano</Link>
+          <Button variant="secondary" size="sm" className="!h-10" aria-keyshortcuts="A" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">A</kbd></Button>
+          <Link aria-keyshortcuts="P" href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-md bg-brand px-4 text-sm font-semibold text-on-brand transition-colors duration-150 hover:bg-brand-hover"><Stethoscope className="size-4" />Novo plano<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">P</kbd></Link>
         </div>
       </Card>
 
@@ -152,7 +156,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                   <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                     <span className="min-w-0"><span className="font-medium">{t.procedureName}</span><span className="text-ink-muted"> · {dateBR(t.performedAt)}</span></span>
                     <span className="flex items-center gap-2"><span className="tabular-nums">{money(t.priceCents)}</span>
-                      {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge>No orçamento</Badge> : <button type="button" onClick={() => api.treatments.update(t.id, { paymentStatus: "received" })} className="text-xs font-semibold text-brand">Marcar recebido</button>}
+                      {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge>Cobrado no orçamento</Badge> : <button type="button" onClick={() => api.treatments.update(t.id, { paymentStatus: "received" })} className="text-xs font-semibold text-brand">Marcar recebido</button>}
                     </span>
                   </li>
                 ))}

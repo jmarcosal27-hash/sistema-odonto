@@ -176,7 +176,7 @@ export default function Page() {
       </div>
       <div>
         <label htmlFor="busca-agenda" className="mb-1 flex items-center gap-1 text-sm font-semibold"><Search aria-hidden className="size-4" />Buscar agendamento</label>
-        <Input id="busca-agenda" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome ou telefone do paciente" />
+        <Input id="busca-agenda" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome ou telefone" />
         {query.trim().length >= 2 && (
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto" aria-live="polite" aria-label="Resultados da busca">
             {matches.map((a) => (
@@ -255,7 +255,7 @@ export default function Page() {
             <Segmented size="sm" label="Visualização" value={view} onChange={setView} options={[{ value: "day", label: view === "day" && hasPros ? "Dia por profissional" : "Dia" }, { value: "week", label: "Semana" }]} />
             <Segmented size="sm" label="Zoom da grade" value={zoom} onChange={setZoom} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }]} />
             <Button size="sm" variant="secondary" onClick={() => setBlockForm({ date: day })}><Lock aria-hidden className="size-4" />Bloquear</Button>
-            <Button size="sm" title="Atalho: N" aria-keyshortcuts="N" onClick={() => setForm({ preset: { date: day } })}><Plus className="size-4" />Nova consulta</Button>
+            <Button size="sm" title="Atalho: N" aria-keyshortcuts="N" onClick={() => setForm({ preset: { date: day } })}><Plus className="size-4" />Nova consulta<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">N</kbd></Button>
             </div>
           </div>
 

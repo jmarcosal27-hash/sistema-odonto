@@ -102,8 +102,8 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button disabled={readOnly} title="Atalho: E" aria-keyshortcuts="E" onClick={() => setAdding("in")}><Plus aria-hidden className="size-4" />Entrada</Button>
-        <Button variant="secondary" disabled={readOnly} title="Atalho: S" aria-keyshortcuts="S" onClick={() => setAdding("out")}><Plus aria-hidden className="size-4" />Saída</Button>
+        <Button disabled={readOnly} title="Atalho: E" aria-keyshortcuts="E" onClick={() => setAdding("in")}><Plus aria-hidden className="size-4" />Entrada<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">E</kbd></Button>
+        <Button variant="secondary" disabled={readOnly} title="Atalho: S" aria-keyshortcuts="S" onClick={() => setAdding("out")}><Plus aria-hidden className="size-4" />Saída<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">S</kbd></Button>
         <div className="flex-1" />
         <Button variant="secondary" disabled={!rows.length} onClick={exportCsv}><Download aria-hidden className="size-4" />Exportar CSV</Button>
       </div>

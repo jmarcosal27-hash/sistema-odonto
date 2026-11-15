@@ -42,9 +42,10 @@ const FAQ: { group: string; items: [string, string][] }[] = [
 const SHORTCUTS: [string, string][] = [
   ["Ctrl K  ou  /", "Buscar paciente, tela ou ação"],
   ["?", "Abrir esta ajuda"],
-  ["N", "Agenda: nova consulta"],
+  ["N", "Agenda: nova consulta · Pacientes: novo paciente"],
   ["T", "Agenda: voltar para hoje"],
   ["← →", "Agenda: dia ou semana anterior e seguinte"],
+  ["A / P", "Ficha do paciente: agendar / novo plano"],
   ["E", "Caixa: lançar entrada"],
   ["S", "Caixa: lançar saída"],
 ];

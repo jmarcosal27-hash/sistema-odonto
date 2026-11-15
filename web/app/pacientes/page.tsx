@@ -9,6 +9,7 @@ import type { Patient } from "@/lib/types";
 import { Avatar, Badge, Button, Card, Empty, Input, PageSkeleton, Segmented, Select, cx } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
 import { useToast } from "@/components/toast";
+import { useHotkeys } from "@/lib/hotkeys";
 
 type Bucket = "all" | "in_treatment" | "open_budget" | "seen" | "new" | "birthday";
 const STATUS_BADGE = {
@@ -30,6 +31,7 @@ export default function Page() {
   // "/pacientes?novo=1" (atalho do Início) já abre o cadastro.
   useEffect(() => { if (new URLSearchParams(window.location.search).has("novo")) setForm(true); }, []);
   const file = useRef<HTMLInputElement>(null);
+  useHotkeys({ n: () => setForm(true) });
 
   const list = useMemo(() => {
     if (!db) return [];
@@ -105,7 +107,7 @@ export default function Page() {
           <Input aria-label="Buscar paciente" placeholder="Nome, telefone ou CPF" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-48" />
           <Select aria-label="Sexo" value={sex} onChange={(e) => setSex(e.target.value)} className="w-44"><option value="">Todos os sexos</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option></Select>
           <Segmented label="Ordem" value={sort} onChange={setSort} options={[{ value: "recent", label: "Recentes" }, { value: "az", label: "A–Z" }]} />
-          <Button onClick={() => setForm(true)}><Plus className="size-4" />Novo paciente</Button>
+          <Button aria-keyshortcuts="N" onClick={() => setForm(true)}><Plus className="size-4" />Novo paciente<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">N</kbd></Button>
         </div>
         {!list.length ? (
           <Empty title={archived ? "Nenhum paciente arquivado" : db.patients.length ? "Ninguém com esse filtro" : "Sua lista de pacientes está vazia"}

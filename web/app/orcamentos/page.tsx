@@ -85,12 +85,12 @@ function Budgets() {
             {rows.map(({ b, p }) => {
               const plan = db.plans.find((x) => x.id === b.planId);
               const expired = b.status === "presented" && Date.now() - new Date(b.presentedAt).getTime() > (plan?.validityDays ?? 30) * 86400000;
-              const msg = `Olá, ${p?.fullName.split(" ")[0]}! Segue o seu orçamento: ${money(b.totalCents)} (${plan?.items.length ?? 0} itens). Qualquer dúvida, é só chamar.`;
+              const msg = `Olá, ${p?.fullName.split(" ")[0]}! Segue o seu orçamento: ${money(b.totalCents)} (${plural(plan?.items.length ?? 0, "item", "itens")}). Qualquer dúvida, é só chamar.`;
               return (
                 <li key={b.id} id={`b-${b.id}`} className={`grid gap-3 p-4 md:grid-cols-[1fr_auto_auto] md:items-center ${highlight === b.id ? "bg-brand-soft" : ""}`}>
                   <div className="min-w-0">
                     <Link href={`/pacientes/${b.patientId}`} className="font-semibold hover:underline truncate block">{p?.fullName ?? "Paciente removido"}</Link>
-                    <p className="text-xs text-ink-muted">{plan?.items.length ?? 0} itens · apresentado em {dateBR(b.presentedAt)}</p>
+                    <p className="text-xs text-ink-muted">{plural(plan?.items.length ?? 0, "item", "itens")} · apresentado em {dateBR(b.presentedAt)}</p>
                   </div>
                   <div className="flex items-center gap-3 md:justify-end">
                     <span className="font-bold tabular-nums">{money(b.totalCents)}</span>

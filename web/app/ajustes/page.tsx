@@ -73,7 +73,7 @@ export default function Page() {
           </div>
           <p className="text-xs text-ink-muted">Só o dono da clínica troca o logo. Ele é reduzido para caber no documento.</p>
         </div>
-        <div className="flex justify-end"><Button disabled={!dirty} onClick={async () => { try { await api.account.updateProfile(draft); setDraft({}); toast("Ajustes salvos."); } catch (e) { toast(e instanceof Error ? e.message : "Não foi possível salvar.", "error"); } }}>Salvar</Button></div>
+        <div className="flex items-center justify-end gap-3">{!dirty && <span className="text-xs text-ink-muted">Nada alterado ainda</span>}<Button disabled={!dirty} onClick={async () => { try { await api.account.updateProfile(draft); setDraft({}); toast("Ajustes salvos."); } catch (e) { toast(e instanceof Error ? e.message : "Não foi possível salvar.", "error"); } }}>Salvar</Button></div>
       </Card>
 
       <Card className="flex flex-wrap items-center justify-between gap-3">

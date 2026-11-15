@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, MessageCircle } from "lucide-react";
 import { useDb, api, PAYMENT_METHODS } from "@/lib/store";
 import { monthSummary, lastMonths, overdue } from "@/lib/finance";
-import { dateBR, money, parseMoney, todayISO, whatsappLink, plural } from "@/lib/format";
+import { dateBR, money, parseMoney, todayISO, whatsappLink, plural, moneyShort, niceMaxCents } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/catalog";
 import type { Installment, PaymentMethod } from "@/lib/types";
 import { Badge, Button, Card, Empty, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle, cx } from "@/components/ui";
@@ -40,8 +40,8 @@ function Finance() {
   const series = lastMonths(ym, Number(span)).map((m) => ({ m, ...monthSummary(db, m) }));
   const peak = Math.max(1, ...series.flatMap((x) => [x.received, x.spent]));
   // Topo "redondo" da escala (1, 2 ou 5 × 10^n reais) para as linhas de referência.
-  const max = (() => { const r = peak / 100; const p = 10 ** Math.floor(Math.log10(r || 1)); const n = [1, 2, 5, 10].find((k) => k * p >= r) ?? 10; return n * p * 100; })();
-  const short = (c: number) => { const r = c / 100; return r >= 1000 ? `R$ ${(r / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : `R$ ${Math.round(r)}`; };
+  const max = niceMaxCents(peak);
+  const short = moneyShort;
   const expensesAll = db.expenses.filter((e) => e.spentAt.startsWith(ym)).sort((a, b) => a.spentAt.localeCompare(b.spentAt));
   const expenses = expensesAll.filter((e) => expFilter === "all" || (expFilter === "paid" ? e.paid !== false : e.paid === false));
   const byCat = Object.entries(expensesAll.reduce<Record<string, number>>((acc, e) => { acc[e.category] = (acc[e.category] ?? 0) + e.amountCents; return acc; }, {})).sort((a, b) => b[1] - a[1]);
@@ -73,7 +73,7 @@ function Finance() {
           <Kpi label="Resultado do mês" value={money(s.balance)} sub="recebido menos despesas lançadas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
           <Kpi label="Recebido" value={money(s.received)} valueClass="text-success" sub="avulsos + parcelas pagas" />
           <Kpi label="Despesas lançadas" value={money(s.spent)} sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
-          <Kpi tone="warning" label="A receber" value={money(s.receivable)} sub={late.length ? plural(late.length, "parcela vencida", "parcelas vencidas") : "nada vencido"} />
+          <Kpi tone={late.length ? "warning" : "surface"} label="A receber" value={money(s.receivable)} sub={late.length ? plural(late.length, "parcela vencida", "parcelas vencidas") : "nada vencido"} />
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           <Card>

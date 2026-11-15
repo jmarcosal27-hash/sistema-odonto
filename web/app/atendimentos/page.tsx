@@ -91,7 +91,7 @@ export default function Page() {
                 <div className="flex items-center gap-2">
                   <span className="font-semibold tabular-nums">{money(t.priceCents)}</span>
                   {t.clinicalStatus === "done" ? <Badge tone="info">Concluído</Badge> : <Badge tone="accent">Em andamento</Badge>}
-                  {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">No orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
+                  {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">Cobrado no orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
                 </div>
                 <div className="flex gap-2 md:justify-end">
                   {t.clinicalStatus === "in_progress" && <Button size="sm" variant="soft" onClick={() => run(() => api.treatments.update(t.id, { clinicalStatus: "done", performedAt: todayISO() }), "Marcado como concluído.")}>Concluir</Button>}
