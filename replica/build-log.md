@@ -160,3 +160,39 @@ Origem: item 1 de `INTEGRACAO-SMILEOS.md`. Migration nova `web/supabase/migratio
 
 Verificação: `npm run lint`, `npx tsc --noEmit` e `node --check scripts/rls-test.mjs` limpos. Não testado no navegador nem contra o Supabase.
 Perguntas para o advogado: (1) guardar apenas `completed_by` e data basta como "conferência", ou é preciso registro de assinatura/consentimento do paciente? (2) retenção: ficha concluída some junto com o paciente (cascata); há prazo mínimo de guarda do prontuário a respeitar? (3) recepção pode ler e preencher anamnese (dado de saúde) ou só dentista e dono? (4) "Conversa reservada" é aceitável como resposta registrada?
+
+## Onda C — 2026-11-15 (registro feito depois, a partir do git)
+
+Entrou pelos commits `80fc53c`…`491411e` (PR #5, merge `3cbfcdf`), sem registro neste log na época. Migrations novas,
+**nenhuma aplicada**: `20261116000001_hof` a `20261116000007_convenios`.
+
+| área | status | o que tem | o que falta |
+| --- | --- | --- | --- |
+| HOF (`000001`, `000005`) | done | faceograma por rosto, regiões, anotações e produto no plano/orçamento; platisma separado | conferir interação e impressão no navegador |
+| Vendas (`000002`) | done | funil kanban, oportunidade criada/movida por gatilho a partir do orçamento, metas, comentários; RLS com `can_see_patient` | testar integração com orçamento |
+| Prótese (`000003`) | done | laboratórios, serviços em kanban, histórico; RLS com `can_see_patient` | — |
+| Agenda por profissional (`000004`) | done | profissionais, bloqueio de horário, status ampliado, vários procedimentos por agendamento; `scripts/agenda-test.mjs` | experiência mobile |
+| Caixa e comissão (`000006`) | done (corrigido abaixo) | livro-caixa lido de parcelas/atendimentos/despesas + lançamentos manuais, abertura/fechamento do dia, estorno permanente, regras de % por dentista e procedimento | — |
+| Convênios (`000007`) | done (corrigido abaixo) | convênios, tabela de repasse, lotes de faturamento com itens, glosa, CSV, paciente conveniado | — |
+
+## Correções financeiras da revisão (Codex) — 2026-11-15
+
+Branch `fix/financeiro-onda-c`. Migration nova `web/supabase/migrations/20261117000001_correcoes_financeiro.sql` (não aplicada;
+as anteriores não foram editadas).
+
+| achado | status | correção | o que falta |
+| --- | --- | --- | --- |
+| 1. Pagamento de comissão em 3 gravações soltas | done | RPC `pay_commission`: pagamento, itens e saída do caixa numa transação; recebimento já pago faz tudo voltar | o banco ainda confia no valor de comissão calculado no navegador (só valida formato e soma) |
+| 2. Repasse de convênio podia entrar 2× no caixa | done | RPC `cash_billing_batch` trava o lote (`for update`), calcula no servidor o que falta lançar e grava a entrada com `cash_movements.billing_batch_id`; `cashed_cents` só muda pela função ou por estorno (gatilho devolve o valor ao "a lançar"); entrada ligada a lote não pode ser criada direto; botão desabilita durante o envio | — |
+| 3. Itens de faturamento ignoravam o modo dividido | done | policies de `billing_items` recriadas com `can_see_patient` (como Vendas e Prótese); status do item e do lote passam a ser calculados por gatilho no banco, enxergando todos os itens | lote (cabeçalho) segue visível a todos os membros; só tem valores agregados de caixa |
+| 4. Estorno não chegava ao Financeiro/Indicadores | done | `paidInstallments`/`receivedTreatments` em `lib/finance.ts` excluem o que foi estornado no Caixa; usados em `received()`, indicadores, ficha do paciente e Atendimentos | papéis que não leem `cash_receipts` (dentista, recepção) não enxergam o estorno; decidir se a parcela estornada volta a ser "a receber" |
+| 5. Comissão usava só o 1º procedimento | done | parcela dividida entre os procedimentos do orçamento na proporção do preço (`splitProportional`, sem perder centavo); cada parte com a regra do seu procedimento; tela do Caixa mostra as partes quando as regras diferem | dentista ainda vem da agenda (ou do vínculo manual no recebimento), sem ligação direta com quem executou cada procedimento |
+| 6. `optional()` engolia qualquer erro | done | só "tabela não existe" (`PGRST205`/`42P01`) vira lista vazia; rede, permissão e coluna sobem como erro | — |
+
+Verificação: `npm run lint` e `npx tsc --noEmit` limpos; `scripts/financeiro-test.mjs` (novo: divisão proporcional,
+comissão por procedimento, estorno nos totais, valor lançado do lote), `agenda-test.mjs` e `safe-next-test.mjs` passam;
+`node --check scripts/rls-test.mjs` ok com casos novos (RPC de comissão com rollback, caixa do convênio sem duplicar com
+chamadas simultâneas, estorno do repasse, status calculado no banco, split nos itens).
+**Supabase local (Docker), 2026-11-15:** as 12 migrations pendentes (`20261114000001` a `20261117000001`) aplicadas sem erro
+com `supabase migration up`; `node scripts/rls-test.mjs` → **551 PASS, 0 FAIL**. Ainda não aplicadas na nuvem. Os inventários `features*.csv` e trechos de `backend.md` estão desatualizados (marcam
+HOF, Vendas, Prótese e arquivos como ausentes).

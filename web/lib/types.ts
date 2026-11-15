@@ -460,6 +460,8 @@ export interface CashMovement {
   patientId?: string;
   professionalId?: string;
   payoutId?: string;
+  /** Entrada de repasse de convênio: lote de faturamento de origem. */
+  billingBatchId?: string;
   reversedAt?: string;
   reversalReason?: string;
 }

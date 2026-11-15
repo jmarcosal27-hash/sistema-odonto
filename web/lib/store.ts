@@ -18,7 +18,7 @@ import { addDays, todayISO, uid } from "./format";
 import { MAX_BLOCK_DAYS, prepareAppointment, toMin } from "./agenda";
 import { checkHofItem } from "./hof";
 import { checkMovement, checkRule } from "./cash";
-import { batchStatus, checkItemAmounts, itemStatus, itemsFromTreatments, expectedPayment, normalizeInsurer, eligibleTreatments, type InsurerInput } from "./convenios";
+import { batchCashed, batchStatus, checkItemAmounts, itemStatus, itemsFromTreatments, expectedPayment, normalizeInsurer, eligibleTreatments, type InsurerInput } from "./convenios";
 import { normName } from "./convenios-presets";
 import { buildSeed } from "./seed";
 import { MAX_DEMO_FILE_BYTES, checkFile, readAsDataUrl } from "./files";
@@ -962,8 +962,23 @@ const localApi = {
         b.status = batchStatus(b.sentOn, db.billingItems.filter((i) => i.batchId === b.id));
       });
     },
-    async setCashed(id: string, cashedCents: number) {
-      commit((db) => { guard(db); const b = db.billingBatches.find((x) => x.id === id); if (b) b.cashedCents = cashedCents; });
+    /** Lança no caixa o que o convênio pagou e ainda não entrou (mesma regra da RPC cash_billing_batch). */
+    async cashBatch(id: string) {
+      let amount = 0;
+      commit((db) => {
+        guard(db);
+        const b = db.billingBatches.find((x) => x.id === id);
+        if (!b) throw new Error("Lote não encontrado.");
+        if (!b.sentOn) throw new Error("Marque o lote como enviado antes de lançar no caixa.");
+        const paid = db.billingItems.filter((i) => i.batchId === id).reduce((s, i) => s + i.paidCents, 0);
+        amount = paid - batchCashed(db, id);
+        if (amount <= 0) throw new Error("Nada novo a lançar no caixa para este lote.");
+        const ins = db.insurers.find((x) => x.id === b.insurerId);
+        db.cashMovements.push({ id: uid(), kind: "in", date: todayISO(), amountCents: amount, method: "insurance", category: "Convênio", billingBatchId: id,
+          description: `${ins?.name ?? "Convênio"} — lote ${String(b.month).padStart(2, "0")}/${b.year}${b.protocol ? ` (protocolo ${b.protocol})` : ""}` });
+        b.cashedCents = paid;
+      });
+      return amount;
     },
     async removeBatch(id: string) {
       commit((db) => {
@@ -995,6 +1010,9 @@ const localApi = {
           const m = db.cashMovements.find((x) => x.id === id);
           if (!m || m.reversedAt) throw new Error("Lançamento não encontrado ou já estornado.");
           m.reversedAt = at; m.reversalReason = r;
+          // Estornar a entrada do convênio devolve o valor ao "a lançar" do lote (como o gatilho do banco).
+          const b = m.billingBatchId ? db.billingBatches.find((x) => x.id === m.billingBatchId) : undefined;
+          if (b) b.cashedCents = batchCashed(db, b.id);
           return;
         }
         let meta = db.cashReceipts.find((x) => x.sourceType === source && x.sourceId === id);
