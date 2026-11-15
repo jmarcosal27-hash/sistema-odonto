@@ -68,7 +68,7 @@ function Finance() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Kpi label="Sobrou no mês" value={money(s.balance)} sub="recebido menos despesas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
           <Kpi label="Recebido" value={money(s.received)} valueClass="text-success" sub="avulsos + parcelas pagas" />
-          <Kpi label="Despesas" value={money(s.spent)} sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
+          <Kpi label="Despesas lançadas" value={money(s.spent)} sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
           <Kpi tone="warning" label="A receber" value={money(s.receivable)} sub={late.length ? plural(late.length, "parcela vencida", "parcelas vencidas") : "nada vencido"} />
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">

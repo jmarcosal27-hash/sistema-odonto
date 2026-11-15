@@ -81,7 +81,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Saldo inicial" value={money(totals.opening)} sub="caixa até o dia anterior" />
         <Kpi tone="success" label="Entradas" value={money(sum("in"))} valueClass="text-success" sub={filtered ? "com os filtros" : undefined} />
-        <Kpi label="Saídas" value={money(sum("out"))} sub={filtered ? "com os filtros" : undefined} />
+        <Kpi label="Saídas do caixa" value={money(sum("out"))} sub={filtered ? "com os filtros" : undefined} />
         <Kpi label="Saldo final" value={money(totals.closing)} valueClass={totals.closing < 0 ? "text-danger" : undefined} sub="caixa todo no período" />
       </div>
 
@@ -115,7 +115,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
                   </div>
                   <div className="text-right md:order-3">
                     <p className={`font-semibold tabular-nums ${e.reversed ? "text-ink-muted line-through" : e.kind === "in" ? "text-success" : "text-ink"}`}>{e.kind === "in" ? "+" : "−"} {money(e.amountCents)}</p>
-                    {!filtered && <p className="text-xs text-ink-muted tabular-nums">saldo {money(balance.get(e.key) ?? 0)}</p>}
+                    {!filtered && <p className="text-xs text-ink-muted tabular-nums">saldo após: {money(balance.get(e.key) ?? 0)}</p>}
                   </div>
                   <div className="md:order-4 flex items-start justify-end">
                     {e.reversed ? <Badge tone="danger">Estornado</Badge> : e.source !== "expense" && (

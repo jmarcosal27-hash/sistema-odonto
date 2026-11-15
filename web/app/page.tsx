@@ -101,7 +101,7 @@ export default function Home() {
                 <tr className="border-b border-border text-left text-xs text-ink-muted">
                   <th scope="col" className="pb-2 pr-3 font-semibold">Hora</th>
                   <th scope="col" className="pb-2 pr-3 font-semibold">Paciente</th>
-                  <th scope="col" className="hidden pb-2 pr-3 font-semibold sm:table-cell">Dentista</th>
+                  {db.professionals.length > 0 && <th scope="col" className="hidden pb-2 pr-3 font-semibold sm:table-cell">Dentista</th>}
                   <th scope="col" className="pb-2 text-right font-semibold">Situação</th>
                 </tr>
               </thead>
@@ -115,7 +115,7 @@ export default function Home() {
                         {a.patientId ? <Link href={`/pacientes/${a.patientId}`} className="font-semibold break-words hover:text-brand">{name(a)}</Link> : <span className="font-semibold">{name(a)}</span>}
                         {a.procedures?.length ? <span className="block text-xs text-ink-muted">{a.procedures.map((p) => p.name).join(" · ")}</span> : null}
                       </td>
-                      <td className="hidden py-2.5 pr-3 align-top text-ink-muted sm:table-cell">{profName(a.professionalId) ?? "—"}</td>
+                      {db.professionals.length > 0 && <td className="hidden py-2.5 pr-3 align-top text-ink-muted sm:table-cell">{profName(a.professionalId) ?? "Sem profissional"}</td>}
                       <td className="py-2.5 text-right align-top"><Badge tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status]}</Badge></td>
                     </tr>
                   );
@@ -162,9 +162,9 @@ export default function Home() {
           <Card>
             <SheetTitle action={<Link href="/indicadores">Indicadores</Link>}><span className="inline-block first-letter:uppercase">{fromISODate(today).toLocaleDateString("pt-BR", { month: "long" })} em números</span></SheetTitle>
             <dl className="mt-3 grid grid-cols-2 border-t border-border [&>div]:border-b [&>div]:border-border [&>div]:py-3 [&>div:nth-child(odd)]:border-r [&>div:nth-child(odd)]:pr-3 [&>div:nth-child(even)]:pl-3">
-              <div><dt className="text-[13px] font-medium text-ink-muted">Entrou</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] text-success tabular-nums">{money(s.received)}</dd></div>
-              <div><dt className="text-[13px] font-medium text-ink-muted">Saiu</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tabular-nums">{money(s.spent)}</dd></div>
-              <div><dt className="text-[13px] font-medium text-ink-muted">Sobrou</dt><dd className={cx("mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
+              <div><dt className="text-[13px] font-medium text-ink-muted">Recebido</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] text-success tabular-nums">{money(s.received)}</dd></div>
+              <div><dt className="text-[13px] font-medium text-ink-muted">Despesas lançadas</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tabular-nums">{money(s.spent)}</dd></div>
+              <div><dt className="text-[13px] font-medium text-ink-muted">Resultado do mês</dt><dd className={cx("mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums", s.balance < 0 ? "text-danger" : "text-success")}>{money(s.balance)}</dd></div>
               <div><dt className="text-[13px] font-medium text-ink-muted">A receber</dt><dd className="mt-0.5 text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums">{money(s.receivable)}</dd></div>
             </dl>
           </Card>
