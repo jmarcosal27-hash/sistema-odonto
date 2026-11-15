@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, MessageCircle } from "lucide-react";
 import { useDb, api, PAYMENT_METHODS } from "@/lib/store";
 import { monthSummary, lastMonths, overdue } from "@/lib/finance";
-import { dateBR, money, parseMoney, todayISO, whatsappLink } from "@/lib/format";
+import { dateBR, money, parseMoney, todayISO, whatsappLink, plural } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/catalog";
 import type { Installment, PaymentMethod } from "@/lib/types";
 import { Badge, Button, Card, Empty, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle } from "@/components/ui";
@@ -69,7 +69,7 @@ function Finance() {
           <Kpi label="Sobrou no mês" value={money(s.balance)} sub="recebido menos despesas" valueClass={s.balance < 0 ? "text-danger" : "text-success"} />
           <Kpi label="Recebido" value={money(s.received)} valueClass="text-success" sub="avulsos + parcelas pagas" />
           <Kpi label="Despesas" value={money(s.spent)} sub={s.toPay ? `${money(s.toPay)} ainda a pagar` : "tudo pago"} />
-          <Kpi tone="warning" label="A receber" value={money(s.receivable)} sub={late.length ? `${late.length} parcela(s) vencida(s)` : "nada vencido"} />
+          <Kpi tone="warning" label="A receber" value={money(s.receivable)} sub={late.length ? plural(late.length, "parcela vencida", "parcelas vencidas") : "nada vencido"} />
         </div>
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           <Card>
@@ -113,7 +113,7 @@ function Finance() {
       {tab === "receivable" && <>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Kpi tone="warning" label="Total a receber" value={money(s.receivable)} />
-          <Kpi label="Vencido" value={money(late.reduce((x, i) => x + i.amountCents, 0))} valueClass={late.length ? "text-danger" : ""} sub={`${new Set(late.map((i) => i.patientId)).size} paciente(s)`} />
+          <Kpi label="Vencido" value={money(late.reduce((x, i) => x + i.amountCents, 0))} valueClass={late.length ? "text-danger" : ""} sub={plural(new Set(late.map((i) => i.patientId)).size, "paciente", "pacientes")} />
           <Kpi label="Atendimentos avulsos sem pagamento" value={money(loosePending.reduce((x, t) => x + t.priceCents, 0))} sub={<Link href="/atendimentos" className="font-semibold text-brand">ver em Atendimentos</Link>} />
         </div>
         <Segmented label="Parcelas" value={recFilter} onChange={setRecFilter} options={[{ value: "open", label: "Em aberto" }, { value: "overdue", label: `Vencidas · ${late.length}` }, { value: "paid", label: "Pagas" }]} />
@@ -132,7 +132,7 @@ function Finance() {
                     <span className="font-bold tabular-nums">{money(i.amountCents)}</span>
                     {isLate && <Badge tone="danger">Vencida</Badge>}
                     {!i.paidAt ? <>
-                      {isLate && p?.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Passando para lembrar da parcela ${i.number}/${i.of} de ${money(i.amountCents)}, que venceu em ${dateBR(i.dueDate)}. Qualquer dúvida, é só chamar.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Lembrar</a>}
+                      {isLate && p?.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Passando para lembrar da parcela ${i.number}/${i.of} de ${money(i.amountCents)}, que venceu em ${dateBR(i.dueDate)}. Qualquer dúvida, é só chamar.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Lembrar</a>}
                       <Button size="sm" onClick={() => setPaying(i)}>Receber</Button>
                     </> : <Button size="sm" variant="ghost" onClick={() => window.confirm("Desfazer o recebimento desta parcela?") && run(() => api.installments.unpay(i.id))}>Desfazer</Button>}
                   </li>

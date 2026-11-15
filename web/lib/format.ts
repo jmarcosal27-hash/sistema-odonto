@@ -1,5 +1,8 @@
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+/** "1 consulta" / "3 consultas": número com a palavra no singular ou plural. */
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 export const money = (cents: number) => brl.format(cents / 100);
 
 export function parseMoney(input: string): number | undefined {

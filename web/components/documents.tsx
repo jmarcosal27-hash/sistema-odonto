@@ -67,7 +67,7 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
                   </span>
                   <span className="flex flex-wrap items-center gap-1">
                     <Link href={href} target="_blank" aria-label={`Ver e imprimir ${label} de ${dateBR(e.doc.issuedOn)}`}
-                      className="inline-flex h-9 items-center gap-1 rounded-pill px-4 text-sm font-semibold text-brand hover:bg-brand-soft"><Printer className="size-3.5" />Ver/imprimir</Link>
+                      className="inline-flex h-9 items-center gap-1 rounded-md px-4 text-sm font-semibold text-brand hover:bg-brand-soft"><Printer className="size-3.5" />Ver/imprimir</Link>
                     <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(e)} aria-label={`Editar ${label} de ${dateBR(e.doc.issuedOn)}`}><Pencil className="size-3.5" />Editar</Button>
                     <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir ${label} de ${dateBR(e.doc.issuedOn)}`}
                       onClick={() => {

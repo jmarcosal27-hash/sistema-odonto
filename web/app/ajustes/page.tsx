@@ -60,7 +60,7 @@ export default function Page() {
           <div className="flex flex-wrap items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element -- data URL pequeno */}
             {p.logo ? <img src={p.logo} alt="Logo atual da clínica" className="h-14 w-auto max-w-32 rounded-md border border-border bg-white object-contain p-1" /> : <span className="text-sm text-ink-muted">Sem logo.</span>}
-            <label className="inline-flex h-10 cursor-pointer items-center rounded-pill bg-surface-300 px-4 text-sm font-semibold focus-within:outline focus-within:outline-2">
+            <label className="inline-flex h-10 cursor-pointer items-center rounded-md bg-surface-300 px-4 text-sm font-semibold focus-within:outline focus-within:outline-2">
               Escolher imagem
               <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={async (e) => {
                 const f = e.target.files?.[0]; e.target.value = "";
@@ -90,7 +90,7 @@ export default function Page() {
         <p className="text-sm text-ink-muted">Os dados são seus. Baixe uma cópia completa quando quiser.</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => download("meus-dados.json", api.account.exportJson(), "application/json")}>Baixar tudo (JSON)</Button>
-          <Link href="/pacientes" className="inline-flex h-10 items-center rounded-pill bg-surface-300 px-4 text-sm font-semibold">Exportar pacientes (planilha)</Link>
+          <Link href="/pacientes" className="inline-flex h-10 items-center rounded-md bg-surface-300 px-4 text-sm font-semibold">Exportar pacientes (planilha)</Link>
         </div>
         <details className="rounded-md bg-surface-300 p-3 text-sm">
           <summary className="cursor-pointer font-semibold">Dados de exemplo</summary>

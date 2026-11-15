@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock, Plus, Search, SlidersHorizontal, UserCog, Zap } from "lucide-react";
 import { api, useDb, useRemoteState } from "@/lib/store";
-import { addDays, dateBR, dateLong, fromISODate, toISODate, todayISO } from "@/lib/format";
+import { addDays, dateBR, dateLong, fromISODate, toISODate, todayISO, plural } from "@/lib/format";
 import type { Appointment, Professional, TimeBlock } from "@/lib/types";
 import { NO_PROFESSIONAL, STATUS_LABEL, STATUS_ORDER, fmtMin, layoutLanes, matchesPatient, procedureTotals, toMin } from "@/lib/agenda";
 import { Button, Card, Input, PageSkeleton, Segmented, Select, cx } from "@/components/ui";
@@ -48,6 +48,8 @@ export default function Page() {
   const isOwner = !remote || (remote.status === "ready" && remote.session.role === "owner");
 
   useEffect(() => { if (window.innerWidth < 768) setView("day"); }, []);
+  // Atalho vindo do Início ou da busca (Ctrl+K): /agenda?nova=1 abre a marcação direto.
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("nova") === "1") setForm({ preset: { date: todayISO() } }); }, []);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const on = () => setMobile(mq.matches);
@@ -147,7 +149,7 @@ export default function Page() {
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Profissionais</h2>
-          {isOwner && <button type="button" onClick={() => setManaging(true)} className="inline-flex h-10 items-center gap-1 rounded-pill px-3 text-xs font-semibold text-brand hover:bg-brand-soft"><UserCog aria-hidden className="size-4" />Gerenciar</button>}
+          {isOwner && <button type="button" onClick={() => setManaging(true)} className="inline-flex h-10 items-center gap-1 rounded-md px-3 text-xs font-semibold text-brand hover:bg-brand-soft"><UserCog aria-hidden className="size-4" />Gerenciar</button>}
         </div>
         <ul>
           {db.professionals.map((p) => (
@@ -203,7 +205,7 @@ export default function Page() {
               {grid.map((d) => {
                 const n = everyone(d).length;
                 return (
-                  <button key={d} type="button" onClick={() => setDay(d)} aria-label={`${dateLong(d)}${n ? `, ${n} compromisso(s)` : ""}`} aria-pressed={d === day}
+                  <button key={d} type="button" onClick={() => setDay(d)} aria-label={`${dateLong(d)}${n ? `, ${plural(n, "compromisso", "compromissos")}` : ""}`} aria-pressed={d === day}
                     className={cx("relative grid h-8 place-items-center rounded-full text-sm",
                       d.slice(0, 7) !== month && "text-ink-muted/60",
                       d === day ? "bg-brand text-on-brand font-bold" : d === todayISO() ? "font-bold ring-1 ring-brand" : "hover:bg-surface-300")}>
@@ -228,7 +230,7 @@ export default function Page() {
               <button type="button" onClick={() => setDay(todayISO())} className="rounded-pill border border-border-strong h-10 px-3 text-xs font-semibold">Hoje</button>
               <button type="button" aria-label="Próximo" onClick={() => setDay(addDays(day, view === "day" ? 1 : 7))} className="grid size-10 place-items-center rounded-pill hover:bg-surface-300"><ChevronRight className="size-4" /></button>
             </div>
-            <h2 className="text-sm font-semibold first-letter:uppercase flex-1 min-w-40">{label} <span className="font-normal text-ink-muted">· {total} compromisso(s)</span></h2>
+            <h2 className="text-sm font-semibold first-letter:uppercase flex-1 min-w-40">{label} <span className="font-normal text-ink-muted">· {plural(total, "compromisso", "compromissos")}</span></h2>
             {view === "week" && <label className="flex min-h-10 items-center gap-1.5 text-xs"><input type="checkbox" className="size-5" checked={hideWeekend} onChange={(e) => setHideWeekend(e.target.checked)} />Ocultar fim de semana</label>}
             {view === "day" && mobile && hasPros && (
               <Select aria-label="Profissional" className="!w-auto flex-1 min-w-36" value={mobilePros.some((c) => c.key === mobileProf) ? mobileProf : "all"} onChange={(e) => setMobileProf(e.target.value)}>

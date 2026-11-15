@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Db, TimeBlock } from "@/lib/types";
 import { MAX_BLOCK_DAYS, blockDates, toMin } from "@/lib/agenda";
 import { api } from "@/lib/store";
-import { addDays, dateLong } from "@/lib/format";
+import { addDays, dateLong, plural } from "@/lib/format";
 import { Button, ErrorNote, Field, Input, Modal, Select } from "./ui";
 import { useToast } from "./toast";
 
@@ -34,7 +34,7 @@ export function BlockDialog({ db, preset, onClose }: { db: Db; preset: { date: s
       const s = toMin(startTime), e = toMin(endTime);
       const under = db.appointments.filter((a) => a.time && a.status !== "cancelled" && dates.includes(a.date)
         && (!professionalId || (a.professionalId ?? "") === professionalId) && toMin(a.time) < e && s < toMin(a.time) + a.durationMinutes).length;
-      toast(`${dates.length > 1 ? `${dates.length} dias bloqueados` : "Horário bloqueado"}.${under ? ` Atenção: ${under} agendamento(s) já marcados nesse período continuam na agenda.` : ""}`);
+      toast(`${dates.length > 1 ? `${dates.length} dias bloqueados` : "Horário bloqueado"}.${under ? ` Atenção: ${plural(under, "agendamento já marcado", "agendamentos já marcados")} nesse período ${under === 1 ? "continua" : "continuam"} na agenda.` : ""}`);
       onClose();
     } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível bloquear."); }
   };
@@ -61,7 +61,7 @@ export function BlockDialog({ db, preset, onClose }: { db: Db; preset: { date: s
         <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="size-5" checked={multi} onChange={(e) => setMulti(e.target.checked)} />Vários dias</label>
         {multi && (
           <div className="space-y-3 rounded-md border border-border p-3">
-            <Field label="Até o dia" hint={dates.length ? `${dates.length} dia(s) bloqueado(s).` : undefined}>{(id, d) => <Input id={id} aria-describedby={d} type="date" min={date} value={until} onChange={(e) => setUntil(e.target.value)} />}</Field>
+            <Field label="Até o dia" hint={dates.length ? `${plural(dates.length, "dia bloqueado", "dias bloqueados")}.` : undefined}>{(id, d) => <Input id={id} aria-describedby={d} type="date" min={date} value={until} onChange={(e) => setUntil(e.target.value)} />}</Field>
             <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="size-5" checked={skipWeekend} onChange={(e) => setSkipWeekend(e.target.checked)} />Pular sábados e domingos</label>
           </div>
         )}

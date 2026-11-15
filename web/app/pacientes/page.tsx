@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Plus, Upload, Download, Cake } from "lucide-react";
 import { useDb, api, patientStatus, isBirthdayMonth } from "@/lib/store";
-import { age, dateShort, todayISO } from "@/lib/format";
+import { age, dateShort, todayISO, plural } from "@/lib/format";
 import type { Patient } from "@/lib/types";
 import { Avatar, Badge, Button, Card, Empty, Input, PageSkeleton, Segmented, Select, cx } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
@@ -76,7 +76,7 @@ export default function Page() {
     });
     try {
       const r = await api.patients.importRows(rows);
-      toast(`${r.created} paciente(s) importado(s).${r.errors.length ? ` ${r.errors.length} linha(s) puladas: ${r.errors.slice(0, 3).join("; ")}` : ""}`, r.errors.length && !r.created ? "error" : "ok");
+      toast(`${plural(r.created, "paciente importado", "pacientes importados")}.${r.errors.length ? ` ${plural(r.errors.length, "linha pulada", "linhas puladas")}: ${r.errors.slice(0, 3).join("; ")}` : ""}`, r.errors.length && !r.created ? "error" : "ok");
     } catch (e) { toast(e instanceof Error ? e.message : "Falha ao importar.", "error"); }
   };
 

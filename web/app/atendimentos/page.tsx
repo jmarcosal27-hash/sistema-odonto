@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useDb, api, stalledTreatments } from "@/lib/store";
-import { dateBR, money, todayISO } from "@/lib/format";
+import { dateBR, money, todayISO, plural } from "@/lib/format";
 import { receivedTreatments } from "@/lib/finance";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Select } from "@/components/ui";
 import { TreatmentForm } from "@/components/treatment-form";
@@ -57,7 +57,7 @@ export default function Page() {
 
       {stalled > 0 && (
         <Link href="/atendimentos/parados" className="flex items-center justify-between gap-3 rounded-lg bg-warning-soft px-4 py-3 text-sm font-medium">
-          {stalled} tratamento(s) aprovado(s) parado(s) há mais de 7 dias, sem consulta marcada<span className="font-semibold">Ver →</span>
+          {plural(stalled, "tratamento aprovado parado", "tratamentos aprovados parados")} há mais de 7 dias, sem consulta marcada<span className="font-semibold">Ver →</span>
         </Link>
       )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

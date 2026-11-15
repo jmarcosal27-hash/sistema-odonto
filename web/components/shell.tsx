@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutGrid, Stethoscope, FileText, ClipboardCheck, Users, CalendarDays, BarChart3, Tags,
-  Settings, CircleHelp, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp, Handshake, FlaskConical, Wallet, IdCard,
+  Settings, CircleHelp, Search, Sun, Moon, Monitor, Menu, X, LogOut, TrendingUp, Handshake, FlaskConical, Wallet, IdCard,
 } from "lucide-react";
 import { cx } from "./ui";
 import { ToastProvider } from "./toast";
@@ -14,6 +14,7 @@ import { Onboarding } from "./onboarding";
 import { useDb, api, isReadOnly, useRemoteState } from "@/lib/store";
 import { REMOTE, supabaseBrowser } from "@/lib/supabase/client";
 import { CreateClinic } from "./create-clinic";
+import { CommandPalette } from "./command-palette";
 import { Logo, LogoIcon } from "./logo";
 
 // Ordem do Simples Dental: Inteligência, Pacientes, Agenda, Vendas, Financeiro, Prótese. `sub` = item recuado sob o anterior.
@@ -59,10 +60,23 @@ export function Shell({ children }: { children: ReactNode }) {
   const [help, setHelp] = useState(false);
   const [onboard, setOnboard] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [search, setSearch] = useState(false);
   const theme = db?.profile.theme ?? "system";
 
   useEffect(() => { setDrawer(false); }, [path]);
   useEffect(() => { setMounted(true); }, []);
+  // Atalhos: Ctrl/Cmd+K ou "/" abrem a busca; "?" abre a ajuda (fora de campos de texto).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearch(true); }
+      else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "/") { e.preventDefault(); setSearch(true); }
+      else if (!typing && e.key === "?") { e.preventDefault(); setHelp(true); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "system") root.removeAttribute("data-theme");
@@ -123,6 +137,11 @@ export function Shell({ children }: { children: ReactNode }) {
               <h1 className="text-xl lg:text-[28px] lg:leading-9 font-semibold tracking-[-0.025em] truncate">{title}</h1>
               <p className="hidden md:block min-w-0 truncate text-sm text-ink-muted first-letter:uppercase">{[todayLong, mounted && db?.profile.clinicName].filter(Boolean).join(" · ")}</p>
             </div>
+            <button type="button" onClick={() => setSearch(true)} aria-label="Buscar paciente, tela ou ação (Ctrl+K)" aria-keyshortcuts="Control+K"
+              className="hidden md:inline-flex h-10 w-64 items-center gap-2 rounded-md border border-border bg-surface-100 px-3 text-sm text-ink-muted transition-colors duration-150 hover:border-border-strong">
+              <Search aria-hidden className="size-4" /><span className="flex-1 text-left">Buscar paciente…</span><kbd className="rounded-sm border border-border px-1.5 text-[11px]">Ctrl K</kbd>
+            </button>
+            <button type="button" aria-label="Buscar" onClick={() => setSearch(true)} className="md:hidden grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Search aria-hidden className="size-5" /></button>
             <IconBtn label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
               onClick={() => db && api.account.updateProfile({ theme: nextTheme })}><ThemeIcon className="size-5" /></IconBtn>
             <IconBtn label="Ajuda" onClick={() => setHelp(true)}><CircleHelp className="size-5" /></IconBtn>
@@ -168,6 +187,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </li>
         </ul>
       </nav>
+      <CommandPalette open={search} onClose={() => setSearch(false)} />
       <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>

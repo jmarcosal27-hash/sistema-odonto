@@ -6,7 +6,7 @@ import { api, useDb } from "@/lib/store";
 import { CONVENIOS_DF, INSURER_TYPE_LABEL, normName } from "@/lib/convenios-presets";
 import { procedureKey } from "@/lib/convenios";
 import { BASE_PROCEDURES } from "@/lib/catalog";
-import { money, parseMoney } from "@/lib/format";
+import { money, parseMoney, plural } from "@/lib/format";
 import type { Db, Insurer } from "@/lib/types";
 import { Badge, Button, Card, Empty, Field, Input, Modal, PageSkeleton, Segmented, Select, Textarea, Toggle } from "@/components/ui";
 import { BillingTab } from "@/components/convenios-billing";
@@ -118,7 +118,7 @@ function PricesTab({ db }: { db: Db }) {
       </div>
       {!insurerId ? <Empty title="Escolha um convênio" body="A tabela guarda quanto o convênio repassa por procedimento. Ela define o valor faturado nos lotes." /> : (
         <>
-          <p className="text-sm text-ink-muted">{mine.length} valor(es) cadastrado(s). Procedimento sem valor aqui é faturado pelo preço do atendimento. Deixe em branco para remover. Mostrando até 60 resultados: use a busca.</p>
+          <p className="text-sm text-ink-muted">{plural(mine.length, "valor cadastrado", "valores cadastrados")}. Procedimento sem valor aqui é faturado pelo preço do atendimento. Deixe em branco para remover. Mostrando até 60 resultados: use a busca.</p>
           <ul className="divide-y divide-border rounded-md border border-border">
             {shown.map((p) => <PriceRow key={`${insurerId}:${p.id}`} insurerId={insurerId} procId={p.id} name={p.name} clinic={db.prices[p.id]} current={mine.find((x) => x.procedureKey === procedureKey(p.id, p.name))?.priceCents} />)}
           </ul>

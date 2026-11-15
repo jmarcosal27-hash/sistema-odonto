@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ClipboardList, FilePenLine, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
 import { ANAMNESIS_CHOICES, DEFAULT_ANAMNESIS, choiceOf, hasUnanswered } from "@/lib/catalog";
-import { dateBR, todayISO, uid } from "@/lib/format";
+import { dateBR, todayISO, uid, plural } from "@/lib/format";
 import type { AnamnesisAnswer, AnamnesisChoice, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Db } from "@/lib/types";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Textarea } from "./ui";
 import { useAction } from "./toast";
@@ -69,7 +69,7 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
                       {draft && <Badge tone="warning">Rascunho</Badge>}
                       {r.revisionOf && <Badge tone="info">Revisão</Badge>}
                       {superseded && <Badge tone="neutral">Substituída</Badge>}
-                      {!draft && !superseded && alertsOf(r).length > 0 && <Badge tone="danger">{alertsOf(r).length} alerta(s)</Badge>}
+                      {!draft && !superseded && alertsOf(r).length > 0 && <Badge tone="danger">{plural(alertsOf(r).length, "alerta", "alertas")}</Badge>}
                     </span>
                   </summary>
                   <dl className="mt-2 space-y-2">

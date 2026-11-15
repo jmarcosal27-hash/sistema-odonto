@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2, Plus } from "lucide-react";
 import { useDb, api, planTotal, itemTotal, activePatients, PAYMENT_METHODS, regionLabel } from "@/lib/store";
 import { ADULT_LOWER, ADULT_UPPER, CHILD_LOWER, CHILD_UPPER, PHASES } from "@/lib/catalog";
-import { money, parseMoney, age, dateBR } from "@/lib/format";
+import { money, parseMoney, age, dateBR, plural } from "@/lib/format";
 import type { PlanItem, ToothCondition, Phase, PaymentMethod, HofFace, HofShape } from "@/lib/types";
 import { Button, Card, Segmented, PageSkeleton, Select, Input, Empty, Field, Textarea, cx } from "@/components/ui";
 import { Odontogram } from "@/components/odontogram";
@@ -211,7 +211,7 @@ function PlanEditor() {
       )}
 
       {patient && db.budgets.some((b) => b.patientId === patient.id) && (
-        <p className="text-xs text-ink-muted">Este paciente já tem {db.budgets.filter((b) => b.patientId === patient.id).length} orçamento(s). Gerar outro cria uma segunda opção — o primeiro não é alterado. Último em {dateBR(db.budgets.filter((b) => b.patientId === patient.id).at(-1)!.presentedAt)}.</p>
+        <p className="text-xs text-ink-muted">Este paciente já tem {plural(db.budgets.filter((b) => b.patientId === patient.id).length, "orçamento", "orçamentos")}. Gerar outro cria uma segunda opção — o primeiro não é alterado. Último em {dateBR(db.budgets.filter((b) => b.patientId === patient.id).at(-1)!.presentedAt)}.</p>
       )}
 
       <ToothDialog
