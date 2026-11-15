@@ -874,6 +874,85 @@ const { data: pjDel } = await a.from("prosthesis_jobs").delete().eq("id", pj2.id
 check(pjDel?.length === 1, "dono exclui serviço");
 check(((await a.from("prosthesis_events").select("id").eq("job_id", pj2.id)).data ?? []).length === 0, "excluir o serviço apaga o histórico dele em cascata");
 
+// ===== Agenda por profissional (migration 20261116000004) =====
+const { data: pro1, error: pr1 } = await a.from("professionals").insert({ clinic_id: clinicA, name: "Dra. Agenda", color: "#2563eb" }).select("id").single();
+check(!pr1 && pro1, "dono A cadastra profissional");
+const { data: pro2 } = await a.from("professionals").insert({ clinic_id: clinicA, name: "Dr. Cadeira 2", color: "#16a34a" }).select("id").single();
+for (const [label, row] of [["nome vazio", { name: "  " }], ["nome acima de 80", { name: "x".repeat(81) }], ["cor inválida", { name: "Cor ruim", color: "azul" }], ["nome repetido sem diferenciar caixa", { name: " dra. agenda " }]]) {
+  const { error } = await a.from("professionals").insert({ clinic_id: clinicA, ...row });
+  check(!!error, `CHECK profissional: ${label} é recusado`);
+}
+const { data: prB } = await b.from("professionals").select("id").eq("clinic_id", clinicA);
+check(prB?.length === 0, "B NÃO vê profissionais da clínica A");
+const { error: prBi } = await b.from("professionals").insert({ clinic_id: clinicA, name: "Intruso" });
+check(!!prBi, "B NÃO cadastra profissional na clínica A");
+const { data: prBu } = await b.from("professionals").update({ name: "Alterado por B" }).eq("id", pro1.id).select("id");
+check(!prBu || prBu.length === 0, "B NÃO altera profissional de A");
+const { data: prBd } = await b.from("professionals").delete().eq("id", pro1.id).select("id");
+check(!prBd || prBd.length === 0, "B NÃO exclui profissional de A");
+const { error: prC } = await c.from("professionals").insert({ clinic_id: clinicA, name: "Criado por dentista" });
+check(!!prC, "dentista (não é o dono) NÃO cadastra profissional");
+const { data: prCr } = await c.from("professionals").select("id").eq("clinic_id", clinicA);
+check((prCr?.length ?? 0) >= 2, "dentista da clínica LÊ os profissionais");
+const { data: proB1 } = await b.from("professionals").insert({ clinic_id: clinicB, name: "Profissional de B" }).select("id").single();
+
+// agendamento com profissional, procedimentos e novos status
+const ap = (extra = {}) => ({ clinic_id: clinicA, patient_id: pat.id, kind: "consultation", date: "2026-12-01", time: "09:00", duration_minutes: 45, ...extra });
+const procs = [{ name: "Limpeza", price_cents: 15000, duration_minutes: 30 }, { name: "Aplicação de flúor", price_cents: 5000, duration_minutes: 15 }];
+const { data: ap1, error: ag1 } = await a.from("appointments").insert(ap({ professional_id: pro1.id, procedures: procs, label: "Primeira consulta", forced: true })).select("id,professional_id,procedures,label,forced,status").single();
+check(!ag1 && ap1?.professional_id === pro1.id && ap1.procedures.length === 2 && ap1.label === "Primeira consulta" && ap1.forced === true && ap1.status === "to_confirm", "A agenda com profissional, 2 procedimentos, etiqueta e encaixe");
+const { data: apOld } = await a.from("appointments").insert(ap({ time: "15:00" })).select("id,professional_id,procedures,forced").single();
+check(apOld?.professional_id === null && Array.isArray(apOld.procedures) && apOld.procedures.length === 0 && apOld.forced === false, "agendamento sem profissional continua válido (lista vazia, sem encaixe)");
+for (const st of ["to_confirm", "confirmed", "waiting", "in_service", "done", "no_show", "cancelled"]) {
+  const { error } = await a.from("appointments").update({ status: st }).eq("id", ap1.id);
+  check(!error, `status '${st}' é aceito`);
+}
+const { error: stBad } = await a.from("appointments").update({ status: "voando" }).eq("id", ap1.id);
+check(!!stBad, "CHECK: status inválido é recusado");
+for (const [label, row] of [["procedimentos não é lista", { procedures: { nome: "x" } }], ["procedimento sem nome", { procedures: [{ name: " ", price_cents: 1, duration_minutes: 10 }] }],
+  ["valor negativo", { procedures: [{ name: "x", price_cents: -1, duration_minutes: 10 }] }], ["valor quebrado", { procedures: [{ name: "x", price_cents: 1.5, duration_minutes: 10 }] }],
+  ["duração zero", { procedures: [{ name: "x", price_cents: 1, duration_minutes: 0 }] }], ["duração acima de 600", { procedures: [{ name: "x", price_cents: 1, duration_minutes: 601 }] }],
+  ["item que não é objeto", { procedures: ["x"] }], ["mais de 20 itens", { procedures: Array.from({ length: 21 }, () => ({ name: "x", price_cents: 1, duration_minutes: 5 })) }],
+  ["etiqueta acima de 30", { label: "x".repeat(31) }]]) {
+  const { error } = await a.from("appointments").insert(ap(row));
+  check(!!error, `CHECK agendamento: ${label} é recusado`);
+}
+const { error: apXPro } = await a.from("appointments").insert(ap({ professional_id: proB1.id }));
+check(!!apXPro, "agendamento NÃO aponta para profissional de outra clínica");
+const { data: apB } = await b.from("appointments").select("id").eq("professional_id", pro1.id);
+check(apB?.length === 0, "B NÃO vê agendamentos da clínica A por profissional");
+
+// bloqueios
+const blk = (extra = {}) => ({ clinic_id: clinicA, professional_id: pro1.id, date: "2026-12-01", start_time: "12:00", end_time: "13:00", reason: "Almoço", ...extra });
+const { data: bl1, error: bk1 } = await a.from("time_blocks").insert(blk()).select("id,reason").single();
+check(!bk1 && bl1?.reason === "Almoço", "A bloqueia o horário de um profissional");
+const { error: bk2 } = await a.from("time_blocks").insert(blk({ professional_id: null, date: "2026-12-02", reason: "Feriado" }));
+check(!bk2, "A bloqueia a clínica toda (sem profissional)");
+for (const [label, row] of [["fim antes do início", { start_time: "13:00", end_time: "12:00" }], ["fim igual ao início", { start_time: "12:00", end_time: "12:00" }],
+  ["motivo vazio", { reason: "  " }], ["motivo acima de 80", { reason: "x".repeat(81) }], ["profissional de outra clínica", { professional_id: proB1.id }]]) {
+  const { error } = await a.from("time_blocks").insert(blk(row));
+  check(!!error, `CHECK bloqueio: ${label} é recusado`);
+}
+const { data: blB } = await b.from("time_blocks").select("id").eq("clinic_id", clinicA);
+check(blB?.length === 0, "B NÃO vê bloqueios da clínica A");
+const { error: blBi } = await b.from("time_blocks").insert(blk());
+check(!!blBi, "B NÃO cria bloqueio na clínica A");
+const { data: blBu } = await b.from("time_blocks").update({ reason: "Alterado por B" }).eq("id", bl1.id).select("id");
+check(!blBu || blBu.length === 0, "B NÃO altera bloqueio de A");
+const { data: blBd } = await b.from("time_blocks").delete().eq("id", bl1.id).select("id");
+check(!blBd || blBd.length === 0, "B NÃO remove bloqueio de A");
+const { error: blC } = await c.from("time_blocks").insert(blk({ date: "2026-12-03" }));
+check(!blC, "dentista da clínica cria bloqueio (quem escreve bloqueia)");
+
+// excluir profissional: agendamentos ficam, sem profissional; bloqueios dele saem
+const { data: proTmp } = await a.from("professionals").insert({ clinic_id: clinicA, name: "Profissional Temporário" }).select("id").single();
+const { data: apTmp } = await a.from("appointments").insert(ap({ time: "16:00", professional_id: proTmp.id })).select("id").single();
+const { data: blTmp } = await a.from("time_blocks").insert(blk({ professional_id: proTmp.id, date: "2026-12-04" })).select("id").single();
+const { data: proDel } = await a.from("professionals").delete().eq("id", proTmp.id).select("id");
+const apTmpAfter = (await a.from("appointments").select("id,professional_id").eq("id", apTmp.id).maybeSingle()).data;
+const blTmpAfter = (await a.from("time_blocks").select("id").eq("id", blTmp.id).maybeSingle()).data;
+check(proDel?.length === 1 && apTmpAfter?.id === apTmp.id && apTmpAfter.professional_id === null && !blTmpAfter, "excluir profissional NÃO apaga o agendamento (fica sem profissional) e remove os bloqueios dele");
+
 // Acesso vencido → só leitura
 await admin.from("access_grants").update({ expires_at: new Date(Date.now() - 1000).toISOString(), starts_at: new Date(Date.now() - 86400000).toISOString() }).eq("clinic_id", clinicA);
 const { data: readOk } = await a.from("patients").select("id").eq("clinic_id", clinicA);
@@ -987,6 +1066,24 @@ check(!xp6 || xp6.length === 0, "acesso vencido: A NÃO edita laboratório");
 const { data: xp7 } = await a.from("prosthesis_jobs").delete().eq("id", pj.id).select("id");
 check(!xp7 || xp7.length === 0, "acesso vencido: A NÃO exclui serviço de prótese");
 
+// Agenda por profissional com acesso vencido: lê, não escreve
+const { data: expPro } = await a.from("professionals").select("id").eq("clinic_id", clinicA);
+check((expPro?.length ?? 0) >= 2, "acesso vencido: A ainda LÊ os profissionais");
+const { data: expBl } = await a.from("time_blocks").select("id").eq("clinic_id", clinicA);
+check((expBl?.length ?? 0) >= 2, "acesso vencido: A ainda LÊ os bloqueios");
+const { error: xg1 } = await a.from("professionals").insert({ clinic_id: clinicA, name: "Após vencer" });
+check(!!xg1, "acesso vencido: A NÃO cadastra profissional");
+const { data: xg2 } = await a.from("professionals").update({ name: "Renomeado após vencer" }).eq("id", pro1.id).select("id");
+check(!xg2 || xg2.length === 0, "acesso vencido: A NÃO edita profissional");
+const { data: xg3 } = await a.from("professionals").delete().eq("id", pro1.id).select("id");
+check(!xg3 || xg3.length === 0, "acesso vencido: A NÃO exclui profissional");
+const { error: xg4 } = await a.from("time_blocks").insert(blk({ date: "2026-12-10" }));
+check(!!xg4, "acesso vencido: A NÃO cria bloqueio");
+const { data: xg5 } = await a.from("time_blocks").delete().eq("id", bl1.id).select("id");
+check(!xg5 || xg5.length === 0, "acesso vencido: A NÃO remove bloqueio");
+const { data: xg6 } = await a.from("appointments").update({ status: "in_service", professional_id: pro2.id }).eq("id", ap1.id).select("id");
+check(!xg6 || xg6.length === 0, "acesso vencido: A NÃO muda status nem profissional do agendamento");
+
 // Limpeza
 await admin.from("clinics").delete().in("id", [clinicA, clinicB]);
 const { count: leftover } = await admin.from("opportunities").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
@@ -994,6 +1091,9 @@ const { count: leftStages } = await admin.from("sales_stages").select("id", { co
 const { count: leftPj } = await admin.from("prosthesis_jobs").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
 const { count: leftLab } = await admin.from("laboratories").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
 check(leftPj === 0 && leftLab === 0, "limpeza: excluir a clínica apaga serviços de prótese, laboratórios e histórico em cascata");
+const { count: leftPro } = await admin.from("professionals").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
+const { count: leftBlk } = await admin.from("time_blocks").select("id", { count: "exact", head: true }).in("clinic_id", [clinicA, clinicB]);
+check(leftPro === 0 && leftBlk === 0, "limpeza: excluir a clínica apaga profissionais e bloqueios em cascata");
 check(leftover === 0 && leftStages === 0, "limpeza: excluir a clínica apaga etapas, oportunidades, comentários e metas em cascata");
 await admin.storage.from(bucket).remove([pathA, pathC]).catch(() => {});
 for (const u of [a, b, c, f, rcp]) { const { data: { user } } = await u.auth.getUser(); await admin.auth.admin.deleteUser(user.id); }

@@ -8,13 +8,14 @@ import { useSyncExternalStore } from "react";
 import type {
   AnamnesisAnswer, AnamnesisQuestion, Certificate, ClinicalNote, CustomDocument, Medication, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Db, Expense, Installment, Patient, PatientEvent, PaymentMethod, PlanItem,
-  Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry, Opportunity, ProsthesisJob,
+  Procedure, Profile, RecallStatus, Treatment, TreatmentPlan, MessageTemplate, WaitlistEntry, Opportunity, ProsthesisJob, Professional,
 } from "./types";
 import { MAX_COMMENT } from "./types";
 import { addProsthesisEvent, moveProsthesis, normalizeJob, normalizeLab, type JobInput } from "./prosthesis";
 import { backfillSales,defaultStages, moveOpportunity, pushEvent, sortedStages, stageOfKind, syncBudgetOpportunity } from "./sales";
 import { BASE_PROCEDURES, DEFAULT_ACTIVE_SPECIALTIES, hasUnanswered } from "./catalog";
 import { addDays, todayISO, uid } from "./format";
+import { MAX_BLOCK_DAYS, prepareAppointment, toMin } from "./agenda";
 import { checkHofItem } from "./hof";
 import { buildSeed } from "./seed";
 import { MAX_DEMO_FILE_BYTES, checkFile, readAsDataUrl } from "./files";
@@ -22,7 +23,7 @@ import { REMOTE, supabaseBrowser } from "./supabase/client";
 import { loadRemote, makeRemoteApi, type RemoteState } from "./remote";
 
 const KEY = "consultorio-db-v1";
-const VERSION = 9;
+const VERSION = 10;
 const listeners = new Set<() => void>();
 let cache: Db | null = null;
 
@@ -38,7 +39,7 @@ export function emptyDb(): Db {
     clinicalNotes: [], anamnesisTemplates: [], anamnesisRecords: [],
     medications: [], prescriptions: [], prescriptionTemplates: [], certificates: [], customDocuments: [], patientFiles: [],
     salesStages: defaultStages(), opportunities: [], opportunityEvents: [], salesGoals: {},
-    laboratories: [], prosthesisJobs: [], prosthesisEvents: [],
+    laboratories: [], prosthesisJobs: [], prosthesisEvents: [], professionals: [], timeBlocks: [],
     templates: [
       { kind: "confirmation", body: "Olá, {nome}! Passando para confirmar seu horário em {data} às {hora}. Pode responder com SIM para confirmar? 😊" },
       { kind: "recall", body: "Oi, {nome}! Já está na hora da sua revisão. Quer que eu reserve um horário para você nesta semana?" },
@@ -71,6 +72,8 @@ function migrate(db: Db): Db {
   backfillSales(db);
   // v9: controle de prótese (laboratórios, serviços e histórico). Começa vazio e não toca em nada que já existe.
   db.laboratories ??= []; db.prosthesisJobs ??= []; db.prosthesisEvents ??= [];
+  // v10: agenda por profissional e bloqueios. Começa vazia; agendamentos antigos seguem sem profissional (coluna "Sem profissional") e sem perda.
+  db.professionals ??= []; db.timeBlocks ??= [];
   db.version = VERSION;
   return db;
 }
@@ -378,15 +381,10 @@ const localApi = {
   },
 
   appointments: {
-    async save(a: Omit<Appointment, "id"> & { id?: string }) {
+    async save(input: Omit<Appointment, "id"> & { id?: string }) {
       commit((db) => {
         guard(db);
-        if (a.time && a.status !== "cancelled") {
-          const start = toMin(a.time), end = start + a.durationMinutes;
-          const clash = db.appointments.find((x) => x.id !== a.id && x.date === a.date && x.time && x.status !== "cancelled"
-            && toMin(x.time) < end && start < toMin(x.time) + x.durationMinutes);
-          if (clash) throw new Error(`Esse horário bate com outro compromisso às ${clash.time}.`);
-        }
+        const a = prepareAppointment(db, input);
         const existing = a.id && db.appointments.find((x) => x.id === a.id);
         if (existing) Object.assign(existing, a);
         else {
@@ -411,6 +409,47 @@ const localApi = {
         if (status === "done") touchVisit(db, a.patientId, a.date);
       });
     },
+  },
+
+  professionals: {
+    async save(p: { id?: string; name: string; color: string; active: boolean }) {
+      commit((db) => {
+        guard(db);
+        const name = p.name.trim();
+        if (!name || name.length > 80) throw new Error("O nome do profissional precisa ter de 1 a 80 caracteres.");
+        if (!/^#[0-9a-fA-F]{6}$/.test(p.color)) throw new Error("Escolha uma cor para o profissional.");
+        if (db.professionals.some((x) => x.id !== p.id && x.name.toLowerCase() === name.toLowerCase())) throw new Error("Já existe um profissional com esse nome.");
+        const existing = p.id ? db.professionals.find((x) => x.id === p.id) : undefined;
+        if (p.id && !existing) throw new Error("Profissional não encontrado.");
+        if (existing) Object.assign(existing, { name, color: p.color, active: p.active });
+        else db.professionals.push({ id: uid(), name, color: p.color, active: p.active } satisfies Professional);
+      });
+    },
+    /** Os agendamentos do profissional ficam, só sem profissional; os bloqueios dele saem junto. */
+    async remove(id: string) {
+      commit((db) => {
+        guard(db);
+        db.professionals = db.professionals.filter((x) => x.id !== id);
+        db.appointments.forEach((a) => { if (a.professionalId === id) a.professionalId = undefined; });
+        db.timeBlocks = db.timeBlocks.filter((b) => b.professionalId !== id);
+      });
+    },
+  },
+
+  timeBlocks: {
+    /** Um bloqueio por dia em `dates`. Sem profissional = clínica toda. */
+    async create(b: { professionalId?: string; dates: string[]; startTime: string; endTime: string; reason: string }) {
+      commit((db) => {
+        guard(db);
+        const reason = b.reason.trim() || "Bloqueio";
+        if (reason.length > 80) throw new Error("O motivo pode ter até 80 caracteres.");
+        if (!b.startTime || !b.endTime || toMin(b.endTime) <= toMin(b.startTime)) throw new Error("O fim precisa ser depois do início.");
+        if (!b.dates.length || b.dates.length > MAX_BLOCK_DAYS) throw new Error(`Escolha de 1 a ${MAX_BLOCK_DAYS} dias.`);
+        if (b.professionalId && !db.professionals.some((p) => p.id === b.professionalId)) throw new Error("Profissional não encontrado.");
+        b.dates.forEach((date) => db.timeBlocks.push({ id: uid(), professionalId: b.professionalId, date, startTime: b.startTime, endTime: b.endTime, reason }));
+      });
+    },
+    async remove(id: string) { commit((db) => { guard(db); db.timeBlocks = db.timeBlocks.filter((x) => x.id !== id); }); },
   },
 
   waitlist: {
@@ -862,8 +901,6 @@ const localApi = {
   },
 };
 
-function toMin(t: string) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-
 export const regionLabel = (r: PlanItem["region"]) => (r === "upper" ? "arcada superior" : r === "lower" ? "arcada inferior" : "ambas as arcadas");
 
 export function patientStatus(db: Db, p: Patient): "in_treatment" | "open_budget" | "seen" | "new" {
@@ -924,6 +961,8 @@ export const api: typeof localApi = remoteApi ? {
   installments: remoteApi.installments,
   treatments: remoteApi.treatments,
   appointments: remoteApi.appointments,
+  professionals: remoteApi.professionals,
+  timeBlocks: remoteApi.timeBlocks,
   waitlist: remoteApi.waitlist,
   recall: remoteApi.recall,
   expenses: remoteApi.expenses,

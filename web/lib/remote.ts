@@ -14,7 +14,7 @@ import type {
   AnamnesisAnswer, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Certificate, ClinicalNote, CustomDocument, Medication, PatientFile, Prescription, PrescriptionItem, PrescriptionTemplate,
   Appointment, Budget, Db, Expense, Installment, MessageTemplate, Patient, PatientEvent, PaymentMethod,
   PlanItem, Procedure, Profile, RecallState, RecallStatus, Treatment, TreatmentPlan, WaitlistEntry,
-  Opportunity, OpportunityEvent, SalesStage, Laboratory, ProsthesisEvent, ProsthesisJob,
+  Opportunity, OpportunityEvent, SalesStage, Laboratory, ProsthesisEvent, ProsthesisJob, Professional, TimeBlock, AppointmentProcedure,
 } from "./types";
 import { MAX_COMMENT } from "./types";
 import { supabaseBrowser } from "./supabase/client";
@@ -22,6 +22,7 @@ import { todayISO } from "./format";
 import { hasUnanswered } from "./catalog";
 import { normalizeJob, normalizeLab, type JobInput } from "./prosthesis";
 import { checkHofItem } from "./hof";
+import { MAX_BLOCK_DAYS, prepareAppointment, toMin } from "./agenda";
 import { EXT, MAX_FILE_BYTES, checkFile } from "./files";
 
 export interface Session { userId: string; email: string; clinicId: string; role: "owner" | "dentist" | "receptionist" | "finance"; memberId: string }
@@ -42,6 +43,12 @@ async function q<T>(p: PromiseLike<{ data: T; error: { message: string; code?: s
   const { data, error } = await p;
   if (error) throw friendly(error);
   return data;
+}
+
+/** No banco os procedimentos do agendamento usam snake_case (jsonb validado por CHECK). */
+function mapProcedures(v: unknown): AppointmentProcedure[] | undefined {
+  if (!Array.isArray(v) || !v.length) return undefined;
+  return v.map((p: Row) => ({ name: p.name as string, priceCents: p.price_cents as number, durationMinutes: p.duration_minutes as number, procedureId: s(p.procedure_id) }));
 }
 
 const PAGE = 1000;
@@ -74,7 +81,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   // Funil de vendas: se a migration de vendas ainda não foi aplicada, o resto do app segue funcionando e /vendas avisa.
   const optional = (t: string, order?: [string, boolean][]) => by(t, order).catch(() => [] as Row[]);
 
-  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files, stages, opps, oppEvents, goals, labs, pjobs, pevents] =
+  const [clinic, grants, patients, events, custom, settings, plans, items, budgets, inst, treatments, expenses, appts, templates, waitlist, recall, notes, anaTemplates, anaRecords, meds, rxs, rxItems, rxTemplates, certs, customDocs, files, stages, opps, oppEvents, goals, labs, pjobs, pevents, pros, tblocks] =
     await Promise.all([
       q(sb.from("clinics").select("*").eq("id", c).single()), by("access_grants", [["expires_at", false], ["id", true]]),
       by("patients"), by("patient_events"), by("custom_procedures"), by("procedure_settings", [["procedure_id", true]]),
@@ -91,6 +98,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       optional("opportunity_events", [["created_at", true], ["id", true]]), optional("sales_goals", [["month", true]]),
       optional("laboratories", [["name", true], ["id", true]]), optional("prosthesis_jobs", [["created_at", false], ["id", true]]),
       optional("prosthesis_events", [["created_at", true], ["id", true]]),
+      optional("professionals", [["name", true], ["id", true]]), optional("time_blocks", [["date", true], ["start_time", true], ["id", true]]),
     ]);
   const cl = clinic as Row;
   const g = (grants as Row[])[0];
@@ -122,7 +130,7 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
   const snap = (r: Row) => ({ professionalName: s(r.professional_name), professionalCro: s(r.professional_cro), professionalCroUf: s(r.professional_cro_uf) });
 
   const db: Db = {
-    version: 9,
+    version: 10,
     patients: (patients as Row[]).map((r): Patient => ({
       id: r.id as string, fullName: r.full_name as string, birthDate: s(r.birth_date), sex: (r.sex as Patient["sex"]) ?? undefined,
       cpf: s(r.cpf), phone: s(r.phone), email: s(r.email), address: (r.address as Patient["address"]) ?? undefined,
@@ -160,6 +168,12 @@ export async function loadRemote(sb: SupabaseClient = supabaseBrowser()): Promis
       id: r.id as string, patientId: s(r.patient_id), title: s(r.title), kind: r.kind as Appointment["kind"], date: r.date as string,
       time: r.time ? String(r.time).slice(0, 5) : undefined, durationMinutes: r.duration_minutes as number,
       status: r.status as Appointment["status"], notes: s(r.notes),
+      professionalId: s(r.professional_id), procedures: mapProcedures(r.procedures), label: s(r.label), forced: r.forced ? true : undefined,
+    })),
+    professionals: (pros as Row[]).map((r): Professional => ({ id: r.id as string, name: r.name as string, color: r.color as string, active: r.active as boolean })),
+    timeBlocks: (tblocks as Row[]).map((r): TimeBlock => ({
+      id: r.id as string, professionalId: s(r.professional_id), date: r.date as string,
+      startTime: String(r.start_time).slice(0, 5), endTime: String(r.end_time).slice(0, 5), reason: r.reason as string,
     })),
     templates: (templates as Row[]).map((r): MessageTemplate => ({ kind: r.kind as MessageTemplate["kind"], body: r.body as string })),
     waitlist: (waitlist as Row[]).map((r): WaitlistEntry => ({
@@ -361,16 +375,13 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
     },
 
     appointments: {
-      save: (a: Omit<Appointment, "id"> & { id?: string }) => run(async () => {
+      save: (input: Omit<Appointment, "id"> & { id?: string }) => run(async () => {
         const { sb, session, db } = ctx();
-        if (a.time && a.status !== "cancelled") {
-          const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
-          const start = toMin(a.time), end = start + a.durationMinutes;
-          const clash = db.appointments.find((x) => x.id !== a.id && x.date === a.date && x.time && x.status !== "cancelled" && toMin(x.time) < end && start < toMin(x.time) + x.durationMinutes);
-          if (clash) throw new Error(`Esse horário bate com outro compromisso às ${clash.time}.`);
-        }
+        const a = prepareAppointment(db, input);
         const row = { patient_id: a.patientId ?? null, title: a.title ?? null, kind: a.kind, date: a.date, time: a.time ?? null,
-          duration_minutes: a.durationMinutes, status: a.status, notes: a.notes ?? null };
+          duration_minutes: a.durationMinutes, status: a.status, notes: a.notes ?? null,
+          professional_id: a.professionalId ?? null, label: a.label ?? null, forced: !!a.forced,
+          procedures: (a.procedures ?? []).map((p) => ({ name: p.name, price_cents: p.priceCents, duration_minutes: p.durationMinutes, ...(p.procedureId ? { procedure_id: p.procedureId } : {}) })) };
         if (a.id) await q(sb.from("appointments").update(row).eq("id", a.id));
         else {
           await q(sb.from("appointments").insert({ ...row, clinic_id: session.clinicId, dentist_id: session.userId }));
@@ -386,6 +397,37 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         await q(sb.from("appointments").update({ status }).eq("id", id));
         const a = db.appointments.find((x) => x.id === id);
         if (a && status === "done") await touchVisit(a.patientId, a.date);
+      }),
+    },
+
+    professionals: {
+      save: (p: { id?: string; name: string; color: string; active: boolean }) => run(async () => {
+        const { sb, session } = ctx();
+        const name = p.name.trim();
+        if (!name) throw new Error("Dê um nome ao profissional.");
+        const row = { name, color: p.color, active: p.active };
+        if (p.id) {
+          const rows = await q(sb.from("professionals").update(row).eq("id", p.id).select("id"));
+          if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica gerencia os profissionais.");
+        } else await q(sb.from("professionals").insert({ ...row, clinic_id: session.clinicId }));
+      }),
+      remove: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("professionals").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error("Sem permissão para isso. Só o dono da clínica gerencia os profissionais.");
+      }),
+    },
+
+    timeBlocks: {
+      create: (b: { professionalId?: string; dates: string[]; startTime: string; endTime: string; reason: string }) => run(async () => {
+        const { sb, session } = ctx();
+        const reason = b.reason.trim() || "Bloqueio";
+        if (!b.startTime || !b.endTime || toMin(b.endTime) <= toMin(b.startTime)) throw new Error("O fim precisa ser depois do início.");
+        if (!b.dates.length || b.dates.length > MAX_BLOCK_DAYS) throw new Error(`Escolha de 1 a ${MAX_BLOCK_DAYS} dias.`);
+        await q(sb.from("time_blocks").insert(b.dates.map((date) => ({ clinic_id: session.clinicId, professional_id: b.professionalId ?? null, date, start_time: b.startTime, end_time: b.endTime, reason }))));
+      }),
+      remove: (id: string) => run(async () => {
+        const rows = await q(ctx().sb.from("time_blocks").delete().eq("id", id).select("id"));
+        if (!rows?.length) throw new Error(NO_ROWS);
       }),
     },
 

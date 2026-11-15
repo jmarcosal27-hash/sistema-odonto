@@ -166,7 +166,29 @@ export interface WaitlistEntry {
 }
 
 export type AppointmentKind = "consultation" | "return" | "personal";
-export type AppointmentStatus = "to_confirm" | "confirmed" | "done" | "cancelled" | "no_show";
+/** `waiting` = paciente na recepção; `in_service` = na cadeira. */
+export type AppointmentStatus = "to_confirm" | "confirmed" | "waiting" | "in_service" | "done" | "cancelled" | "no_show";
+
+/** Dentista ou cadeira da clínica: uma coluna na agenda do dia. */
+export interface Professional {
+  id: string;
+  name: string;
+  color: string; // #rrggbb
+  active: boolean;
+}
+
+/** Procedimento previsto no agendamento. Duração e valor entram na soma do agendamento. */
+export interface AppointmentProcedure { name: string; priceCents: number; durationMinutes: number; procedureId?: string }
+
+/** Horário bloqueado (almoço, folga, manutenção). Um bloqueio por dia; sem profissional = clínica toda. */
+export interface TimeBlock {
+  id: string;
+  professionalId?: string;
+  date: string; // yyyy-mm-dd
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  reason: string;
+}
 
 export interface Appointment {
   id: string;
@@ -178,6 +200,13 @@ export interface Appointment {
   durationMinutes: number;
   status: AppointmentStatus;
   notes?: string;
+  /** Agendamentos antigos não têm profissional: aparecem na coluna "Sem profissional". */
+  professionalId?: string;
+  /** Vários procedimentos: a duração do agendamento é a soma deles. */
+  procedures?: AppointmentProcedure[];
+  label?: string;
+  /** Encaixe: foi marcado por cima de outro compromisso ou bloqueio de propósito. */
+  forced?: boolean;
 }
 
 export interface MessageTemplate { kind: "confirmation" | "recall"; body: string }
@@ -447,4 +476,6 @@ export interface Db {
   laboratories: Laboratory[];
   prosthesisJobs: ProsthesisJob[];
   prosthesisEvents: ProsthesisEvent[];
+  professionals: Professional[];
+  timeBlocks: TimeBlock[];
 }
