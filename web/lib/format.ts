@@ -114,3 +114,13 @@ export const niceMaxCents = (peakCents: number) => {
 };
 /** Valor curto para eixo de gráfico: "R$ 2,5 mil", "R$ 800". */
 export const moneyShort = (cents: number) => { const r = cents / 100; return r >= 1000 ? `R$ ${(r / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : `R$ ${Math.round(r)}`; };
+
+/** Saudação a partir do nome profissional: "Dra. Ana Oliveira" → "Dra. Ana"; "Ana Oliveira" → "Ana". */
+export function greetingName(full?: string) {
+  const w = (full ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!w.length) return "";
+  const t = w[0].replace(/\.$/, "").toLowerCase();
+  const title = t === "dr" ? "Dr." : t === "dra" ? "Dra." : "";
+  const given = title ? w[1] : w[0];
+  return title ? (given ? `${title} ${given}` : "") : given;
+}

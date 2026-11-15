@@ -59,6 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const remote = useRemoteState();
   const [drawer, setDrawer] = useState(false);
   const [help, setHelp] = useState(false);
+  const [helpQ, setHelpQ] = useState<string>();
   const [onboard, setOnboard] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [search, setSearch] = useState(false);
@@ -66,13 +67,18 @@ export function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => { setDrawer(false); }, [path]);
   useEffect(() => { setMounted(true); }, []);
-  // Atalhos: Ctrl/Cmd+K ou "/" abrem a busca; "?" abre a ajuda (fora de campos de texto).
+  // Atalhos: Ctrl/Cmd+K abre a busca geral; "/" foca a busca da tela (ou abre a geral); "?" abre a ajuda (fora de campos de texto).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearch(true); }
-      else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "/") { e.preventDefault(); setSearch(true); }
+      else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "/") {
+        e.preventDefault();
+        // Na tela com busca própria, "/" foca essa busca; nas demais, abre a busca geral.
+        const field = document.querySelector<HTMLInputElement>('#conteudo input[type="search"], #conteudo input[aria-label^="Buscar"]');
+        if (field) { field.focus(); field.select(); } else setSearch(true);
+      }
       else if (!typing && e.key === "?") { e.preventDefault(); setHelp(true); }
     };
     window.addEventListener("keydown", onKey);
@@ -188,9 +194,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </li>
         </ul>
       </nav>
-      <CommandPalette open={search} onClose={() => setSearch(false)} />
+      <CommandPalette open={search} onClose={() => setSearch(false)} onHelp={(q) => { setHelpQ(q); setHelp(true); }} />
       <ConfirmHost />
-      <HelpModal open={help} onClose={() => setHelp(false)} onStartTour={() => { setHelp(false); setOnboard(true); }} />
+      <HelpModal open={help} question={helpQ} onClose={() => { setHelp(false); setHelpQ(undefined); }} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>
   );

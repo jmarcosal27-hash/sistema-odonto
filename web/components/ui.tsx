@@ -57,7 +57,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 );
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={cx(inputBase, width(className), "h-11 border-border-strong", className)} {...rest}>{children}</select>;
+  return <select className={cx(inputBase, "so-select", width(className), "h-11 border-border-strong", className)} {...rest}>{children}</select>;
 }
 
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {

@@ -85,7 +85,7 @@ export default function Page() {
             {canManage ? "Defina quanto a clínica quer vender neste mês para ver quanto falta por dia útil." : "A meta do mês ainda não foi definida pelo dono da clínica."}
           </p>
         )}
-        <p className="text-xs text-ink-muted">Vendido = orçamentos aprovados no mês (valor aprovado, já com desconto) + oportunidades ganhas sem orçamento. Dias úteis: segunda a sexta, sem feriados.</p>
+        <details className="text-xs text-ink-muted"><summary className="cursor-pointer w-fit font-medium hover:text-ink">Como é calculado</summary><p className="mt-1">Vendido = orçamentos aprovados no mês (valor aprovado, já com desconto) + oportunidades ganhas sem orçamento. Dias úteis: segunda a sexta, sem feriados.</p></details>
       </Card>
 
       <div className="flex flex-wrap items-center gap-3">

@@ -9,6 +9,13 @@ import { Modal, Button, Field, Input, Select, cx } from "./ui";
 import { useAction } from "./toast";
 import { toggleCondition } from "@/lib/teeth";
 
+const CONDITION_GROUPS = [
+  { tone: "danger", label: "Problema", dot: "bg-danger" },
+  { tone: "accent", label: "Já tratado", dot: "bg-brand" },
+  { tone: "success", label: "Sem problema", dot: "bg-success" },
+  { tone: "muted", label: "Não aparece", dot: "bg-ink-muted" },
+] as const;
+
 export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onConditions }: {
   db: Db; tooth?: number; open: boolean; onClose: () => void;
   conditions: ToothCondition[];
@@ -59,18 +66,22 @@ export function ToothDialog({ db, tooth, open, onClose, conditions, onAdd, onCon
         {tooth && (
           <fieldset>
             <legend className="text-xs font-semibold text-ink-muted mb-2">Situação do dente (pode marcar mais de uma)</legend>
-            <div className="flex flex-wrap gap-2">
-              {CONDITIONS.map((c) => {
-                const on = conditions.includes(c.id);
-                const dot = { success: "bg-success", danger: "bg-danger", accent: "bg-brand", muted: "bg-ink-muted" }[c.tone];
-                return (
-                  <button key={c.id} type="button" aria-pressed={on} onClick={() => toggle(c.id)}
-                    className={cx("inline-flex items-center gap-1.5 rounded-pill border h-8 px-3 text-sm transition",
-                      on ? "border-ink bg-surface-300 font-semibold" : "border-border-strong")}>
-                    <span aria-hidden className={cx("size-2 rounded-full", dot)} />{c.label}
-                  </button>
-                );
-              })}
+            <div className="space-y-2.5">
+              {CONDITION_GROUPS.map((g) => (
+                <div key={g.tone} className="flex flex-wrap items-center gap-2">
+                  <span className="w-24 shrink-0 text-xs text-ink-muted">{g.label}</span>
+                  {CONDITIONS.filter((c) => c.tone === g.tone).map((c) => {
+                    const on = conditions.includes(c.id);
+                    return (
+                      <button key={c.id} type="button" aria-pressed={on} onClick={() => toggle(c.id)}
+                        className={cx("inline-flex items-center gap-1.5 rounded-pill border h-8 px-3 text-sm transition",
+                          on ? "border-ink bg-surface-300 font-semibold" : "border-border-strong")}>
+                        <span aria-hidden className={cx("size-2 rounded-full", g.dot)} />{c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </fieldset>
         )}

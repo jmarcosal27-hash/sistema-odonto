@@ -81,6 +81,7 @@ export function StatusMenu({ status, who, onPick, disabled, className }: {
     <>
       <button ref={trigger} type="button" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
         aria-label={`Situação de ${who}: ${STATUS_LABEL[status]}. Alterar`}
+        title={STATUS_LABEL[status]}
         onClick={(e) => { e.stopPropagation(); if (open) close(false); else show(); }}
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); show(); } }}
         className={cx("flex items-center justify-center gap-0.5 rounded-sm hover:bg-surface-100/70 disabled:opacity-50", className)}>

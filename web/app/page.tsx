@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Plus, UserPlus } from "lucide-react";
 import { useDb, recallInfo, activePatients, stalledTreatments } from "@/lib/store";
 import { monthSummary, overdue } from "@/lib/finance";
-import { addDays, plural, dateLong, dateShort, fromISODate, money, todayISO } from "@/lib/format";
+import { addDays, plural, dateLong, dateShort, fromISODate, money, todayISO, greetingName } from "@/lib/format";
 import type { Appointment, AppointmentStatus } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/agenda";
 import { Badge, Card, PageSkeleton, SheetTitle, cx } from "@/components/ui";
@@ -68,7 +68,7 @@ export default function Home() {
   const waiting = db.waitlist.filter((w) => w.status === "waiting" || w.status === "contacted");
   const stalled = stalledTreatments(db);
   const toConfirm = live.filter((a) => a.patientId && a.status === "to_confirm" && a.date >= today && a.date <= addDays(today, 2)).length;
-  const first = db.profile.professionalName?.split(" ").slice(-1)[0];
+  const first = greetingName(db.profile.professionalName);
 
   const todo = [
     { n: late.length ? new Set(late.map((i) => i.patientId)).size : 0, text: ["paciente com parcela vencida", "pacientes com parcela vencida"], link: "Ver cobranças", href: "/financeiro?aba=receivable" },

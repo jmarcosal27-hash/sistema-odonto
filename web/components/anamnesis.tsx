@@ -8,7 +8,8 @@ import { ANAMNESIS_CHOICES, DEFAULT_ANAMNESIS, choiceOf, hasUnanswered } from "@
 import { dateBR, todayISO, uid, plural } from "@/lib/format";
 import type { AnamnesisAnswer, AnamnesisChoice, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Db } from "@/lib/types";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Textarea } from "./ui";
-import { useAction } from "./toast";
+import { useAction, useToast } from "./toast";
+import { removeWithUndo, usePendingRemoval } from "@/lib/undo";
 
 const alertsOf = (r: AnamnesisRecord) => r.answers.filter((a) => a.alert && choiceOf(a) === "yes");
 const choiceLabel = (c: AnamnesisChoice | undefined) => ANAMNESIS_CHOICES.find((x) => x.value === c)?.label ?? "Não respondida";
@@ -18,10 +19,12 @@ type FormTarget = { kind: "new" } | { kind: "draft"; record: AnamnesisRecord } |
 /** Anamnese na ficha do paciente: rascunhos, fichas concluídas (imutáveis, com revisões) e gestão dos modelos da clínica. */
 export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
   const run = useAction();
+  const toast = useToast();
+  const pending = usePendingRemoval();
   const [form, setForm] = useState<FormTarget | null>(null);
   const [manage, setManage] = useState(false);
   const records = db.anamnesisRecords
-    .filter((r) => r.patientId === patientId)
+    .filter((r) => r.patientId === patientId && !pending.has(r.id))
     .sort((a, b) => b.filledOn.localeCompare(a.filledOn) || b.createdAt.localeCompare(a.createdAt));
   const templates = db.anamnesisTemplates;
   const readOnly = isReadOnly(db);
@@ -91,7 +94,7 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
                       <>
                         <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setForm({ kind: "draft", record: r })}><FilePenLine className="size-3.5" />Continuar</Button>
                         <Button size="sm" variant="ghost" disabled={readOnly}
-                          onClick={async () => { if (await ask({ title: "Excluir este rascunho?", body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true })) void run(() => api.anamnesis.removeRecord(r.id), "Rascunho excluído."); }}>
+                          onClick={() => removeWithUndo(r.id, "Rascunho excluído.", () => api.anamnesis.removeRecord(r.id), toast)}>
                           <Trash2 className="size-3.5" />Excluir rascunho
                         </Button>
                       </>
