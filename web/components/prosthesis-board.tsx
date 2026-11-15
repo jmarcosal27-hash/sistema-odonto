@@ -1,13 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { GripVertical, TriangleAlert } from "lucide-react";
+import { CalendarClock, CircleCheck, ClipboardList, FlaskConical, GripVertical, Send, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { ProsthesisJob, ProsthesisStage } from "@/lib/types";
 import { STAGES, isOverdue, kindName } from "@/lib/prosthesis";
 import { dateBR } from "@/lib/format";
 import { Badge, Select, cx } from "./ui";
 
 export const jobButtonId = (id: string) => `job-open-${id}`;
+
+// Cor distinta por etapa, via tokens (claro e escuro). Atrasado sobrepõe a faixa em vermelho.
+const TONE: Record<ProsthesisStage, { icon: LucideIcon; title: string; strip: string; card: string }> = {
+  pre_lab: { icon: ClipboardList, title: "text-stage-gray", strip: "bg-stage-gray", card: "bg-surface-100" },
+  sent: { icon: Send, title: "text-stage-amber", strip: "bg-stage-amber", card: "bg-surface-100" },
+  lab: { icon: FlaskConical, title: "text-stage-violet", strip: "bg-stage-violet", card: "bg-surface-100" },
+  scheduled: { icon: CalendarClock, title: "text-stage-blue", strip: "bg-stage-blue", card: "bg-surface-100" },
+  done: { icon: CircleCheck, title: "text-success", strip: "bg-success", card: "bg-success-soft" },
+};
 
 /**
  * Quadro kanban do controle de prótese. Três formas de mover um cartão, todas chamando `onMove`:
@@ -58,14 +67,16 @@ export function ProsthesisBoard({ byStage, today, patientName, labName, onOpen, 
         const cards = byStage.get(st.id) ?? [];
         const late = cards.filter((j) => isOverdue(j, today)).length;
         const headId = `col-${st.id}`;
+        const tone = TONE[st.id];
+        const StageIcon = tone.icon;
         return (
           <section key={st.id} aria-labelledby={headId}
             onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverStage(st.id); } }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverStage(null); }}
             onDrop={(e) => drop(e, st.id)}
-            className={cx("w-72 shrink-0 rounded-lg border-2 p-3 transition-colors duration-150", overStage === st.id ? "border-brand bg-brand-soft" : "border-transparent bg-surface-300/60")}>
+            className={cx("w-72 shrink-0 rounded-lg border-2 p-3 transition-colors duration-150", overStage === st.id ? "border-brand bg-brand-soft" : "border-transparent bg-surface-300")}>
             <header className="mb-3 flex items-center justify-between gap-2 px-1">
-              <h2 id={headId} className="truncate text-sm font-semibold">{st.name}</h2>
+              <h2 id={headId} className={cx("flex min-w-0 items-center gap-2 text-sm font-bold", tone.title)}><StageIcon aria-hidden className="size-5 shrink-0" /><span className="truncate">{st.name}</span></h2>
               <span className="flex items-center gap-1.5">
                 {late > 0 && (
                   <span className="inline-flex h-6 items-center gap-1 rounded-pill bg-danger-soft px-2 text-xs font-semibold text-danger" aria-label={`${late} ${late === 1 ? "atrasado" : "atrasados"}`}>
@@ -76,7 +87,7 @@ export function ProsthesisBoard({ byStage, today, patientName, labName, onOpen, 
               </span>
             </header>
             {cards.length === 0 ? (
-              <p className="rounded-md border border-dashed border-border-strong px-3 py-6 text-center text-xs text-ink-muted">Nenhum serviço aqui.</p>
+              <p className="px-3 py-6 text-center text-xs text-ink-muted">Nenhum serviço nesta etapa. Mova os serviços para cá conforme avançam.</p>
             ) : (
               <ul className="space-y-2">
                 {cards.map((j) => {
@@ -86,7 +97,9 @@ export function ProsthesisBoard({ byStage, today, patientName, labName, onOpen, 
                     <li key={j.id} draggable
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", j.id); e.dataTransfer.effectAllowed = "move"; setDragId(j.id); }}
                       onDragEnd={() => { setDragId(null); setOverStage(null); }}
-                      className={cx("rounded-md border bg-surface-200 p-3 shadow-sm", overdue ? "border-danger" : "border-border", dragId === j.id && "opacity-50")}>
+                      className={cx("flex overflow-hidden rounded-md border shadow-sm", tone.card, overdue ? "border-danger" : "border-border", dragId === j.id && "opacity-50")}>
+                      <div aria-hidden className={cx("grid w-9 shrink-0 place-items-start justify-center pt-3 text-surface-100", overdue ? "bg-danger" : tone.strip)}>{overdue ? <TriangleAlert className="size-4" /> : <StageIcon className="size-4" />}</div>
+                      <div className="min-w-0 flex-1 p-3">
                       <div className="flex items-start gap-1">
                         <GripVertical aria-hidden className="mt-0.5 size-4 shrink-0 cursor-grab text-ink-muted" />
                         <button id={jobButtonId(j.id)} type="button" onClick={() => onOpen(j)} onKeyDown={(e) => onKey(e, j)}
@@ -113,6 +126,7 @@ export function ProsthesisBoard({ byStage, today, patientName, labName, onOpen, 
                           {STAGES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </Select>
                       </label>
+                      </div>
                     </li>
                   );
                 })}

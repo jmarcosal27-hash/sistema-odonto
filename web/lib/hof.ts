@@ -14,12 +14,45 @@ const REGION_LABELS: Record<string, string> = {
   nariz: "Nariz", glabela: "Glabela", labio_superior: "Lábio superior", labio_inferior: "Lábio inferior", mento: "Mento",
 };
 
-/** Elipse como caminho (permite rotação sem `transform`). */
-const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) =>
-  `M${cx - rx} ${cy} a${rx} ${ry} ${rot} 1 0 ${2 * rx} 0 a${rx} ${ry} ${rot} 1 0 ${-2 * rx} 0 Z`;
+type P = [number, number];
+const f1 = (n: number) => Math.round(n * 10) / 10;
+const poly = (pts: P[]) => `M${pts.map(([x, y]) => `${f1(x)} ${f1(y)}`).join(" L")} Z`;
+
+/** Elipse (rotação em graus) como polígono denso: permite girar sem `transform`. */
+const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0) => {
+  const a = (rot * Math.PI) / 180;
+  return poly(Array.from({ length: 36 }, (_, i) => {
+    const t = (i / 36) * 2 * Math.PI, x = rx * Math.cos(t), y = ry * Math.sin(t);
+    return [cx + x * Math.cos(a) - y * Math.sin(a), cy + x * Math.sin(a) + y * Math.cos(a)] as P;
+  }));
+};
+
+/** Faixa de espessura w (meia largura, varia de w0 a w1) ao longo de uma curva Catmull-Rom pelos pontos dados. */
+function band(ctrl: P[], w0: number, w1 = w0): string {
+  const c = [ctrl[0], ...ctrl, ctrl[ctrl.length - 1]], pts: P[] = [], N = 10;
+  for (let i = 1; i < c.length - 2; i++) {
+    for (let k = 0; k < N; k++) {
+      const t = k / N, t2 = t * t, t3 = t2 * t;
+      pts.push([0, 1].map((j) => 0.5 * (2 * c[i][j] + (c[i + 1][j] - c[i - 1][j]) * t + (2 * c[i - 1][j] - 5 * c[i][j] + 4 * c[i + 1][j] - c[i + 2][j]) * t2 + (3 * c[i][j] - c[i - 1][j] - 3 * c[i + 1][j] + c[i + 2][j]) * t3)) as P);
+    }
+  }
+  pts.push(ctrl[ctrl.length - 1]);
+  const l: P[] = [], r: P[] = [];
+  pts.forEach((p, i) => {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+    const w = w0 + (w1 - w0) * (i / (pts.length - 1)) * 1, s = Math.sin((Math.PI * i) / (pts.length - 1)); // pontas arredondadas
+    const ww = w * (0.35 + 0.65 * Math.min(1, s * 3));
+    l.push([p[0] + nx * ww, p[1] + ny * ww]); r.push([p[0] - nx * ww, p[1] - ny * ww]);
+  });
+  return poly([...l, ...r.reverse()]);
+}
+const mirrorX = (pts: P[]): P[] => pts.map(([x, y]) => [300 - x, y]);
 
 // Geometria por rosto, ajustada às feições de cada foto. Nos pares (_d/_e) o caminho fica no lado
 // direito do paciente (esquerda da imagem) e o lado esquerdo é o espelho em x = 150.
+// Banco restringe hof_regions a 18 ids: regiões do Simples sem id próprio viram sub-formas de um id existente
+// (malar inclui a bochecha; olheira = periorbital; mandibula = linha do ângulo ao mento; pescoco = arco + platisma).
 const PAIRED = ["mandibula", "tempora", "malar", "olheira", "nasogeniano"];
 type Geo = Record<string, string>;
 
@@ -31,36 +64,43 @@ function build(g: Geo): HofRegion[] {
   });
 }
 
+/** Pescoço: arco submentoniano + 3 faixas de platisma (laterais simétricas e central). */
+const neck = (archY: number, sideTop: P, sideBot: P, half: number) => [
+  band([[150 - half, archY - 6], [150 - half / 2, archY + 2], [150, archY + 5], [150 + half / 2, archY + 2], [150 + half, archY - 6]], 3.2),
+  band([sideTop, sideBot], 3.4), band(mirrorX([sideTop, sideBot]), 3.4),
+  band([[150, sideTop[1]], [150, sideBot[1]]], 3),
+].join(" ");
+
 export const HOF_REGIONS_BY_FACE: Record<HofFace, HofRegion[]> = {
   female: build({
-    testa: "M98 100 Q150 84 202 100 Q208 112 200 121 Q150 108 100 121 Q92 112 98 100 Z",
-    perioral: `${ell(150, 266, 46, 27)} ${ell(150, 266, 38, 19)}`,
-    pescoco: "M106 338 Q150 352 194 338 L200 374 Q150 388 100 374 Z",
-    nariz: "M147 182 L153 182 L158 214 Q166 218 166 223 Q150 231 134 223 Q134 218 142 214 Z",
-    glabela: ell(150, 143, 9, 9),
-    labio_superior: "M114 262 Q130 250 142 248 Q150 253 158 248 Q170 250 187 262 Q150 267 114 262 Z",
+    testa: poly([[116, 74], [184, 74], [207, 120], [93, 120]]),
+    tempora: ell(83, 122, 5.5, 14, -12),
+    glabela: poly([[150, 126], [161, 141], [150, 158], [139, 141]]),
+    nariz: "M147.5 160 L152.5 160 L155 196 Q167 204 174 216 Q171 226 160 226 Q150 229 140 226 Q129 226 126 216 Q133 204 145 196 Z",
+    olheira: band([[80, 176], [92, 186], [108, 188], [124, 178]], 5.5),
+    malar: `${band([[72, 201], [94, 205], [118, 212]], 7)} ${ell(97, 236, 12, 8.5, -8)}`,
+    nasogeniano: band([[127, 222], [119, 240], [114, 258]], 3.6),
+    perioral: `${ell(150, 264, 49, 28)} ${ell(150, 264, 40, 19)}`,
+    labio_superior: "M114 262 Q130 249 142 247 Q150 252 158 247 Q170 249 187 262 Q150 267 114 262 Z",
     labio_inferior: "M116 263 Q150 269 186 263 Q172 282 150 282 Q130 282 116 263 Z",
-    mento: ell(150, 303, 20, 9),
-    mandibula: "M68 236 Q76 275 108 304 Q124 316 138 318 L136 308 Q118 304 102 292 Q84 272 76 238 Z",
-    tempora: ell(76, 127, 6.5, 13, -8),
-    malar: ell(92, 208, 15, 9, -30),
-    olheira: "M85 183 Q104 192 123 183 Q104 200 85 183 Z",
-    nasogeniano: "M127 224 Q114 238 109 256 L113 258 Q119 240 130 227 Z",
+    mento: ell(150, 303, 21, 9),
+    mandibula: band([[76, 238], [90, 268], [106, 290], [127, 304], [141, 309]], 5, 4),
+    pescoco: neck(341, [118, 352], [108, 396], 42),
   }),
   male: build({
-    testa: "M98 112 Q150 96 202 112 Q208 126 200 136 Q150 122 100 136 Q92 126 98 112 Z",
-    perioral: `${ell(151, 265, 46, 27)} ${ell(151, 265, 38, 19)}`,
-    pescoco: "M100 338 Q150 352 200 338 L204 374 Q150 388 96 374 Z",
-    nariz: "M147 185 L153 185 L158 220 Q166 224 167 229 Q150 237 133 229 Q134 224 142 220 Z",
-    glabela: ell(150, 152, 9, 9),
+    testa: poly([[118, 90], [182, 90], [206, 137], [94, 137]]),
+    tempora: ell(83, 136, 5.5, 14, -12),
+    glabela: poly([[150, 140], [161, 153], [150, 168], [139, 153]]),
+    nariz: "M147.5 164 L152.5 164 L155 200 Q168 208 175 219 Q172 230 161 230 Q150 233 139 230 Q128 230 125 219 Q132 208 145 200 Z",
+    olheira: band([[84, 177], [95, 186], [110, 188], [125, 178]], 5.5),
+    malar: `${band([[72, 203], [94, 207], [118, 213]], 7)} ${ell(97, 238, 12, 8.5, -8)}`,
+    nasogeniano: band([[127, 228], [119, 242], [116, 256]], 3.6),
+    perioral: `${ell(151, 265, 48, 27)} ${ell(151, 265, 39, 17)}`,
     labio_superior: "M118 258 Q132 250 143 251 Q150 254 158 251 Q170 250 184 258 Q150 262 118 258 Z",
     labio_inferior: "M120 259 Q150 263 183 259 Q170 277 151 277 Q133 277 120 259 Z",
-    mento: ell(150, 303, 20, 9),
-    mandibula: "M66 232 Q76 275 108 304 Q124 316 138 318 L136 308 Q118 304 102 292 Q86 272 76 234 Z",
-    tempora: ell(77, 140, 6.5, 13, -8),
-    malar: ell(93, 208, 15, 9, -30),
-    olheira: "M87 183 Q106 192 125 183 Q106 200 87 183 Z",
-    nasogeniano: "M127 230 Q114 243 112 256 L116 258 Q120 245 130 233 Z",
+    mento: ell(150, 303, 21, 9),
+    mandibula: band([[77, 238], [91, 268], [107, 290], [127, 304], [141, 309]], 5, 4),
+    pescoco: neck(343, [120, 354], [110, 396], 40),
   }),
 };
 

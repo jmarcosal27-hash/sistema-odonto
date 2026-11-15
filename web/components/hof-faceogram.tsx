@@ -164,7 +164,11 @@ export function FaceStage({ face, regions = [], placedRegions = [], shapes = [],
                 } : { style: { pointerEvents: "none" } })}
                 className="outline-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#ff3d00]"
               >
-                <path d={r.d} fill={on ? REGION_ON : placed ? INK : "#fff"} fillOpacity={on ? 0.38 : placed ? 0.16 : lit ? 0.18 : 0.04} fillRule="evenodd" stroke="none" />
+                {!on && <path d={r.d} fill="none" stroke="#000" strokeOpacity={0.22} strokeWidth={1.5} strokeLinejoin="round" />}
+                <path
+                  d={r.d} fillRule="evenodd" strokeLinejoin="round" fill={on ? REGION_ON : placed ? INK : "#fff"} fillOpacity={on ? 0.35 : placed ? 0.2 : lit ? 0.15 : 0.02}
+                  stroke={on ? REGION_ON : "#fff"} strokeWidth={on ? 0.8 : 0.75} strokeOpacity={on ? 0.95 : 0.9} strokeDasharray={on ? undefined : "2.5 2.5"}
+                />
                 {interaction && <path d={r.d} fill="none" stroke="transparent" strokeWidth={8} strokeLinejoin="round" />}
               </g>
             );

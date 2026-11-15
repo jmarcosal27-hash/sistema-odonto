@@ -2,23 +2,26 @@
 
 import { useState } from "react";
 import { Plus, Percent } from "lucide-react";
-import { useDb, api, allProcedures, DEFAULT_RECALL_MONTHS } from "@/lib/store";
-import { HOF_SPECIALTY_ID, SPECIALTIES } from "@/lib/catalog";
+import { useDb, api, allProcedures, isReadOnly, DEFAULT_RECALL_MONTHS } from "@/lib/store";
+import { MedicationsManager } from "@/components/documents-extra";
+import { HOF_SPECIALTY_ID, MEDICATIONS_DISCLAIMER, PRESET_MEDICATIONS, SPECIALTIES } from "@/lib/catalog";
 import { HOF_SUGGESTED_PRICES } from "@/lib/hof";
 import { money, parseMoney } from "@/lib/format";
 import { Badge, Button, Card, Field, Input, Kpi, Modal, PageSkeleton, Segmented, Select, Toggle, cx } from "@/components/ui";
 import { useAction } from "@/components/toast";
+import type { Db } from "@/lib/types";
 
 export default function Page() {
   const db = useDb();
   const run = useAction();
-  const [tab, setTab] = useState<"prices" | "specialties">("prices");
+  const [tab, setTab] = useState<"prices" | "specialties" | "meds">("prices");
   const [spec, setSpec] = useState("geral");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [newProc, setNewProc] = useState(false);
   const [adjust, setAdjust] = useState(false);
+  const [manageMeds, setManageMeds] = useState(false);
   if (!db) return <PageSkeleton />;
 
   const procs = allProcedures(db);
@@ -43,7 +46,7 @@ export default function Page() {
         <Kpi label="Com preço padrão" value={priced} sub={priced ? "usados automaticamente no plano" : "nenhum ainda"} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Segmented label="Seção" value={tab} onChange={setTab} options={[{ value: "prices", label: "Procedimentos e preços" }, { value: "specialties", label: "Especialidades" }]} />
+        <Segmented label="Seção" value={tab} onChange={setTab} options={[{ value: "prices", label: "Procedimentos e preços" }, { value: "specialties", label: "Especialidades" }, { value: "meds", label: "Medicamentos" }]} />
         <div className="flex-1" />
         {tab === "prices" && <>
           <Button variant="secondary" size="sm" disabled={!priced} onClick={() => setAdjust(true)}><Percent className="size-4" />Reajustar</Button>
@@ -51,7 +54,9 @@ export default function Page() {
         </>}
       </div>
 
-      {tab === "specialties" ? (
+      {tab === "meds" ? (
+        <MedsTab db={db} onManage={() => setManageMeds(true)} />
+      ) : tab === "specialties" ? (
         <Card className="divide-y divide-border p-0">
           {SPECIALTIES.map((s) => (
             <div key={s.id} className="px-5 py-3">
@@ -116,6 +121,7 @@ export default function Page() {
         </>
       )}
       {newProc && <NewProcedure onClose={() => setNewProc(false)} defaultSpec={spec} />}
+      {manageMeds && <MedicationsManager db={db} readOnly={isReadOnly(db)} onClose={() => setManageMeds(false)} />}
       {adjust && <AdjustPrices count={priced} onClose={() => setAdjust(false)} />}
     </div>
   );
@@ -151,5 +157,39 @@ function AdjustPrices({ count, onClose }: { count: number; onClose: () => void }
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button disabled={!Number.isFinite(n) || n === 0 || n < -90} onClick={async () => { await run(() => api.catalog.adjustAllPrices(n), "Preços reajustados."); onClose(); }}>Aplicar {Number.isFinite(n) ? `${n > 0 ? "+" : ""}${n}%` : ""}</Button></>}>
       <Field label="Porcentagem" hint="Use número negativo para reduzir.">{(id, d) => <Input id={id} aria-describedby={d} inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} />}</Field>
     </Modal>
+  );
+}
+
+function MedsTab({ db, onManage }: { db: Db; onManage: () => void }) {
+  const run = useAction();
+  const readOnly = isReadOnly(db);
+  const have = new Set(db.medications.map((m) => m.name.toLowerCase()));
+  const missing = PRESET_MEDICATIONS.filter((m) => !have.has(m.name.toLowerCase()));
+  const preset = new Map(PRESET_MEDICATIONS.map((m) => [m.name.toLowerCase(), m]));
+  // "Sugerido" = ainda igual ao preset; ao editar a posologia a etiqueta some.
+  const isSuggested = (m: Db["medications"][number]) => preset.get(m.name.toLowerCase())?.posology === m.defaultPosology;
+  return (
+    <Card className="space-y-3">
+      <p className="text-sm text-ink-muted">{MEDICATIONS_DISCLAIMER}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={readOnly || !missing.length} onClick={() => run(() => api.medications.importPresets(missing), "Medicamentos sugeridos importados.")}>
+          {missing.length ? `Importar medicamentos sugeridos (${missing.length})` : "Todos os sugeridos já importados"}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onManage}>Editar ou excluir</Button>
+        <span className="text-xs text-ink-muted">A importação só acrescenta o que ainda não existe. Eles aparecem ao montar uma receita.</span>
+      </div>
+      {!db.medications.length ? <p className="text-sm text-ink-muted">Nenhum medicamento ainda.</p> : (
+        <ul className="divide-y divide-border">
+          {db.medications.map((m) => (
+            <li key={m.id} className="py-2 text-sm">
+              <span className="font-semibold">{m.name}</span>{" "}
+              {m.controlled && <Badge tone="warning">Controlado</Badge>}{" "}
+              {isSuggested(m) && <Badge tone="info">sugerido — revise</Badge>}
+              <span className="block text-ink-muted">{[m.route === "internal" ? "Uso interno" : "Uso externo", m.unit, m.defaultPosology].filter(Boolean).join(" · ")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

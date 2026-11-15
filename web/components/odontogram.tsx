@@ -37,8 +37,8 @@ export function Odontogram({ upper, lower, marks, planned, onConditions, onSelec
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto">
-        <div className="mx-auto w-max space-y-4 px-1">
-          <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+        <div className="mx-auto w-max space-y-3 rounded-xl bg-[#f4f7fb] px-2 py-3 text-slate-700 ring-1 ring-slate-300/60">
+          <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <span>Direita do paciente</span><span>Esquerda do paciente</span>
           </div>
           {rows.map((row, ri) => (
@@ -53,13 +53,13 @@ export function Odontogram({ upper, lower, marks, planned, onConditions, onSelec
                     aria-pressed={current === n}
                     onClick={() => setActive(n)}
                     onKeyDown={(e) => { if (e.key.startsWith("Arrow")) { e.preventDefault(); move(n, e.key); } }}
-                    className={cx("flex min-h-[116px] w-9 sm:w-10 flex-col items-center justify-start rounded-md px-0.5 py-1 transition hover:bg-surface-300 focus-visible:outline-2 focus-visible:outline-brand",
-                      current === n && "bg-brand-soft ring-2 ring-brand",
+                    className={cx("flex w-9 sm:w-11 flex-col items-center justify-start rounded-md px-0.5 py-1 transition hover:bg-slate-200/70 focus-visible:outline-2 focus-visible:outline-brand",
+                      current === n && "bg-sky-100 ring-2 ring-brand",
                       i === row.length / 2 && "ml-2 sm:ml-3")}
                   >
-                    <ToothSvg n={n} conditions={c} className="h-[72px] w-8 overflow-visible" />
-                    <span className="mt-1 text-[11px] font-medium leading-none tabular-nums text-ink">{n}</span>
-                    <span className="mt-0.5 h-3 text-[10px] leading-3 font-semibold text-ink-muted">{conditionAbbr(c)}</span>
+                    <ToothSvg n={n} conditions={c} className="h-auto w-full overflow-visible" />
+                    <span className="mt-1 text-[11px] font-medium leading-none tabular-nums text-slate-800">{n}</span>
+                    <span className="mt-0.5 h-3 text-[10px] leading-3 font-semibold text-slate-500">{conditionAbbr(c)}</span>
                     <span aria-hidden className={cx("mt-0.5 h-0.5 w-5 rounded-full", planned?.has(n) ? "bg-danger" : "bg-transparent")} />
                   </button>
                 );

@@ -613,6 +613,13 @@ export function makeRemoteApi(ctx: () => { sb: SupabaseClient; session: Session;
         const rows = await q(ctx().sb.from("medications").update({ name, route: m.route, controlled: m.controlled, unit: m.unit?.trim() || null, default_posology: m.defaultPosology?.trim() || null }).eq("id", id).select("id"));
         if (!rows?.length) throw new Error(NO_ROWS);
       }),
+      importPresets: (items: { name: string; route: Medication["route"]; controlled: boolean; unit?: string; posology: string }[]) => run(async () => {
+        const { sb, session, db } = ctx();
+        const have = new Set(db.medications.map((x) => x.name.trim().toLowerCase()));
+        const rows = items.filter((it) => !have.has(it.name.toLowerCase())).map((it) => ({ clinic_id: session.clinicId, name: it.name, route: it.route, controlled: it.controlled, unit: it.unit ?? null, default_posology: it.posology }));
+        if (rows.length) await q(sb.from("medications").insert(rows));
+        return rows.length;
+      }),
       remove: (id: string) => run(async () => {
         const rows = await q(ctx().sb.from("medications").delete().eq("id", id).select("id"));
         if (!rows?.length) throw new Error(NO_ROWS);

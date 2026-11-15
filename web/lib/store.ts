@@ -576,6 +576,20 @@ const localApi = {
         Object.assign(cur, { name, route: m.route, controlled: m.controlled, unit: m.unit?.trim() || undefined, defaultPosology: m.defaultPosology?.trim() || undefined });
       });
     },
+    /** Acrescenta só os presets que a clínica ainda não tem (por nome); nunca sobrescreve o que ela editou. */
+    async importPresets(items: { name: string; route: Medication["route"]; controlled: boolean; unit?: string; posology: string }[]) {
+      let added = 0;
+      commit((db) => {
+        guard(db);
+        const now = new Date().toISOString();
+        for (const it of items) {
+          if (db.medications.some((x) => x.name.toLowerCase() === it.name.toLowerCase())) continue;
+          db.medications.push({ id: uid(), name: it.name, route: it.route, controlled: it.controlled, unit: it.unit, defaultPosology: it.posology, createdAt: now });
+          added++;
+        }
+      });
+      return added;
+    },
     // Receitas já emitidas guardam o nome em cada item, então seguem iguais.
     async remove(id: string) {
       commit((db) => {
