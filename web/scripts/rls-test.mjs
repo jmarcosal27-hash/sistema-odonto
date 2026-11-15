@@ -812,7 +812,7 @@ const { data: labB1 } = await b.from("laboratories").insert({ clinic_id: clinicB
 const job = (extra = {}) => ({ clinic_id: clinicA, patient_id: pat.id, professional_name: "Dra. A", description: "Coroa de zircônia no 26", kind: "crown", teeth: "26", shade: "A2", laboratory_id: lab1.id, sent_on: "2026-11-01", due_on: "2026-11-10", cost_cents: 45000, ...extra });
 const { data: pj, error: pj1 } = await a.from("prosthesis_jobs").insert(job()).select("id,stage,stage_changed_at,is_return").single();
 check(!pj1 && pj?.stage === "pre_lab" && pj.is_return === false, "A cria serviço de prótese (nasce em Pré-laboratório)");
-const pHist = async (id) => (await a.from("prosthesis_events").select("kind,body,author_name").eq("job_id", id).order("created_at")).data ?? [];
+const pHist = async (id) => (await a.from("prosthesis_events").select("kind,body,author_id,author_name").eq("job_id", id).order("created_at")).data ?? [];
 check((await pHist(pj.id)).some((e) => e.kind === "system" && e.body === "Criou este serviço"), "histórico registra a criação do serviço (gravado pelo servidor)");
 for (const [label, row] of [["profissional vazio", { professional_name: "  " }], ["descrição vazia", { description: "  " }], ["descrição acima de 255", { description: "x".repeat(256) }], ["tipo inválido", { kind: "ponte" }],
   ["etapa inválida", { stage: "voando" }], ["valor negativo", { cost_cents: -1 }], ["rótulo acima de 30", { label: "x".repeat(31) }], ["previsão antes do envio", { sent_on: "2026-11-10", due_on: "2026-11-01" }],
@@ -837,7 +837,7 @@ check(!pmv1 && new Date(pmv.stage_changed_at) > new Date(pj.stage_changed_at), "
 await a.from("prosthesis_jobs").update({ stage: "lab" }).eq("id", pj.id);
 const pH = await pHist(pj.id);
 check(pH.some((e) => e.kind === "stage" && e.body === "Pré-laboratório → Envio") && pH.some((e) => e.kind === "stage" && e.body === "Envio → Laboratório"), "histórico registra cada mudança de etapa");
-check(pH.filter((e) => e.kind === "stage").every((e) => !!e.author_name), "histórico guarda quem moveu");
+check(pH.filter((e) => e.kind === "stage").every((e) => e.author_id === aUser.user.id), "histórico guarda quem moveu");
 await a.from("prosthesis_jobs").update({ is_return: true, return_reason: "Cor não combinou" }).eq("id", pj.id);
 check((await pHist(pj.id)).some((e) => e.kind === "system" && e.body === "Marcado como retorno: Cor não combinou"), "histórico registra a marcação de retorno com o motivo");
 
