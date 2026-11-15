@@ -40,7 +40,8 @@ export const FAQ: { group: string; items: [string, string][] }[] = [
 ];
 
 const SHORTCUTS: [string, string][] = [
-  ["Ctrl K  ou  /", "Buscar paciente, tela ou ação"],
+  ["Ctrl K", "Buscar paciente, tela ou ação"],
+  ["/", "Ir para a busca da tela (ou abrir a busca geral)"],
   ["?", "Abrir esta ajuda"],
   ["N", "Agenda: nova consulta · Pacientes: novo paciente"],
   ["T", "Agenda: voltar para hoje"],
