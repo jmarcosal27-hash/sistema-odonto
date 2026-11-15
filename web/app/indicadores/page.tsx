@@ -6,9 +6,9 @@ import { CircleHelp } from "lucide-react";
 import { useDb, recallInfo, activePatients } from "@/lib/store";
 import { indicators, lastMonths, periodFor, billed, received } from "@/lib/finance";
 import { addDays, money, moneyShort, niceMaxCents, todayISO, plural } from "@/lib/format";
-import { Card, Empty, PageSkeleton, Segmented } from "@/components/ui";
+import { Card, Empty, Field, Input, PageSkeleton, Segmented } from "@/components/ui";
 
-type Period = "month" | "30d" | "year";
+type Period = "month" | "30d" | "year" | "custom";
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
 
 function Metric({ label, value, hint, help, tone }: { label: string; value: string | number; hint?: string; help: string; tone?: "danger" | "success" }) {
@@ -18,7 +18,7 @@ function Metric({ label, value, hint, help, tone }: { label: string; value: stri
       <p className="flex items-center justify-between gap-2 text-[13px] font-medium text-ink-muted">
         {label}<button type="button" aria-expanded={open} aria-label={`O que é ${label}?`} title={help} onClick={() => setOpen(!open)} className="-m-2 grid size-8 place-items-center rounded-pill hover:bg-surface-300"><CircleHelp aria-hidden className="size-3.5" /></button>
       </p>
-      <p className={`mt-1 text-2xl font-semibold leading-8 tracking-[-0.02em] truncate ${tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : ""}`}>{value}</p>
+      <p className={`mt-1 whitespace-nowrap text-lg leading-7 sm:text-2xl sm:leading-8 font-semibold tracking-[-0.02em] tabular-nums ${tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : ""}`}>{value}</p>
       {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       {open && <p className="mt-2 border-t border-border pt-2 text-xs leading-5 text-ink">{help}</p>}
     </div>
@@ -28,8 +28,10 @@ function Metric({ label, value, hint, help, tone }: { label: string; value: stri
 export default function Page() {
   const db = useDb();
   const [period, setPeriod] = useState<Period>("month");
+  const [range, setRange] = useState<[string, string]>(() => { const [a, b] = periodFor("month"); return [a, b]; });
   if (!db) return <PageSkeleton />;
-  const [from, to] = periodFor(period);
+  const [from, to] = period === "custom" ? range : periodFor(period);
+  const pick = (v: Period) => { if (v === "custom" && period !== "custom") { const [a, b] = periodFor(period); setRange([a, b]); } setPeriod(v); };
   const k = indicators(db, from, to);
   const months = lastMonths(todayISO().slice(0, 7), 6).map((m) => {
     const last = new Date(Number(m.slice(0, 4)), Number(m.slice(5)), 0).getDate();
@@ -45,15 +47,21 @@ export default function Page() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">Como a clínica está indo, em números.</p>
-        <Segmented size="sm" label="Período" value={period} onChange={setPeriod} options={[{ value: "month", label: "Este mês" }, { value: "30d", label: "Últimos 30 dias" }, { value: "year", label: "Este ano" }]} />
+        <Segmented size="sm" label="Período" value={period} onChange={pick} options={[{ value: "month", label: "Este mês" }, { value: "30d", label: "Últimos 30 dias" }, { value: "year", label: "Este ano" }, { value: "custom", label: "Escolher datas" }]} />
       </div>
+      {period === "custom" && (
+        <div className="flex flex-wrap items-end justify-end gap-2">
+          <Field label="De">{(id) => <Input id={id} type="date" value={range[0]} max={range[1]} onChange={(e) => e.target.value && setRange([e.target.value, range[1]])} />}</Field>
+          <Field label="Até">{(id) => <Input id={id} type="date" value={range[1]} min={range[0]} onChange={(e) => e.target.value && setRange([range[0], e.target.value])} />}</Field>
+        </div>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Metric label="Faturado" value={money(k.billed)} help="Valor dos procedimentos concluídos no período, pagos ou não." />
         <Metric label="Recebido" value={money(k.received)} tone="success" help="Dinheiro que entrou: atendimentos avulsos pagos e parcelas recebidas." />
         <Metric label="Média por paciente" value={k.avgPerPayer === null ? "—" : money(k.avgPerPayer)} hint={k.avgPerPayer === null ? "sem pagamentos no período" : "entre quem pagou"} help="Recebido dividido pelo número de pacientes que pagaram algo no período." />
         <Metric label="Inadimplência" value={money(k.overdue)} tone={k.overdue ? "danger" : undefined} hint="só o que já venceu" help="Soma das parcelas com vencimento passado e ainda não pagas. O “A receber” do Financeiro inclui também as parcelas que ainda vão vencer." />
         <Metric label="Taxa de falta" value={pct(k.noShowRate)} tone={k.noShowRate && k.noShowRate > 0.15 ? "danger" : undefined} hint={k.noShowRate === null ? "sem consultas no período" : "faltas ÷ consultas que aconteceriam"} help="Consultas marcadas como 'faltou' dividido por atendidas + faltas." />
-        <Metric label="Conversão de orçamentos" value={pct(k.conversion)} hint={plural(k.budgetsCount, "apresentado", "apresentados")} help="Aprovados ÷ orçamentos já respondidos (aprovados + recusados) apresentados no período." />
+        <Metric label="Conversão de orçamentos" value={pct(k.conversion)} hint={k.conversion === null ? `${plural(k.budgetsCount, "apresentado", "apresentados")}, nenhum respondido ainda` : plural(k.budgetsCount, "apresentado", "apresentados")} help="Aprovados ÷ orçamentos já respondidos (aprovados + recusados), contando só os apresentados no período escolhido. A taxa da tela Orçamentos considera todos os orçamentos, de qualquer data." />
         <Metric label="Consultas realizadas" value={k.visits} help="Compromissos com paciente marcados como atendidos no período." />
         <Metric label="Novos pacientes" value={k.newPatients} help="Pacientes cadastrados no período." />
       </div>

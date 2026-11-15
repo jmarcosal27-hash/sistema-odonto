@@ -149,7 +149,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <Search aria-hidden className="size-4" /><span className="flex-1 text-left">Buscar paciente…</span><kbd className="rounded-sm border border-border px-1.5 text-[11px]">Ctrl K</kbd>
             </button>
             <button type="button" aria-label="Buscar" onClick={() => setSearch(true)} className="md:hidden grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Search aria-hidden className="size-5" /></button>
-            <IconBtn label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
+            <IconBtn className="hidden sm:grid" label={`Tema: ${theme === "system" ? "do sistema" : theme === "light" ? "claro" : "escuro"}. Trocar`}
               onClick={() => db && api.account.updateProfile({ theme: nextTheme })}><ThemeIcon className="size-5" /></IconBtn>
             <IconBtn label="Ajuda" onClick={() => setHelp(true)}><CircleHelp className="size-5" /></IconBtn>
             </div>
@@ -214,8 +214,8 @@ function NavLink({ it, path }: { it: NavItem; path: string }) {
   );
 }
 
-function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return <button type="button" aria-label={label} title={label} onClick={onClick} className="grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300">{children}</button>;
+function IconBtn({ label, onClick, children, className }: { label: string; onClick: () => void; children: ReactNode; className?: string }) {
+  return <button type="button" aria-label={label} title={label} onClick={onClick} className={`${className ?? "grid"} size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300`}>{children}</button>;
 }
 
 async function logout() {

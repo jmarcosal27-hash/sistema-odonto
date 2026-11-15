@@ -6,7 +6,7 @@ import { Plus } from "lucide-react";
 import { useDb, api, stalledTreatments } from "@/lib/store";
 import { dateBR, money, todayISO, plural } from "@/lib/format";
 import { receivedTreatments } from "@/lib/finance";
-import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Select } from "@/components/ui";
+import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Segmented, Select } from "@/components/ui";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useAction } from "@/components/toast";
 
@@ -19,6 +19,14 @@ export default function Page() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [allTime, setAllTime] = useState(false);
+  const [pickMonth, setPickMonth] = useState(false);
+  const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const preset = allTime ? "all" : pickMonth ? "custom" : year === now.getFullYear() && month === now.getMonth() ? "month" : year === lastM.getFullYear() && month === lastM.getMonth() ? "last" : "custom";
+  const pickPreset = (v: "month" | "last" | "custom" | "all") => {
+    setAllTime(v === "all"); setPickMonth(v === "custom");
+    if (v === "month") { setYear(now.getFullYear()); setMonth(now.getMonth()); }
+    if (v === "last") { setYear(lastM.getFullYear()); setMonth(lastM.getMonth()); }
+  };
   const [clinical, setClinical] = useState<"" | "in_progress" | "done">("");
   const [pay, setPay] = useState<"" | "pending" | "received">("");
   const [q, setQ] = useState("");
@@ -47,10 +55,13 @@ export default function Page() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <Select aria-label="Ano" value={year} onChange={(e) => setYear(Number(e.target.value))} disabled={allTime} className="w-28">{years.map((y) => <option key={y}>{y}</option>)}</Select>
-        <Select aria-label="Mês" value={month} onChange={(e) => setMonth(Number(e.target.value))} disabled={allTime} className="w-40">{MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select>
-        <label className="flex items-center gap-2 text-sm h-10"><input type="checkbox" checked={allTime} onChange={(e) => setAllTime(e.target.checked)} className="size-4" />Todo o período</label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented size="sm" label="Período" value={preset} onChange={pickPreset}
+          options={[{ value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher mês" }, { value: "all", label: "Todo o período" }]} />
+        {preset === "custom" && <>
+        <Select aria-label="Mês" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-36">{MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select>
+        <Select aria-label="Ano" value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-28">{years.map((y) => <option key={y}>{y}</option>)}</Select>
+        </>}
         <div className="flex-1" />
         <Button onClick={() => setForm(true)}><Plus className="size-4" />Registrar atendimento</Button>
       </div>
