@@ -45,7 +45,7 @@ export default function Page() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">Como a clínica está indo, em números.</p>
-        <Segmented label="Período" value={period} onChange={setPeriod} options={[{ value: "month", label: "Este mês" }, { value: "30d", label: "Últimos 30 dias" }, { value: "year", label: "Este ano" }]} />
+        <Segmented size="sm" label="Período" value={period} onChange={setPeriod} options={[{ value: "month", label: "Este mês" }, { value: "30d", label: "Últimos 30 dias" }, { value: "year", label: "Este ano" }]} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Metric label="Faturado" value={money(k.billed)} help="Valor dos procedimentos concluídos no período, pagos ou não." />

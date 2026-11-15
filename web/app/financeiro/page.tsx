@@ -28,6 +28,14 @@ function Finance() {
   const [tab, setTab] = useState<Tab>((params.get("aba") as Tab) ?? "overview");
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const [pickMonth, setPickMonth] = useState(false);
+  const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const preset = pickMonth ? "custom" : year === now.getFullYear() && month === now.getMonth() ? "month" : year === lastM.getFullYear() && month === lastM.getMonth() ? "last" : "custom";
+  const pickPreset = (v: "month" | "last" | "custom") => {
+    setPickMonth(v === "custom");
+    if (v === "month") { setYear(now.getFullYear()); setMonth(now.getMonth()); }
+    if (v === "last") { setYear(lastM.getFullYear()); setMonth(lastM.getMonth()); }
+  };
   const [span, setSpan] = useState<"6" | "12">("6");
   const [expFilter, setExpFilter] = useState<"all" | "toPay" | "paid">("all");
   const [recFilter, setRecFilter] = useState<"open" | "overdue" | "paid">("open");
@@ -63,8 +71,12 @@ function Finance() {
         ]} />
         <div className="flex-1" />
         {tab !== "receivable" && <>
+          <Segmented size="sm" label="Período" value={preset} onChange={pickPreset}
+            options={[{ value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher mês" }]} />
+          {preset === "custom" && <>
+          <Select aria-label="Mês" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-36">{MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select>
           <Select aria-label="Ano" value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-28">{[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => <option key={y}>{y}</option>)}</Select>
-          <Select aria-label="Mês" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-40">{MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select>
+          </>}
         </>}
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { STATUS_LABEL } from "@/lib/agenda";
 import Link from "next/link";
 import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plus, Archive, Hourglass } from "lucide-react";
@@ -12,6 +12,7 @@ import { PatientForm } from "@/components/patient-form";
 import { AppointmentForm } from "@/components/appointment-form";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useToast } from "@/components/toast";
+import { rememberPatient } from "@/lib/recent";
 import { useHotkeys } from "@/lib/hotkeys";
 import { useRouter } from "next/navigation";
 import { ClinicalNotes } from "@/components/clinical-notes";
@@ -32,6 +33,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const toast = useToast();
   const router = useRouter();
   useHotkeys({ a: () => setSchedule(true), p: () => router.push(`/plano?paciente=${id}`) }, !!db);
+  const exists = !!db?.patients.some((x) => x.id === id);
+  useEffect(() => { if (exists) rememberPatient(id); }, [id, exists]);
   if (!db) return <PageSkeleton />;
   const p = db.patients.find((x) => x.id === id);
   if (!p) return <Card><Empty title="Paciente não encontrado" body="Ele pode ter sido removido ou o link está errado." action={<Link href="/pacientes" className="font-semibold text-brand">Voltar para pacientes</Link>} /></Card>;
