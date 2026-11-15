@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarPlus, MessageCircle } from "lucide-react";
 import { useDb, stalledTreatments } from "@/lib/store";
-import { dateBR, money, whatsappLink } from "@/lib/format";
+import { dateBR, money, whatsappLink, plural } from "@/lib/format";
 import { Avatar, Button, Card, Empty, PageSkeleton } from "@/components/ui";
 import { AppointmentForm } from "@/components/appointment-form";
 
@@ -34,10 +34,10 @@ export default function Page() {
                   <Avatar name={p.fullName} />
                   <div className="flex-1 min-w-48">
                     <Link href={`/pacientes/${p.id}`} className="font-semibold hover:underline">{p.fullName}</Link>
-                    <p className="text-xs text-ink-muted">Aprovado em {dateBR(b.authorizedAt)} · há {days(b.authorizedAt!)} dias · {pending.length} item(ns) pendente(s): {pending.map((t) => t.procedureName).join(", ")}</p>
+                    <p className="text-xs text-ink-muted">Aprovado em {dateBR(b.authorizedAt)} · há {days(b.authorizedAt!)} dias · {plural(pending.length, "item pendente", "itens pendentes")}: {pending.map((t) => t.procedureName).join(", ")}</p>
                   </div>
                   <span className="font-bold tabular-nums">{money(b.totalCents)}</span>
-                  {p.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Vamos marcar a continuação do seu tratamento? Tenho horários nesta semana.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>}
+                  {p.phone && <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Vamos marcar a continuação do seu tratamento? Tenho horários nesta semana.`)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>}
                   <Button size="sm" onClick={() => setBooking(p.id)}><CalendarPlus className="size-4" />Agendar</Button>
                 </li>
               );

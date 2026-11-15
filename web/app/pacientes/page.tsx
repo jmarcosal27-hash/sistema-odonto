@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Plus, Upload, Download, Cake } from "lucide-react";
 import { useDb, api, patientStatus, isBirthdayMonth } from "@/lib/store";
-import { age, dateShort, todayISO } from "@/lib/format";
+import { age, dateShort, todayISO, plural } from "@/lib/format";
 import type { Patient } from "@/lib/types";
 import { Avatar, Badge, Button, Card, Empty, Input, PageSkeleton, Segmented, Select, cx } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
 import { useToast } from "@/components/toast";
+import { useHotkeys } from "@/lib/hotkeys";
 
 type Bucket = "all" | "in_treatment" | "open_budget" | "seen" | "new" | "birthday";
 const STATUS_BADGE = {
@@ -30,6 +31,7 @@ export default function Page() {
   // "/pacientes?novo=1" (atalho do Início) já abre o cadastro.
   useEffect(() => { if (new URLSearchParams(window.location.search).has("novo")) setForm(true); }, []);
   const file = useRef<HTMLInputElement>(null);
+  useHotkeys({ n: () => setForm(true) });
 
   const list = useMemo(() => {
     if (!db) return [];
@@ -76,7 +78,7 @@ export default function Page() {
     });
     try {
       const r = await api.patients.importRows(rows);
-      toast(`${r.created} paciente(s) importado(s).${r.errors.length ? ` ${r.errors.length} linha(s) puladas: ${r.errors.slice(0, 3).join("; ")}` : ""}`, r.errors.length && !r.created ? "error" : "ok");
+      toast(`${plural(r.created, "paciente importado", "pacientes importados")}.${r.errors.length ? ` ${plural(r.errors.length, "linha pulada", "linhas puladas")}: ${r.errors.slice(0, 3).join("; ")}` : ""}`, r.errors.length && !r.created ? "error" : "ok");
     } catch (e) { toast(e instanceof Error ? e.message : "Falha ao importar.", "error"); }
   };
 
@@ -103,9 +105,9 @@ export default function Page() {
       <Card className="space-y-3">
         <div className="flex flex-wrap gap-2">
           <Input aria-label="Buscar paciente" placeholder="Nome, telefone ou CPF" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-48" />
-          <Select aria-label="Sexo" value={sex} onChange={(e) => setSex(e.target.value)} className="w-36"><option value="">Todos os sexos</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option></Select>
+          <Select aria-label="Sexo" value={sex} onChange={(e) => setSex(e.target.value)} className="w-44"><option value="">Todos os sexos</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option></Select>
           <Segmented label="Ordem" value={sort} onChange={setSort} options={[{ value: "recent", label: "Recentes" }, { value: "az", label: "A–Z" }]} />
-          <Button onClick={() => setForm(true)}><Plus className="size-4" />Novo paciente</Button>
+          <Button aria-keyshortcuts="N" onClick={() => setForm(true)}><Plus className="size-4" />Novo paciente<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">N</kbd></Button>
         </div>
         {!list.length ? (
           <Empty title={archived ? "Nenhum paciente arquivado" : db.patients.length ? "Ninguém com esse filtro" : "Sua lista de pacientes está vazia"}

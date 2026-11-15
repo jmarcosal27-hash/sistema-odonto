@@ -62,7 +62,7 @@ export default function Page() {
                   {tab !== "scheduled" && (p.phone
                     ? <a href={whatsappLink(p.phone, fill(tpl.body, { nome: p.fullName.split(" ")[0] }))} target="_blank" rel="noreferrer"
                         onClick={() => tab === "pending" && api.recall.setStatus(p.id, "contacted", r.dueAt)}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Chamar</a>
                     : <Badge tone="warning">Sem celular</Badge>)}
                   {tab === "pending" && <Button size="sm" variant="secondary" onClick={() => run(() => api.recall.setStatus(p.id, "contacted", r.dueAt), "Marcado como contatado.")}><Check className="size-4" />Contatado</Button>}
                   {tab !== "scheduled" && <Button size="sm" onClick={() => setBooking(p.id)}><CalendarPlus className="size-4" />Agendar</Button>}

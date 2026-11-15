@@ -59,7 +59,7 @@ export function Odontogram({ upper, lower, marks, planned, onConditions, onSelec
                   >
                     <ToothSvg n={n} conditions={c} className="h-auto w-full overflow-visible" />
                     <span className="mt-1 text-[11px] font-medium leading-none tabular-nums text-slate-800">{n}</span>
-                    <span className="mt-0.5 h-3 text-[10px] leading-3 font-semibold text-slate-500">{conditionAbbr(c)}</span>
+                    <span className="mt-0.5 h-3 text-[11px] leading-3 font-semibold text-ink-muted">{conditionAbbr(c)}</span>
                     <span aria-hidden className={cx("mt-0.5 h-0.5 w-5 rounded-full", planned?.has(n) ? "bg-danger" : "bg-transparent")} />
                   </button>
                 );
@@ -75,7 +75,7 @@ export function Odontogram({ upper, lower, marks, planned, onConditions, onSelec
         </p>
         {current !== undefined && (
           <button type="button" onClick={() => onSelect(current)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-brand px-3 text-sm font-semibold text-white">
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand px-3 text-sm font-semibold text-white">
             <Plus className="size-4" />Procedimento no dente {current}
           </button>
         )}
@@ -90,7 +90,7 @@ export function Odontogram({ upper, lower, marks, planned, onConditions, onSelec
                 onClick={() => current !== undefined && onConditions(current, toggleCondition(activeConditions, k.id))}
                 className={cx("inline-flex h-9 items-center gap-1.5 rounded-pill border px-2.5 text-xs transition disabled:opacity-50",
                   on ? "border-ink bg-surface-300 font-semibold" : "border-border-strong hover:bg-surface-300")}>
-                <span aria-hidden className="grid min-w-5 place-items-center rounded-sm px-1 text-[10px] font-bold text-white" style={{ background: k.color }}>{k.abbr}</span>
+                <span aria-hidden className="grid min-w-5 place-items-center rounded-sm px-1 text-[11px] font-bold text-white" style={{ background: k.color }}>{k.abbr}</span>
                 {k.label}
               </button>
             </li>

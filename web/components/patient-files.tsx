@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "./confirm";
 import { useRef, useState } from "react";
 import { FileText, ImageIcon, Trash2, Upload } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
@@ -55,7 +56,7 @@ export function PatientFiles({ db, patientId }: { db: Db; patientId: string }) {
               <span className="flex gap-1">
                 <Button size="sm" variant="ghost" onClick={() => void open(f.id)} aria-label={`Abrir ${f.name}`}>Abrir</Button>
                 <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir ${f.name}`}
-                  onClick={() => window.confirm(`Excluir "${f.name}"? Não dá para desfazer.`) && void run(() => api.patientFiles.remove(f.id), "Arquivo excluído.")}><Trash2 className="size-3.5" />Excluir</Button>
+                  onClick={() => void ask({ title: `Excluir "${f.name}"?`, body: "O arquivo sai da ficha do paciente. Não dá para desfazer.", confirmLabel: "Excluir", danger: true }).then((ok) => { if (ok) void run(() => api.patientFiles.remove(f.id), "Arquivo excluído."); })}><Trash2 className="size-3.5" />Excluir</Button>
               </span>
             </li>
           ))}

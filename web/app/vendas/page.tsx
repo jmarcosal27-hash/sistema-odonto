@@ -111,7 +111,7 @@ export default function Page() {
                 action={!db.opportunities.length && <Button onClick={() => setCreating(true)}><Plus aria-hidden className="size-4" />Criar oportunidade</Button>} />
             </Card>
           )}
-          <p className="text-xs text-ink-muted">Arraste os cartões entre as colunas, use o campo “Mover para” ou, com o cartão focado, Shift + seta para a esquerda ou direita.</p>
+          <p className="text-xs text-ink-muted">Arraste os cartões entre as colunas, use o campo “Etapa” ou, com o cartão focado, Shift + seta para a esquerda ou direita.</p>
           <SalesBoard stages={stages} byStage={byStage} patientName={patientName} onOpen={(o) => setOpenId(o.id)} onMove={(o, id) => void move(o, id)} onManageStages={canManage ? () => setManaging(true) : undefined} />
         </>
       )}

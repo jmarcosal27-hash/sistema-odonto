@@ -5,7 +5,7 @@ import { Plus, TriangleAlert, X } from "lucide-react";
 import type { Appointment, AppointmentKind, AppointmentProcedure, AppointmentStatus } from "@/lib/types";
 import { MAX_LABEL, MAX_PROCEDURES, MAX_REPEAT, STATUS_LABEL, STATUS_ORDER, findConflict, procedureTotals, repeatDates } from "@/lib/agenda";
 import { allProcedures, api, useDb } from "@/lib/store";
-import { dateBR, money, parseMoney, todayISO } from "@/lib/format";
+import { dateBR, money, parseMoney, todayISO, plural } from "@/lib/format";
 import { Modal, Button, Field, Input, Segmented, Select, Textarea, ErrorNote } from "./ui";
 import { PatientPicker } from "./patient-picker";
 import { PatientForm } from "./patient-form";
@@ -70,7 +70,7 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
     if (missing || !a.date) return;
     if (rows.some((r) => r.name.trim() && !(Number(r.minutes) >= 1))) return setError("Informe a duração de cada procedimento (em minutos).");
     if (repeat && !editing && (!(Number(times) >= 2) || Number(times) > MAX_REPEAT)) return setError(`Repita de 2 a ${MAX_REPEAT} vezes.`);
-    if (conflicts.length && !a.forced) return setError(`${conflicts[0].text}${conflicts.length > 1 ? ` (e mais ${conflicts.length - 1} data(s) da série)` : ""} Marque "Forçar encaixe" para marcar mesmo assim.`);
+    if (conflicts.length && !a.forced) return setError(`${conflicts[0].text}${conflicts.length > 1 ? ` (e mais ${plural(conflicts.length - 1, "data", "datas")} da série)` : ""} Marque "Forçar encaixe" para marcar mesmo assim.`);
     const base = { ...(a as Appointment), patientId: personal ? undefined : a.patientId, professionalId: a.professionalId || undefined,
       procedures: procs.length ? procs : undefined, durationMinutes: duration, label: a.label?.trim() || undefined, forced: a.forced || undefined };
     let saved = 0;
@@ -78,7 +78,7 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
       for (const date of dates) { await api.appointments.save({ ...base, date }); saved++; }
       const waiting = db.waitlist.filter((w) => w.status === "waiting" || w.status === "contacted").length;
       if (a.status === "cancelled" && editing?.status !== "cancelled" && a.time && waiting)
-        toast(`Horário liberado. ${waiting} paciente(s) na lista de espera — veja em Agenda › Lista de espera.`);
+        toast(`Horário liberado. ${plural(waiting, "paciente", "pacientes")} na lista de espera — veja em Agenda › Lista de espera.`);
       else toast(dates.length > 1 ? `${dates.length} compromissos marcados.` : editing ? "Compromisso atualizado." : "Compromisso marcado.");
       onClose();
     } catch (e) {
@@ -146,7 +146,7 @@ export function AppointmentForm({ open, onClose, preset, editing }: {
 
           {(conflicts.length > 0 || a.forced) && (
             <div role="status" className="space-y-2 rounded-md border-2 border-warning bg-warning-soft p-3 text-sm">
-              {conflicts.length > 0 && <p className="flex items-start gap-2 font-semibold"><TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />{conflicts[0].text}{conflicts.length > 1 && ` Mais ${conflicts.length - 1} data(s) da série também batem.`}</p>}
+              {conflicts.length > 0 && <p className="flex items-start gap-2 font-semibold"><TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />{conflicts[0].text}{conflicts.length > 1 && ` Mais ${plural(conflicts.length - 1, "data", "datas")} da série também ${conflicts.length - 1 === 1 ? "bate" : "batem"}.`}</p>}
               <label className="flex min-h-10 items-center gap-2 font-medium"><input type="checkbox" className="size-5" checked={!!a.forced} onChange={(e) => set({ forced: e.target.checked })} />Forçar encaixe (marcar mesmo assim)</label>
             </div>
           )}

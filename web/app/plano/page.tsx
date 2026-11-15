@@ -1,11 +1,12 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2, Plus } from "lucide-react";
 import { useDb, api, planTotal, itemTotal, activePatients, PAYMENT_METHODS, regionLabel } from "@/lib/store";
 import { ADULT_LOWER, ADULT_UPPER, CHILD_LOWER, CHILD_UPPER, PHASES } from "@/lib/catalog";
-import { money, parseMoney, age, dateBR } from "@/lib/format";
+import { money, parseMoney, age, dateBR, plural } from "@/lib/format";
 import type { PlanItem, ToothCondition, Phase, PaymentMethod, HofFace, HofShape } from "@/lib/types";
 import { Button, Card, Segmented, PageSkeleton, Select, Input, Empty, Field, Textarea, cx } from "@/components/ui";
 import { Odontogram } from "@/components/odontogram";
@@ -137,7 +138,10 @@ function PlanEditor() {
           {discountCents > 0 && <p className="text-xs text-ink-muted">{money(subtotal)} − desconto {money(discountCents)}</p>}
           {undefinedCount > 0 && <p className="text-xs text-warning">{undefinedCount} {undefinedCount === 1 ? "item" : "itens"} sem valor</p>}
         </div>
-        <Button size="lg" onClick={generate} loading={saving} disabled={!items.length}>Gerar orçamento</Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button size="lg" onClick={generate} loading={saving} disabled={!items.length} aria-describedby={items.length ? undefined : "gerar-dica"}>Gerar orçamento</Button>
+          {!items.length && <p id="gerar-dica" className="text-xs text-ink-muted">Clique num dente e escolha um procedimento para começar.</p>}
+        </div>
       </div>
 
       <section aria-labelledby="itens" className="space-y-3">
@@ -145,7 +149,7 @@ function PlanEditor() {
           <h2 id="itens" className="font-semibold">Itens do plano</h2>
           <div className="flex gap-2">
             <Button variant="soft" size="sm" onClick={() => openTooth(undefined)}><Plus className="size-4" />Item sem dente</Button>
-            {dirty && <Button variant="secondary" size="sm" onClick={() => { if (confirmClear()) { setItems([]); setMarks({}); } }}><Trash2 className="size-4" />Limpar</Button>}
+            {dirty && <Button variant="secondary" size="sm" onClick={async () => { if (await confirmClear()) { setItems([]); setMarks({}); } }}><Trash2 className="size-4" />Limpar</Button>}
           </div>
         </div>
         {!items.length && <Card><Empty title="Nenhum item ainda" body="Clique num dente do odontograma para registrar o que encontrou e escolher o tratamento." /></Card>}
@@ -211,7 +215,7 @@ function PlanEditor() {
       )}
 
       {patient && db.budgets.some((b) => b.patientId === patient.id) && (
-        <p className="text-xs text-ink-muted">Este paciente já tem {db.budgets.filter((b) => b.patientId === patient.id).length} orçamento(s). Gerar outro cria uma segunda opção — o primeiro não é alterado. Último em {dateBR(db.budgets.filter((b) => b.patientId === patient.id).at(-1)!.presentedAt)}.</p>
+        <p className="text-xs text-ink-muted">Este paciente já tem {plural(db.budgets.filter((b) => b.patientId === patient.id).length, "orçamento", "orçamentos")}. Gerar outro cria uma segunda opção — o primeiro não é alterado. Último em {dateBR(db.budgets.filter((b) => b.patientId === patient.id).at(-1)!.presentedAt)}.</p>
       )}
 
       <ToothDialog
@@ -232,5 +236,5 @@ function PlanEditor() {
 }
 
 function confirmClear() {
-  return window.confirm("Apagar todos os itens deste plano? Isso não pode ser desfeito.");
+  return ask({ title: "Limpar este plano?", body: "Todos os itens e marcações deste plano são apagados. Não dá para desfazer.", confirmLabel: "Limpar plano", danger: true });
 }

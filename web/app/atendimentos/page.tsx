@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useDb, api, stalledTreatments } from "@/lib/store";
-import { dateBR, money, todayISO } from "@/lib/format";
+import { dateBR, money, todayISO, plural } from "@/lib/format";
 import { receivedTreatments } from "@/lib/finance";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Select } from "@/components/ui";
 import { TreatmentForm } from "@/components/treatment-form";
@@ -57,7 +57,7 @@ export default function Page() {
 
       {stalled > 0 && (
         <Link href="/atendimentos/parados" className="flex items-center justify-between gap-3 rounded-lg bg-warning-soft px-4 py-3 text-sm font-medium">
-          {stalled} tratamento(s) aprovado(s) parado(s) há mais de 7 dias, sem consulta marcada<span className="font-semibold">Ver →</span>
+          {plural(stalled, "tratamento aprovado parado", "tratamentos aprovados parados")} há mais de 7 dias, sem consulta marcada<span className="font-semibold">Ver →</span>
         </Link>
       )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -91,7 +91,7 @@ export default function Page() {
                 <div className="flex items-center gap-2">
                   <span className="font-semibold tabular-nums">{money(t.priceCents)}</span>
                   {t.clinicalStatus === "done" ? <Badge tone="info">Concluído</Badge> : <Badge tone="accent">Em andamento</Badge>}
-                  {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">No orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
+                  {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">Cobrado no orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
                 </div>
                 <div className="flex gap-2 md:justify-end">
                   {t.clinicalStatus === "in_progress" && <Button size="sm" variant="soft" onClick={() => run(() => api.treatments.update(t.id, { clinicalStatus: "done", performedAt: todayISO() }), "Marcado como concluído.")}>Concluir</Button>}

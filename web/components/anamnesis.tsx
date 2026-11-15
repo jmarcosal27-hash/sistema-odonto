@@ -1,10 +1,11 @@
 "use client";
 
+import { ask } from "./confirm";
 import { useState } from "react";
 import { ClipboardList, FilePenLine, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, isReadOnly } from "@/lib/store";
 import { ANAMNESIS_CHOICES, DEFAULT_ANAMNESIS, choiceOf, hasUnanswered } from "@/lib/catalog";
-import { dateBR, todayISO, uid } from "@/lib/format";
+import { dateBR, todayISO, uid, plural } from "@/lib/format";
 import type { AnamnesisAnswer, AnamnesisChoice, AnamnesisQuestion, AnamnesisRecord, AnamnesisTemplate, Db } from "@/lib/types";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, Modal, Select, Textarea } from "./ui";
 import { useAction } from "./toast";
@@ -69,7 +70,7 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
                       {draft && <Badge tone="warning">Rascunho</Badge>}
                       {r.revisionOf && <Badge tone="info">Revisão</Badge>}
                       {superseded && <Badge tone="neutral">Substituída</Badge>}
-                      {!draft && !superseded && alertsOf(r).length > 0 && <Badge tone="danger">{alertsOf(r).length} alerta(s)</Badge>}
+                      {!draft && !superseded && alertsOf(r).length > 0 && <Badge tone="danger">{plural(alertsOf(r).length, "alerta", "alertas")}</Badge>}
                     </span>
                   </summary>
                   <dl className="mt-2 space-y-2">
@@ -90,7 +91,7 @@ export function Anamnesis({ db, patientId }: { db: Db; patientId: string }) {
                       <>
                         <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setForm({ kind: "draft", record: r })}><FilePenLine className="size-3.5" />Continuar</Button>
                         <Button size="sm" variant="ghost" disabled={readOnly}
-                          onClick={() => { if (window.confirm("Excluir este rascunho? Não dá para desfazer.")) void run(() => api.anamnesis.removeRecord(r.id), "Rascunho excluído."); }}>
+                          onClick={async () => { if (await ask({ title: "Excluir este rascunho?", body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true })) void run(() => api.anamnesis.removeRecord(r.id), "Rascunho excluído."); }}>
                           <Trash2 className="size-3.5" />Excluir rascunho
                         </Button>
                       </>
@@ -220,7 +221,7 @@ function Templates({ db, onClose }: { db: Db; onClose: () => void }) {
               <span className="flex gap-1">
                 <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(t)} aria-label={`Editar modelo ${t.name}`}><Pencil className="size-3.5" />Editar</Button>
                 <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir modelo ${t.name}`}
-                  onClick={() => { if (window.confirm(`Excluir o modelo "${t.name}"? As fichas já preenchidas continuam guardadas.`)) void run(() => api.anamnesis.removeTemplate(t.id), "Modelo excluído."); }}>
+                  onClick={async () => { if (await ask({ title: `Excluir o modelo "${t.name}"?`, body: "As fichas já preenchidas continuam guardadas.", confirmLabel: "Excluir", danger: true })) void run(() => api.anamnesis.removeTemplate(t.id), "Modelo excluído."); }}>
                   <Trash2 className="size-3.5" />Excluir
                 </Button>
               </span>

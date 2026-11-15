@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { use, useState } from "react";
 import { STATUS_LABEL } from "@/lib/agenda";
 import Link from "next/link";
@@ -7,17 +8,20 @@ import { ArrowLeft, MessageCircle, Phone, CalendarPlus, Stethoscope, Pencil, Plu
 import { useDb, api, patientStatus, PAYMENT_METHODS } from "@/lib/store";
 import { age, dateBR, dateShort, money, todayISO, whatsappLink } from "@/lib/format";
 import { paidInstallments, receivedTreatments } from "@/lib/finance";
-import { Avatar, Badge, Button, Card, Empty, Kpi, PageSkeleton, Toggle } from "@/components/ui";
+import { Avatar, Badge, Button, Card, Empty, Kpi, PageSkeleton, Segmented, Toggle } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
 import { AppointmentForm } from "@/components/appointment-form";
 import { TreatmentForm } from "@/components/treatment-form";
 import { useToast } from "@/components/toast";
+import { useHotkeys } from "@/lib/hotkeys";
+import { useRouter } from "next/navigation";
 import { ClinicalNotes } from "@/components/clinical-notes";
 import { Anamnesis } from "@/components/anamnesis";
 import { Documents } from "@/components/documents";
 import { PatientFiles } from "@/components/patient-files";
 
 const SEX = { female: "Feminino", male: "Masculino", other: "Outro" };
+type Tab = "resumo" | "clinico" | "financeiro";
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -25,7 +29,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [edit, setEdit] = useState(false);
   const [schedule, setSchedule] = useState(false);
   const [treat, setTreat] = useState(false);
+  const [tab, setTab] = useState<Tab>("resumo");
   const toast = useToast();
+  const router = useRouter();
+  useHotkeys({ a: () => setSchedule(true), p: () => router.push(`/plano?paciente=${id}`) }, !!db);
   if (!db) return <PageSkeleton />;
   const p = db.patients.find((x) => x.id === id);
   if (!p) return <Card><Empty title="Paciente não encontrado" body="Ele pode ter sido removido ou o link está errado." action={<Link href="/pacientes" className="font-semibold text-brand">Voltar para pacientes</Link>} /></Card>;
@@ -57,37 +64,32 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       <Card className="flex flex-wrap items-center gap-4">
         <Avatar name={p.fullName} />
         <div className="flex-1 min-w-48">
-          <h2 className="text-lg font-bold break-words">{p.fullName}</h2>
+          <h2 className="sr-only">{p.fullName}</h2>
           <p className="text-sm text-ink-muted">{[a !== undefined && `${a} anos`, p.sex && SEX[p.sex], p.phone].filter(Boolean).join(" · ") || "Sem dados de contato"}</p>
           <div className="mt-1 flex flex-wrap gap-1">{p.archived && <Badge>Arquivado</Badge>}{inWaitlist && <Badge tone="info">Na lista de espera</Badge>}{{ in_treatment: <Badge tone="accent">Em tratamento</Badge>, open_budget: <Badge tone="warning">Orçamento em aberto</Badge>, seen: <Badge tone="success">Já atendido</Badge>, new: <Badge>Ainda não veio</Badge> }[status]}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           {actions.map(({ label, icon: Icon, href }) => (
-            <a key={label} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-pill bg-surface-300 px-4 text-sm font-semibold"><Icon className="size-4" />{label}</a>
+            <a key={label} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong/70 bg-surface-100 px-4 text-sm font-semibold transition-colors duration-150 hover:bg-surface-300"><Icon className="size-4" />{label}</a>
           ))}
-          <Button variant="soft" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar</Button>
-          {!inWaitlist && !p.archived && <Button variant="soft" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}
-          <Link href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-4 text-sm font-semibold text-on-brand"><Stethoscope className="size-4" />Novo plano</Link>
+          <Button variant="secondary" size="sm" className="!h-10" aria-keyshortcuts="A" onClick={() => setSchedule(true)}><CalendarPlus className="size-4" />Agendar<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">A</kbd></Button>
+          <Link aria-keyshortcuts="P" href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-md bg-brand px-4 text-sm font-semibold text-on-brand transition-colors duration-150 hover:bg-brand-hover"><Stethoscope className="size-4" />Novo plano<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">P</kbd></Link>
         </div>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="space-y-4 min-w-0">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Kpi tone="warning" label="Orçamento esperando" value={waiting ? money(waiting) : "—"} />
-            <Kpi tone="success" label="Já pagou" value={money(paid)} />
-            <Kpi label="Falta receber" value={due ? money(due) : "—"} />
-            <Kpi label="Última visita" value={p.lastVisitAt ? dateShort(p.lastVisitAt.slice(0, 10)) : "—"} />
-          </div>
-
+          <Segmented label="Seção da ficha" value={tab} onChange={setTab}
+            options={[{ value: "resumo", label: "Resumo" }, { value: "clinico", label: "Clínico" }, { value: "financeiro", label: <>Financeiro{due ? <span className="ml-1.5 tabular-nums text-ink-muted">· {money(due)}</span> : null}</> }]} />
+          {tab === "resumo" && <>
           <Card>
-            <div className="flex items-center justify-between"><h3 className="font-semibold">Próximos horários</h3><Button size="sm" variant="ghost" onClick={() => setSchedule(true)}><Plus className="size-4" />Agendar</Button></div>
+            <div className="flex items-center justify-between"><h3 className="font-semibold">Próximos horários</h3><span className="flex flex-wrap justify-end gap-1">{!inWaitlist && !p.archived && <Button size="sm" variant="ghost" onClick={() => api.waitlist.add({ patientId: p.id, period: "any" }).then(() => toast("Adicionado à lista de espera."), (e) => toast(e.message, "error"))}><Hourglass className="size-4" />Lista de espera</Button>}<Button size="sm" variant="ghost" onClick={() => setSchedule(true)}><Plus className="size-4" />Agendar</Button></span></div>
             {!upcoming.length ? <p className="text-sm text-ink-muted mt-2">Nada marcado.</p> : (
               <ul className="mt-3 space-y-2">
                 {upcoming.map((ap) => (
                   <li key={ap.id} className="flex items-center gap-3">
                     <span className="grid size-12 place-items-center rounded-md bg-brand text-on-brand text-center leading-tight">
-                      <span className="text-[10px] uppercase">{new Date(ap.date + "T12:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
+                      <span className="text-[11px] font-medium capitalize">{new Date(ap.date + "T12:00").toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}</span>
                       <span className="text-lg font-bold">{ap.date.slice(8)}</span>
                     </span>
                     <span className="text-sm"><span className="font-semibold block">{dateShort(ap.date)} {ap.time ? `às ${ap.time}` : "· horário a definir"}</span>
@@ -97,6 +99,37 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               </ul>
             )}
           </Card>
+
+          <Card>
+            <h3 className="font-semibold">Linha do tempo</h3>
+            <ol className="mt-3 space-y-3 border-l-2 border-border pl-4">
+              {events.map((e) => (
+                <li key={e.id} className="relative text-sm">
+                  <span aria-hidden className="absolute -left-[21px] top-1.5 size-2.5 rounded-full bg-brand" />
+                  <p>{e.label}</p><p className="text-xs text-ink-muted">{dateBR(e.createdAt)}</p>
+                </li>
+              ))}
+            </ol>
+          </Card>
+          </>}
+          {tab === "clinico" && <>
+          <Card className="flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="font-semibold">Odontograma e plano</h3><p className="text-sm text-ink-muted">Marque dentes, procedimentos e gere o orçamento.</p></div>
+            <Link href={`/plano?paciente=${p.id}`} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong/70 bg-surface-100 px-4 text-sm font-semibold transition-colors duration-150 hover:bg-surface-300"><Stethoscope className="size-4" />Abrir odontograma</Link>
+          </Card>
+          <Anamnesis db={db} patientId={p.id} />
+          <ClinicalNotes db={db} patientId={p.id} />
+          <Documents db={db} patientId={p.id} />
+          <PatientFiles db={db} patientId={p.id} />
+
+          </>}
+          {tab === "financeiro" && <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Kpi tone="warning" label="Orçamento esperando" value={waiting ? money(waiting) : "—"} />
+            <Kpi tone="success" label="Já pagou" value={money(paid)} />
+            <Kpi label="Falta receber" value={due ? money(due) : "—"} />
+            <Kpi label="Última visita" value={p.lastVisitAt ? dateShort(p.lastVisitAt.slice(0, 10)) : "—"} />
+          </div>
 
           <Card>
             <div className="flex items-center justify-between"><h3 className="font-semibold">Orçamentos</h3><Link href={`/plano?paciente=${p.id}`} className="text-sm font-semibold text-brand">+ Novo plano</Link></div>
@@ -123,7 +156,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                   <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                     <span className="min-w-0"><span className="font-medium">{t.procedureName}</span><span className="text-ink-muted"> · {dateBR(t.performedAt)}</span></span>
                     <span className="flex items-center gap-2"><span className="tabular-nums">{money(t.priceCents)}</span>
-                      {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge>No orçamento</Badge> : <button type="button" onClick={() => api.treatments.update(t.id, { paymentStatus: "received" })} className="text-xs font-semibold text-brand">Marcar recebido</button>}
+                      {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge>Cobrado no orçamento</Badge> : <button type="button" onClick={() => api.treatments.update(t.id, { paymentStatus: "received" })} className="text-xs font-semibold text-brand">Marcar recebido</button>}
                     </span>
                   </li>
                 ))}
@@ -148,22 +181,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             </Card>
           )}
 
-          <Anamnesis db={db} patientId={p.id} />
-          <ClinicalNotes db={db} patientId={p.id} />
-          <Documents db={db} patientId={p.id} />
-          <PatientFiles db={db} patientId={p.id} />
-
-          <Card>
-            <h3 className="font-semibold">Linha do tempo</h3>
-            <ol className="mt-3 space-y-3 border-l-2 border-border pl-4">
-              {events.map((e) => (
-                <li key={e.id} className="relative text-sm">
-                  <span aria-hidden className="absolute -left-[21px] top-1.5 size-2.5 rounded-full bg-brand" />
-                  <p>{e.label}</p><p className="text-xs text-ink-muted">{dateBR(e.createdAt)}</p>
-                </li>
-              ))}
-            </ol>
-          </Card>
+          </>}
         </div>
 
         <aside className="space-y-4">
@@ -181,8 +199,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       </div>
 
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={() => {
-          if (p.archived || window.confirm("Arquivar este paciente? Ele some das listas, mas o histórico fica guardado e dá para desarquivar.")) api.patients.archive(p.id, !p.archived).then(() => toast(p.archived ? "Paciente reativado." : "Paciente arquivado."));
+        <Button variant="ghost" size="sm" onClick={async () => {
+          if (p.archived || await ask({ title: "Arquivar este paciente?", body: "Ele some das listas, mas o histórico fica guardado e dá para desarquivar depois.", confirmLabel: "Arquivar" })) api.patients.archive(p.id, !p.archived).then(() => toast(p.archived ? "Paciente reativado." : "Paciente arquivado."));
         }}><Archive className="size-4" />{p.archived ? "Desarquivar" : "Arquivar paciente"}</Button>
       </div>
 

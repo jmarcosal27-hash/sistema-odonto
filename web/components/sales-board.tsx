@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { CircleCheck, CircleX, DollarSign, GripVertical, ListTodo, MoreVertical, Plus, type LucideIcon } from "lucide-react";
+import { CircleCheck, CircleX, GripVertical, ListTodo, MoreVertical, Plus, type LucideIcon } from "lucide-react";
 import type { Opportunity, SalesStage, SalesStageKind } from "@/lib/types";
 import { dateBR, money } from "@/lib/format";
 import { Badge, Select, cx } from "./ui";
@@ -10,10 +10,10 @@ export const oppButtonId = (id: string) => `opp-open-${id}`;
 
 // Classes completas (Tailwind só gera o que aparece escrito). Cores vêm dos tokens, valem nos dois temas.
 const TONE: Record<SalesStageKind, { icon: LucideIcon; title: string; strip: string; card: string; meta: string; help: string }> = {
-  open: { icon: ListTodo, title: "text-stage-blue", strip: "bg-stage-teal", card: "bg-surface-100", meta: "text-ink-muted", help: "Todo orçamento criado entra aqui. Mova a oportunidade quando o paciente avançar." },
-  in_progress: { icon: ListTodo, title: "text-stage-blue", strip: "bg-stage-teal", card: "bg-surface-100", meta: "text-ink-muted", help: "Mova as oportunidades para essa etapa após concluir a etapa anterior." },
-  won: { icon: CircleCheck, title: "text-success", strip: "bg-stage-gray", card: "bg-success-soft", meta: "text-success", help: "Mova as oportunidades para essa etapa quando o paciente aprovar o orçamento." },
-  lost: { icon: CircleX, title: "text-danger", strip: "bg-danger", card: "bg-danger-soft", meta: "text-danger", help: "Mova as oportunidades para essa etapa quando o paciente não aprovar o orçamento." },
+  open: { icon: ListTodo, title: "text-ink-muted", strip: "", card: "bg-surface-100", meta: "text-ink-muted", help: "Todo orçamento criado entra aqui. Mova a oportunidade quando o paciente avançar." },
+  in_progress: { icon: ListTodo, title: "text-ink-muted", strip: "", card: "bg-surface-100", meta: "text-ink-muted", help: "Mova as oportunidades para essa etapa após concluir a etapa anterior." },
+  won: { icon: CircleCheck, title: "text-success", strip: "", card: "bg-surface-100", meta: "text-ink-muted", help: "Mova as oportunidades para essa etapa quando o paciente aprovar o orçamento." },
+  lost: { icon: CircleX, title: "text-danger", strip: "", card: "bg-surface-100", meta: "text-ink-muted", help: "Mova as oportunidades para essa etapa quando o paciente não aprovar o orçamento." },
 };
 
 /**
@@ -75,11 +75,11 @@ export function SalesBoard({ stages, byStage, patientName, onOpen, onMove, onMan
             onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverStage(st.id); } }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverStage(null); }}
             onDrop={(e) => drop(e, st.id)}
-            className={cx("w-72 shrink-0 rounded-lg border-2 p-3 transition-colors duration-150", overStage === st.id ? "border-brand bg-brand-soft" : "border-transparent bg-surface-300")}>
+            className={cx("w-64 shrink-0 rounded-lg border p-3 transition-colors duration-150", overStage === st.id ? "border-brand bg-brand-soft" : "border-border bg-surface-300/60")}>
             <header className="mb-3 px-1">
               <div className="flex items-center justify-between gap-2">
-                <h2 id={headId} className={cx("flex min-w-0 items-center gap-2 text-sm font-bold", tone.title)}>
-                  <StageIcon aria-hidden className="size-5 shrink-0" /><span className="truncate">{st.name}</span>
+                <h2 id={headId} className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink">
+                  <StageIcon aria-hidden className={cx("size-4 shrink-0", tone.title)} /><span className="truncate">{st.name}</span>
                 </h2>
                 {onManageStages && (
                   <button type="button" onClick={onManageStages} aria-label={`Opções da etapa ${st.name}: editar etapas`} title="Editar etapas"
@@ -101,8 +101,7 @@ export function SalesBoard({ stages, byStage, patientName, onOpen, onMove, onMan
                   <li key={o.id} draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/plain", o.id); e.dataTransfer.effectAllowed = "move"; setDragId(o.id); }}
                     onDragEnd={() => { setDragId(null); setOverStage(null); }}
-                    className={cx("flex overflow-hidden rounded-md border border-border shadow-sm", tone.card, dragId === o.id && "opacity-50")}>
-                    <div aria-hidden className={cx("grid w-9 shrink-0 place-items-start justify-center pt-3 text-surface-100", tone.strip)}><DollarSign className="size-4" /></div>
+                    className={cx("flex overflow-hidden rounded-md border border-border shadow-sm transition-shadow duration-150 hover:shadow-[var(--so-shadow-md)]", tone.card, dragId === o.id && "opacity-50")}>
                     <div className="min-w-0 flex-1 p-3">
                     <div className="flex items-start gap-1">
                       <GripVertical aria-hidden className="mt-0.5 size-4 shrink-0 cursor-grab text-ink-muted" />
@@ -124,9 +123,9 @@ export function SalesBoard({ stages, byStage, patientName, onOpen, onMove, onMan
                         )}
                       </button>
                     </div>
-                    <label className="mt-2 block text-xs text-ink-muted">
-                      <span className="mb-1 block">Mover para</span>
-                      <Select value={o.stageId} aria-label={`Etapa de ${o.title}, ${patientName(o.patientId)}`} className="h-10 text-sm"
+                    <label className="mt-2 flex items-center gap-2 border-t border-border pt-2 text-xs text-ink-muted">
+                      <span className="shrink-0">Etapa</span>
+                      <Select value={o.stageId} aria-label={`Etapa de ${o.title}, ${patientName(o.patientId)}`} className="!h-8 !py-0 !text-xs"
                         onChange={(e) => move(o, e.target.value, true)}>
                         {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </Select>
@@ -141,7 +140,7 @@ export function SalesBoard({ stages, byStage, patientName, onOpen, onMove, onMan
       })}
       {onManageStages && (
         <div className="w-72 shrink-0 rounded-lg bg-surface-300/60 p-3">
-          <button type="button" onClick={onManageStages} className="inline-flex min-h-10 items-center gap-1 rounded-md px-2 text-sm font-bold text-stage-blue hover:underline"><Plus aria-hidden className="size-4" />Criar nova etapa</button>
+          <button type="button" onClick={onManageStages} className="inline-flex min-h-10 items-center gap-1 rounded-md px-2 text-sm font-semibold text-brand hover:underline"><Plus aria-hidden className="size-4" />Criar nova etapa</button>
         </div>
       )}
     </div>

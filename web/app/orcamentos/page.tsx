@@ -1,11 +1,12 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Printer, MessageCircle, Check, X as XIcon, Download } from "lucide-react";
 import { useDb, api } from "@/lib/store";
-import { dateBR, money, whatsappLink } from "@/lib/format";
+import { dateBR, plural, money, whatsappLink } from "@/lib/format";
 import type { Budget } from "@/lib/types";
 import { Badge, Button, Card, Empty, Input, Kpi, PageSkeleton, Segmented } from "@/components/ui";
 import { AuthorizeDialog } from "@/components/authorize-dialog";
@@ -56,7 +57,7 @@ function Budgets() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <Kpi tone="warning" label="Esperando resposta" value={money(open.reduce((s, b) => s + b.totalCents, 0))} sub={`${open.length} orçamento(s)`} />
+        <Kpi tone="warning" label="Esperando resposta" value={money(open.reduce((s, b) => s + b.totalCents, 0))} sub={plural(open.length, "orçamento", "orçamentos")} />
         <Kpi tone="success" label="Aprovados" value={authorized.length} sub="viraram atendimento" />
         <Kpi label="Taxa de aprovação" value={`${conversion}%`} sub="de todos os orçamentos" />
       </div>
@@ -78,18 +79,18 @@ function Budgets() {
         {!rows.length ? (
           <Empty title={db.budgets.length ? "Nada com esse filtro" : "Nenhum orçamento ainda"}
             body={db.budgets.length ? "Tente outra situação ou limpe a busca." : "Todo orçamento nasce de um plano de tratamento. Monte o primeiro e ele aparece aqui."}
-            action={!db.budgets.length && <Link href="/plano" className="inline-flex h-10 items-center rounded-pill bg-brand px-4 text-sm font-semibold text-on-brand">Montar um plano</Link>} />
+            action={!db.budgets.length && <Link href="/plano" className="inline-flex h-11 items-center rounded-md bg-brand px-5 text-sm font-semibold text-on-brand transition-colors duration-150 hover:bg-brand-hover">Montar um plano</Link>} />
         ) : (
           <ul className="divide-y divide-border">
             {rows.map(({ b, p }) => {
               const plan = db.plans.find((x) => x.id === b.planId);
               const expired = b.status === "presented" && Date.now() - new Date(b.presentedAt).getTime() > (plan?.validityDays ?? 30) * 86400000;
-              const msg = `Olá, ${p?.fullName.split(" ")[0]}! Segue o seu orçamento: ${money(b.totalCents)} (${plan?.items.length ?? 0} itens). Qualquer dúvida, é só chamar.`;
+              const msg = `Olá, ${p?.fullName.split(" ")[0]}! Segue o seu orçamento: ${money(b.totalCents)} (${plural(plan?.items.length ?? 0, "item", "itens")}). Qualquer dúvida, é só chamar.`;
               return (
                 <li key={b.id} id={`b-${b.id}`} className={`grid gap-3 p-4 md:grid-cols-[1fr_auto_auto] md:items-center ${highlight === b.id ? "bg-brand-soft" : ""}`}>
                   <div className="min-w-0">
                     <Link href={`/pacientes/${b.patientId}`} className="font-semibold hover:underline truncate block">{p?.fullName ?? "Paciente removido"}</Link>
-                    <p className="text-xs text-ink-muted">{plan?.items.length ?? 0} itens · apresentado em {dateBR(b.presentedAt)}</p>
+                    <p className="text-xs text-ink-muted">{plural(plan?.items.length ?? 0, "item", "itens")} · apresentado em {dateBR(b.presentedAt)}</p>
                   </div>
                   <div className="flex items-center gap-3 md:justify-end">
                     <span className="font-bold tabular-nums">{money(b.totalCents)}</span>
@@ -98,11 +99,11 @@ function Budgets() {
                     {b.status === "declined" && <Badge tone="neutral">Recusado</Badge>}
                   </div>
                   <div className="flex flex-wrap gap-2 md:justify-end">
-                    <Link href={`/orcamentos/${b.id}/imprimir`} target="_blank" aria-label={`Imprimir orçamento de ${p?.fullName}`} className="inline-flex h-8 items-center gap-1 rounded-pill bg-surface-300 px-3 text-xs font-semibold"><Printer className="size-4" />PDF</Link>
-                    {p?.phone && <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Enviar</a>}
+                    <Link href={`/orcamentos/${b.id}/imprimir`} target="_blank" aria-label={`Imprimir orçamento de ${p?.fullName}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border-strong/70 bg-surface-100 px-3 text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-300"><Printer className="size-4" />PDF</Link>
+                    {p?.phone && <a href={whatsappLink(p.phone, msg)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border-strong/70 bg-surface-100 px-3 text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-300"><MessageCircle className="size-4" />Enviar</a>}
                     {b.status === "presented" && <>
                       <Button size="sm" onClick={() => setAuthorizing(b)}>Aprovar</Button>
-                      <Button size="sm" variant="ghost" onClick={() => run(() => api.budgets.decline(b.id), "Marcado como recusado.")}><XIcon className="size-4" />Recusou</Button>
+                      <Button size="sm" variant="ghost" onClick={async () => { if (await ask({ title: "Marcar como recusado?", body: `O orçamento de ${p?.fullName ?? "este paciente"} (${money(b.totalCents)}) sai dos orçamentos em aberto.`, confirmLabel: "Marcar recusado" })) run(() => api.budgets.decline(b.id), "Marcado como recusado."); }}><XIcon className="size-4" />Recusou</Button>
                     </>}
                   </div>
                 </li>

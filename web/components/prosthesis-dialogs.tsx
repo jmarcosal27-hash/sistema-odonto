@@ -58,7 +58,7 @@ function JobFields({ db, f, set, tried }: { db: Db; f: Form; set: (p: Partial<Fo
       <Field label="Descrição do serviço" className="sm:col-span-2" error={tried && e.description ? "Descreva o serviço." : undefined}>
         {(id, d) => <Input id={id} aria-describedby={d} invalid={tried && e.description} maxLength={255} placeholder="Ex.: Coroa de zircônia no 26" value={f.description} onChange={(x) => set({ description: x.target.value })} />}
       </Field>
-      <Field label="Dente(s) ou região">{(id) => <Input id={id} maxLength={60} placeholder="Ex.: 26 ou arcada superior" value={f.teeth} onChange={(x) => set({ teeth: x.target.value })} />}</Field>
+      <Field label="Dentes ou região">{(id) => <Input id={id} maxLength={60} placeholder="Ex.: 26 ou arcada superior" value={f.teeth} onChange={(x) => set({ teeth: x.target.value })} />}</Field>
       <Field label="Cor ou escala">{(id) => <Input id={id} maxLength={40} placeholder="Ex.: A2 (Vita)" value={f.shade} onChange={(x) => set({ shade: x.target.value })} />}</Field>
       <Field label="Laboratório" className="sm:col-span-2">
         {(id) => <Select id={id} value={f.laboratoryId} onChange={(x) => set({ laboratoryId: x.target.value })}><option value="">Sem laboratório</option>{db.laboratories.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</Select>}

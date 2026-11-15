@@ -5,20 +5,22 @@ import Link from "next/link";
 import { CircleHelp } from "lucide-react";
 import { useDb, recallInfo, activePatients } from "@/lib/store";
 import { indicators, lastMonths, periodFor, billed, received } from "@/lib/finance";
-import { addDays, money, todayISO } from "@/lib/format";
+import { addDays, money, moneyShort, niceMaxCents, todayISO, plural } from "@/lib/format";
 import { Card, Empty, PageSkeleton, Segmented } from "@/components/ui";
 
 type Period = "month" | "30d" | "year";
 const pct = (x: number | null) => (x === null ? "—" : `${Math.round(x * 100)}%`);
 
 function Metric({ label, value, hint, help, tone }: { label: string; value: string | number; hint?: string; help: string; tone?: "danger" | "success" }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg bg-surface-200 p-4 shadow-sm min-w-0">
-      <p className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-        {label}<span title={help} aria-label={help} role="img"><CircleHelp className="size-3.5" /></span>
+    <div className="rounded-lg border border-border bg-surface-200 px-4 pb-4 pt-3.5 min-w-0">
+      <p className="flex items-center justify-between gap-2 text-[13px] font-medium text-ink-muted">
+        {label}<button type="button" aria-expanded={open} aria-label={`O que é ${label}?`} title={help} onClick={() => setOpen(!open)} className="-m-2 grid size-8 place-items-center rounded-pill hover:bg-surface-300"><CircleHelp aria-hidden className="size-3.5" /></button>
       </p>
-      <p className={`mt-1 text-[22px] font-bold leading-7 truncate ${tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : ""}`}>{value}</p>
+      <p className={`mt-1 text-2xl font-semibold leading-8 tracking-[-0.02em] truncate ${tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : ""}`}>{value}</p>
       {hint && <p className="text-xs text-ink-muted">{hint}</p>}
+      {open && <p className="mt-2 border-t border-border pt-2 text-xs leading-5 text-ink">{help}</p>}
     </div>
   );
 }
@@ -33,7 +35,7 @@ export default function Page() {
     const last = new Date(Number(m.slice(0, 4)), Number(m.slice(5)), 0).getDate();
     return { m, billed: billed(db, `${m}-01`, `${m}-${last}`), received: received(db, `${m}-01`, `${m}-${last}`) };
   });
-  const max = Math.max(1, ...months.flatMap((x) => [x.billed, x.received]));
+  const max = niceMaxCents(Math.max(...months.flatMap((x) => [x.billed, x.received])));
   const recallDue = activePatients(db).filter((p) => recallInfo(db, p)?.status === "pending").length;
   const sixMonths = addDays(todayISO(), -182);
   const away = activePatients(db).filter((p) => p.lastVisitAt && p.lastVisitAt.slice(0, 10) < sixMonths
@@ -51,7 +53,7 @@ export default function Page() {
         <Metric label="Média por paciente" value={k.avgPerPayer === null ? "—" : money(k.avgPerPayer)} hint={k.avgPerPayer === null ? "sem pagamentos no período" : "entre quem pagou"} help="Recebido dividido pelo número de pacientes que pagaram algo no período." />
         <Metric label="Inadimplência" value={money(k.overdue)} tone={k.overdue ? "danger" : undefined} hint="parcelas vencidas hoje" help="Soma das parcelas com vencimento passado e ainda não pagas." />
         <Metric label="Taxa de falta" value={pct(k.noShowRate)} tone={k.noShowRate && k.noShowRate > 0.15 ? "danger" : undefined} hint={k.noShowRate === null ? "sem consultas no período" : "faltas ÷ consultas que aconteceriam"} help="Consultas marcadas como 'faltou' dividido por atendidas + faltas." />
-        <Metric label="Conversão de orçamentos" value={pct(k.conversion)} hint={`${k.budgetsCount} apresentado(s)`} help="Aprovados ÷ orçamentos já respondidos (aprovados + recusados) apresentados no período." />
+        <Metric label="Conversão de orçamentos" value={pct(k.conversion)} hint={plural(k.budgetsCount, "apresentado", "apresentados")} help="Aprovados ÷ orçamentos já respondidos (aprovados + recusados) apresentados no período." />
         <Metric label="Consultas realizadas" value={k.visits} help="Compromissos com paciente marcados como atendidos no período." />
         <Metric label="Novos pacientes" value={k.newPatients} help="Pacientes cadastrados no período." />
       </div>
@@ -62,18 +64,30 @@ export default function Page() {
           <p className="text-xs text-ink-muted mb-4">Últimos 6 meses</p>
           {months.every((x) => !x.billed && !x.received) ? <Empty title="Sem movimento" /> : (
             <figure>
-              <div className="flex h-44 items-end gap-3" role="img" aria-label={months.map((x) => `${x.m}: faturado ${money(x.billed)}, recebido ${money(x.received)}`).join("; ")}>
+              <div className="flex gap-2">
+              <div aria-hidden className="relative h-44 w-14 shrink-0 text-right text-[11px] tabular-nums text-ink-muted">
+                {[1, 0.5, 0].map((f) => <span key={f} className="absolute right-0 -translate-y-1/2" style={{ top: `${(1 - f) * 100}%` }}>{moneyShort(max * f)}</span>)}
+              </div>
+              <div className="relative flex-1">
+              <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-44">
+                {[1, 0.5, 0].map((f) => <span key={f} className={`absolute inset-x-0 border-t ${f ? "border-dashed border-border" : "border-border-strong"}`} style={{ top: `${(1 - f) * 100}%` }} />)}
+              </div>
+              <div className="relative flex h-44 items-end gap-3" role="img" aria-label={months.map((x) => `${x.m}: faturado ${money(x.billed)}, recebido ${money(x.received)}`).join("; ")}>
                 {months.map((x) => (
                   <div key={x.m} className="flex flex-1 flex-col items-center gap-1 h-full justify-end">
                     <div className="flex w-full items-end justify-center gap-0.5 h-full">
-                      <div className="w-1/3 rounded-t-sm bg-brand" style={{ height: `${(x.billed / max) * 100}%` }} title={`Faturado ${money(x.billed)}`} />
+                      <div className="w-1/3 rounded-t-sm bg-border-strong" style={{ height: `${(x.billed / max) * 100}%` }} title={`Faturado ${money(x.billed)}`} />
                       <div className="w-1/3 rounded-t-sm bg-success" style={{ height: `${(x.received / max) * 100}%` }} title={`Recebido ${money(x.received)}`} />
                     </div>
-                    <span className="text-[11px] text-ink-muted">{new Date(Number(x.m.slice(0, 4)), Number(x.m.slice(5)) - 1, 1).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</span>
                   </div>
                 ))}
               </div>
-              <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand" />Faturado</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span></figcaption>
+              <div aria-hidden className="mt-1.5 flex gap-3">
+                {months.map((x) => <span key={x.m} className="flex-1 text-center text-[11px] text-ink-muted">{new Date(Number(x.m.slice(0, 4)), Number(x.m.slice(5)) - 1, 1).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</span>)}
+              </div>
+              </div>
+              </div>
+              <figcaption className="mt-3 flex gap-4 text-xs text-ink-muted"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-border-strong" />Faturado</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-success" />Recebido</span></figcaption>
             </figure>
           )}
         </Card>

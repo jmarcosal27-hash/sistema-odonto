@@ -77,7 +77,7 @@ export default function Page() {
                     {p.phone && (tab === "waiting" || tab === "contacted") && (
                       <a href={whatsappLink(p.phone, `Olá, ${p.fullName.split(" ")[0]}! Abriu um horário mais cedo. Quer que eu reserve para você?`)} target="_blank" rel="noreferrer"
                         onClick={() => tab === "waiting" && api.waitlist.setStatus(w.id, "contacted")}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Avisar</a>
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success-soft px-3 text-xs font-semibold"><MessageCircle className="size-4" />Avisar</a>
                     )}
                     {(tab === "waiting" || tab === "contacted") && <>
                       <Button size="sm" onClick={() => setBooking({ entry: w })}><CalendarPlus className="size-4" />Encaixar</Button>

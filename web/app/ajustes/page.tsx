@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { useState } from "react";
 import Link from "next/link";
 import { useDb, api } from "@/lib/store";
@@ -60,7 +61,7 @@ export default function Page() {
           <div className="flex flex-wrap items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element -- data URL pequeno */}
             {p.logo ? <img src={p.logo} alt="Logo atual da clínica" className="h-14 w-auto max-w-32 rounded-md border border-border bg-white object-contain p-1" /> : <span className="text-sm text-ink-muted">Sem logo.</span>}
-            <label className="inline-flex h-10 cursor-pointer items-center rounded-pill bg-surface-300 px-4 text-sm font-semibold focus-within:outline focus-within:outline-2">
+            <label className="inline-flex h-10 cursor-pointer items-center rounded-md bg-surface-300 px-4 text-sm font-semibold focus-within:outline focus-within:outline-2">
               Escolher imagem
               <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={async (e) => {
                 const f = e.target.files?.[0]; e.target.value = "";
@@ -72,7 +73,7 @@ export default function Page() {
           </div>
           <p className="text-xs text-ink-muted">Só o dono da clínica troca o logo. Ele é reduzido para caber no documento.</p>
         </div>
-        <div className="flex justify-end"><Button disabled={!dirty} onClick={async () => { try { await api.account.updateProfile(draft); setDraft({}); toast("Ajustes salvos."); } catch (e) { toast(e instanceof Error ? e.message : "Não foi possível salvar.", "error"); } }}>Salvar</Button></div>
+        <div className="flex items-center justify-end gap-3">{!dirty && <span className="text-xs text-ink-muted">Nada alterado ainda</span>}<Button disabled={!dirty} onClick={async () => { try { await api.account.updateProfile(draft); setDraft({}); toast("Ajustes salvos."); } catch (e) { toast(e instanceof Error ? e.message : "Não foi possível salvar.", "error"); } }}>Salvar</Button></div>
       </Card>
 
       <Card className="flex flex-wrap items-center justify-between gap-3">
@@ -90,14 +91,14 @@ export default function Page() {
         <p className="text-sm text-ink-muted">Os dados são seus. Baixe uma cópia completa quando quiser.</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => download("meus-dados.json", api.account.exportJson(), "application/json")}>Baixar tudo (JSON)</Button>
-          <Link href="/pacientes" className="inline-flex h-10 items-center rounded-pill bg-surface-300 px-4 text-sm font-semibold">Exportar pacientes (planilha)</Link>
+          <Link href="/pacientes" className="inline-flex h-10 items-center rounded-md bg-surface-300 px-4 text-sm font-semibold">Exportar pacientes (planilha)</Link>
         </div>
         <details className="rounded-md bg-surface-300 p-3 text-sm">
           <summary className="cursor-pointer font-semibold">Dados de exemplo</summary>
           <p className="mt-2 text-ink-muted">Esta versão de testes guarda tudo neste navegador e começa com pacientes fictícios.</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => window.confirm("Apagar tudo e começar do zero? Não dá para desfazer.") && api.account.reset(false)}>Começar do zero</Button>
-            <Button size="sm" variant="ghost" onClick={() => window.confirm("Substituir tudo pelos dados de exemplo?") && api.account.reset(true)}>Restaurar exemplos</Button>
+            <Button size="sm" variant="secondary" onClick={() => void ask({ title: "Começar do zero?", body: "Apaga pacientes, agenda, financeiro e documentos desta clínica. Não dá para desfazer.", confirmLabel: "Apagar tudo", danger: true, typeToConfirm: "APAGAR" }).then((ok) => { if (ok) void api.account.reset(false); })}>Começar do zero</Button>
+            <Button size="sm" variant="ghost" onClick={() => void ask({ title: "Restaurar os dados de exemplo?", body: "Tudo o que está no sistema agora é substituído pelos dados de exemplo.", confirmLabel: "Substituir", danger: true }).then((ok) => { if (ok) void api.account.reset(true); })}>Restaurar exemplos</Button>
           </div>
         </details>
       </Card>

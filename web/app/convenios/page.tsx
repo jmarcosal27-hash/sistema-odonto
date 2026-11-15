@@ -1,12 +1,13 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { useMemo, useState } from "react";
 import { Plus, Download } from "lucide-react";
 import { api, useDb } from "@/lib/store";
 import { CONVENIOS_DF, INSURER_TYPE_LABEL, normName } from "@/lib/convenios-presets";
 import { procedureKey } from "@/lib/convenios";
 import { BASE_PROCEDURES } from "@/lib/catalog";
-import { money, parseMoney } from "@/lib/format";
+import { money, parseMoney, plural } from "@/lib/format";
 import type { Db, Insurer } from "@/lib/types";
 import { Badge, Button, Card, Empty, Field, Input, Modal, PageSkeleton, Segmented, Select, Textarea, Toggle } from "@/components/ui";
 import { BillingTab } from "@/components/convenios-billing";
@@ -79,7 +80,7 @@ function ListTab({ db }: { db: Db }) {
 
       <Modal open={!!form} onClose={() => setForm(null)} title={form?.id ? "Editar convênio" : "Novo convênio"}
         footer={<>
-          {form?.id && <Button variant="danger" onClick={() => { if (form.id && confirm("Excluir este convênio e a tabela de valores dele? Pacientes ficam como particulares.")) run(async () => { await api.insurance.removeInsurer(form.id!); setForm(null); }, "Convênio excluído."); }}>Excluir</Button>}
+          {form?.id && <Button variant="danger" onClick={async () => { if (form.id && await ask({ title: "Excluir este convênio?", body: "A tabela de valores dele também é apagada. Os pacientes passam a constar como particulares.", confirmLabel: "Excluir convênio", danger: true })) run(async () => { await api.insurance.removeInsurer(form.id!); setForm(null); }, "Convênio excluído."); }}>Excluir</Button>}
           <Button variant="secondary" onClick={() => setForm(null)}>Cancelar</Button><Button onClick={save}>Salvar</Button>
         </>}>
         {form && (
@@ -118,7 +119,7 @@ function PricesTab({ db }: { db: Db }) {
       </div>
       {!insurerId ? <Empty title="Escolha um convênio" body="A tabela guarda quanto o convênio repassa por procedimento. Ela define o valor faturado nos lotes." /> : (
         <>
-          <p className="text-sm text-ink-muted">{mine.length} valor(es) cadastrado(s). Procedimento sem valor aqui é faturado pelo preço do atendimento. Deixe em branco para remover. Mostrando até 60 resultados: use a busca.</p>
+          <p className="text-sm text-ink-muted">{plural(mine.length, "valor cadastrado", "valores cadastrados")}. Procedimento sem valor aqui é faturado pelo preço do atendimento. Deixe em branco para remover. Mostrando até 60 resultados: use a busca.</p>
           <ul className="divide-y divide-border rounded-md border border-border">
             {shown.map((p) => <PriceRow key={`${insurerId}:${p.id}`} insurerId={insurerId} procId={p.id} name={p.name} clinic={db.prices[p.id]} current={mine.find((x) => x.procedureKey === procedureKey(p.id, p.name))?.priceCents} />)}
           </ul>

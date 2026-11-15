@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock, Plus, Search, SlidersHorizontal, UserCog, Zap } from "lucide-react";
 import { api, useDb, useRemoteState } from "@/lib/store";
-import { addDays, dateBR, dateLong, fromISODate, toISODate, todayISO } from "@/lib/format";
+import { addDays, dateBR, dateLong, fromISODate, toISODate, todayISO, plural } from "@/lib/format";
 import type { Appointment, Professional, TimeBlock } from "@/lib/types";
 import { NO_PROFESSIONAL, STATUS_LABEL, STATUS_ORDER, fmtMin, layoutLanes, matchesPatient, procedureTotals, toMin } from "@/lib/agenda";
 import { Button, Card, Input, PageSkeleton, Segmented, Select, cx } from "@/components/ui";
@@ -13,6 +13,7 @@ import { STATUS_CARD, StatusDot, StatusMenu } from "@/components/agenda-status";
 import { ProfessionalsDialog } from "@/components/professionals-dialog";
 import { BlockDetail, BlockDialog } from "@/components/block-dialog";
 import { useAction } from "@/components/toast";
+import { useHotkeys } from "@/lib/hotkeys";
 
 const START = 7, END = 22;
 const KIND = { consultation: "Consulta", return: "Retorno", personal: "Pessoal" };
@@ -48,6 +49,8 @@ export default function Page() {
   const isOwner = !remote || (remote.status === "ready" && remote.session.role === "owner");
 
   useEffect(() => { if (window.innerWidth < 768) setView("day"); }, []);
+  // Atalho vindo do Início ou da busca (Ctrl+K): /agenda?nova=1 abre a marcação direto.
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("nova") === "1") setForm({ preset: { date: todayISO() } }); }, []);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const on = () => setMobile(mq.matches);
@@ -56,7 +59,19 @@ export default function Page() {
   }, []);
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(t); }, []);
   const ready = !!db;
-  useEffect(() => { if (ready && scroller.current) scroller.current.scrollTop = (8 - START) * hourPx; }, [ready, hourPx]);
+  // Abre a grade perto da hora atual (uma hora antes); fora do expediente, às 8h.
+  useEffect(() => {
+    if (!ready || !scroller.current) return;
+    const n = new Date(); const m = n.getHours() * 60 + n.getMinutes();
+    const at = m >= START * 60 && m <= END * 60 ? Math.max(0, m / 60 - START - 1) : 8 - START;
+    scroller.current.scrollTop = at * hourPx;
+  }, [ready, hourPx]);
+  useHotkeys({
+    n: () => setForm({ preset: { date: day } }),
+    t: () => setDay(todayISO()),
+    arrowleft: () => setDay(addDays(day, view === "day" ? -1 : -7)),
+    arrowright: () => setDay(addDays(day, view === "day" ? 1 : 7)),
+  }, ready);
 
   const grid = useMemo(() => {
     const first = fromISODate(month + "-01");
@@ -119,7 +134,7 @@ export default function Page() {
   const apptCard = (a: Appointment & { lane: number; lanes: number }, col: Col) => {
     const who = name(a);
     const top = Math.max(0, (toMin(a.time!) - START * 60) * ppm);
-    const height = Math.max(20, a.durationMinutes * ppm - 2);
+    const height = Math.max(24, a.durationMinutes * ppm - 2);
     const pro = proOf(a.professionalId);
     const t = procedureTotals(a.procedures);
     const what = a.procedures?.length ? a.procedures[0].name + (a.procedures.length > 1 ? ` +${a.procedures.length - 1}` : "") : KIND[a.kind];
@@ -127,17 +142,17 @@ export default function Page() {
     return (
       <div key={a.id} className="absolute z-20" style={{ top, height, left: `calc(${(a.lane / a.lanes) * 100}% + 2px)`, width: `calc(${100 / a.lanes}% - 4px)` }}>
         <button type="button" onClick={() => setForm({ editing: a })} aria-label={aria} title={aria}
-          className={cx("absolute inset-0 overflow-hidden rounded-sm py-0.5 pl-1.5 pr-10 text-left shadow-sm hover:ring-1 hover:ring-brand", STATUS_CARD[a.status],
+          className={cx("absolute inset-0 overflow-hidden rounded-md py-1 pl-2 text-left", view === "week" ? "pr-6" : "pr-8", " transition-shadow duration-150 hover:shadow-[var(--so-shadow-md)]", STATUS_CARD[a.status],
             a.kind === "personal" && "!bg-surface-300 !border-ink-muted", a.forced && "outline outline-2 outline-warning")}>
-          <span className="block truncate text-[11px] font-semibold">
+          <span className={cx("text-xs font-semibold leading-4 break-words", height > 60 ? "line-clamp-2" : "block truncate")}>
             {a.forced && <Zap aria-hidden className="mr-0.5 inline size-3 text-warning" />}{a.forced && <span className="sr-only">Encaixe. </span>}
-            {a.time} {who}
+            {who}
           </span>
-          {height > 34 && <span className="block truncate text-[10px] text-ink-muted">{what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</span>}
-          {height > 48 && <span className="flex items-center gap-1 truncate text-[10px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
+          {height > 30 && <span className="block truncate text-[11px] leading-4 text-ink-muted"><span><span className="font-semibold text-ink">{a.time}</span>{height <= 64 && ` · ${STATUS_LABEL[a.status]}`} · {what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</span></span>}
+          {height > 64 && <span className="flex items-center gap-1 truncate text-[11px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
           {col.mode === "all" && pro && <span aria-hidden className="absolute bottom-0.5 right-1 size-2.5 rounded-full" style={{ background: pro.color }} />}
         </button>
-        <StatusMenu status={a.status} who={who} onPick={(s) => setStatus(a, s)} className="absolute right-0 top-0 z-10 h-full max-h-[min(100%,2.75rem)] min-h-5 w-10" />
+        <StatusMenu status={a.status} who={who} onPick={(s) => setStatus(a, s)} className={cx("absolute right-0 top-0 z-10 h-full max-h-[min(100%,2.75rem)] min-h-5", view === "week" ? "w-6" : "w-8")} />
       </div>
     );
   };
@@ -147,7 +162,7 @@ export default function Page() {
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Profissionais</h2>
-          {isOwner && <button type="button" onClick={() => setManaging(true)} className="inline-flex h-10 items-center gap-1 rounded-pill px-3 text-xs font-semibold text-brand hover:bg-brand-soft"><UserCog aria-hidden className="size-4" />Gerenciar</button>}
+          {isOwner && <button type="button" onClick={() => setManaging(true)} className="inline-flex h-10 items-center gap-1 rounded-md px-3 text-xs font-semibold text-brand hover:bg-brand-soft"><UserCog aria-hidden className="size-4" />Gerenciar</button>}
         </div>
         <ul>
           {db.professionals.map((p) => (
@@ -161,7 +176,7 @@ export default function Page() {
       </div>
       <div>
         <label htmlFor="busca-agenda" className="mb-1 flex items-center gap-1 text-sm font-semibold"><Search aria-hidden className="size-4" />Buscar agendamento</label>
-        <Input id="busca-agenda" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome ou telefone do paciente" />
+        <Input id="busca-agenda" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome ou telefone" />
         {query.trim().length >= 2 && (
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto" aria-live="polite" aria-label="Resultados da busca">
             {matches.map((a) => (
@@ -203,7 +218,7 @@ export default function Page() {
               {grid.map((d) => {
                 const n = everyone(d).length;
                 return (
-                  <button key={d} type="button" onClick={() => setDay(d)} aria-label={`${dateLong(d)}${n ? `, ${n} compromisso(s)` : ""}`} aria-pressed={d === day}
+                  <button key={d} type="button" onClick={() => setDay(d)} aria-label={`${dateLong(d)}${n ? `, ${plural(n, "compromisso", "compromissos")}` : ""}`} aria-pressed={d === day}
                     className={cx("relative grid h-8 place-items-center rounded-full text-sm",
                       d.slice(0, 7) !== month && "text-ink-muted/60",
                       d === day ? "bg-brand text-on-brand font-bold" : d === todayISO() ? "font-bold ring-1 ring-brand" : "hover:bg-surface-300")}>
@@ -222,13 +237,14 @@ export default function Page() {
         </div>
 
         <Card className="min-w-0 p-0 overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border p-3">
             <div className="flex items-center gap-1">
               <button type="button" aria-label="Anterior" onClick={() => setDay(addDays(day, view === "day" ? -1 : -7))} className="grid size-10 place-items-center rounded-pill hover:bg-surface-300"><ChevronLeft className="size-4" /></button>
-              <button type="button" onClick={() => setDay(todayISO())} className="rounded-pill border border-border-strong h-10 px-3 text-xs font-semibold">Hoje</button>
+              <button type="button" onClick={() => setDay(todayISO())} title="Atalho: T" aria-keyshortcuts="T" className="rounded-md border border-border-strong h-10 px-3 text-xs font-semibold hover:bg-surface-300">Hoje</button>
               <button type="button" aria-label="Próximo" onClick={() => setDay(addDays(day, view === "day" ? 1 : 7))} className="grid size-10 place-items-center rounded-pill hover:bg-surface-300"><ChevronRight className="size-4" /></button>
             </div>
-            <h2 className="text-sm font-semibold first-letter:uppercase flex-1 min-w-40">{label} <span className="font-normal text-ink-muted">· {total} compromisso(s)</span></h2>
+            <h2 className="text-sm font-semibold first-letter:uppercase flex-1 min-w-48">{label} <span className="font-normal text-ink-muted">· {plural(total, "compromisso", "compromissos")}</span></h2>
+            <div className="flex flex-wrap items-center gap-2">
             {view === "week" && <label className="flex min-h-10 items-center gap-1.5 text-xs"><input type="checkbox" className="size-5" checked={hideWeekend} onChange={(e) => setHideWeekend(e.target.checked)} />Ocultar fim de semana</label>}
             {view === "day" && mobile && hasPros && (
               <Select aria-label="Profissional" className="!w-auto flex-1 min-w-36" value={mobilePros.some((c) => c.key === mobileProf) ? mobileProf : "all"} onChange={(e) => setMobileProf(e.target.value)}>
@@ -239,7 +255,8 @@ export default function Page() {
             <Segmented size="sm" label="Visualização" value={view} onChange={setView} options={[{ value: "day", label: view === "day" && hasPros ? "Dia por profissional" : "Dia" }, { value: "week", label: "Semana" }]} />
             <Segmented size="sm" label="Zoom da grade" value={zoom} onChange={setZoom} options={[{ value: "30", label: "30 min" }, { value: "60", label: "60 min" }]} />
             <Button size="sm" variant="secondary" onClick={() => setBlockForm({ date: day })}><Lock aria-hidden className="size-4" />Bloquear</Button>
-            <Button size="sm" onClick={() => setForm({ preset: { date: day } })}><Plus className="size-4" />Nova consulta</Button>
+            <Button size="sm" title="Atalho: N" aria-keyshortcuts="N" onClick={() => setForm({ preset: { date: day } })}><Plus className="size-4" />Nova consulta<kbd aria-hidden className="ml-1 hidden rounded-sm border border-current/30 px-1 text-[11px] font-medium leading-4 opacity-70 lg:inline">N</kbd></Button>
+            </div>
           </div>
 
           {dayEmpty && <p className="p-6 text-center text-sm text-ink-muted">Todos os profissionais estão ocultos. Marque algum em &ldquo;Profissionais&rdquo;.</p>}
@@ -275,7 +292,7 @@ export default function Page() {
                 <div ref={scroller} className="relative max-h-[65vh] overflow-y-auto">
                   <div className="grid" style={{ gridTemplateColumns: `56px repeat(${columns.length}, minmax(0,1fr))`, height: (END - START) * hourPx }}>
                     <div className="relative">
-                      {hours.map((h) => <span key={h} className="absolute right-2 -translate-y-1/2 text-[11px] text-ink-muted tabular-nums" style={{ top: (h - START) * hourPx }}>{h > START ? `${h}:00` : ""}</span>)}
+                      {hours.map((h) => <span key={h} className={cx("absolute right-2 text-[11px] text-ink-muted tabular-nums", h > START ? "-translate-y-1/2" : "top-1")} style={h > START ? { top: (h - START) * hourPx } : undefined}>{`${h}:00`}</span>)}
                     </div>
                     {columns.map(({ id, date: d, col }) => {
                       const placed = layoutLanes(colAppts(d, col).filter((a) => a.time).map((a) => ({ ...a, start: toMin(a.time!), end: toMin(a.time!) + a.durationMinutes })));
@@ -298,8 +315,8 @@ export default function Page() {
                             </button>
                           ))}
                           {d === todayISO() && nowMin >= START * 60 && nowMin <= END * 60 && (
-                            <div aria-hidden className="pointer-events-none absolute inset-x-0 z-30 border-t-2 border-danger" style={{ top: (nowMin - START * 60) * ppm }}>
-                              <span className="absolute -left-1 -top-1.5 size-2.5 rounded-full bg-danger" />
+                            <div aria-hidden className="pointer-events-none absolute inset-x-0 z-30 border-t-2 border-brand" style={{ top: (nowMin - START * 60) * ppm }}>
+                              <span className="absolute -left-1 -top-1.5 size-2.5 rounded-full bg-brand" />
                             </div>
                           )}
                           {placed.map((a) => apptCard(a, col))}

@@ -23,13 +23,13 @@
   --radius-icon: 22%;
 
   /* Tema claro: "Receituário" — papel, tinta da marca e carimbo */
-  --paper: #f6f4fa;
+  --paper: #f7f6fa;
   --surface-100: #ffffff;
   --surface-200: #ffffff;
   --surface-300: #eeeaf7;
   --ink: #1f1b2e;
   --ink-muted: #625c78;
-  --border: #e3deef;
+  --border: #e6e2f0;
   --border-strong: #8e88a8;
   --rule: #1f1b2e;
   --brand: #6d4fd8;
@@ -43,7 +43,8 @@
   --warning-soft: #fdf0d2;
   --danger: #b42318;
   --danger-soft: #fce8e6;
-  --so-shadow-sm: 0 1px 2px rgba(31, 27, 46, 0.05);
+  --so-shadow-sm: 0 1px 2px rgba(31, 27, 46, 0.06);
+  --so-shadow-lift: 0 1px 2px rgba(31, 27, 46, 0.04), 0 2px 8px -2px rgba(31, 27, 46, 0.06);
   --so-shadow-md: 0 12px 32px -8px rgba(31, 27, 46, 0.22);
   /* Barra lateral: campo chapado na tinta da marca, nos dois temas */
   --rail: #1f1b2e;
@@ -52,6 +53,7 @@
   --rail-hover: #2e2843;
   --rail-line: #3a3358;
   --rail-mark: #bba8f5;
+  --rail-active: #f7f6fa;
   /* Cores de etapa dos kanbans (vendas e prótese) */
   --stage-blue: #1a6fd1;
   --stage-teal: #0e9f8e;
@@ -64,7 +66,7 @@
 /* Tema escuro do sistema, quando o usuário não escolheu um tema no app */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #15121c;
+    --paper: #120f18;
     --surface-100: #221e2e;
     --surface-200: #1c1926;
     --surface-300: #2c2740;
@@ -100,7 +102,7 @@
 
 /* Seletor de tema do app: shell.tsx grava data-theme="dark" no <html> */
 :root[data-theme="dark"] {
-  --paper: #15121c;
+  --paper: #120f18;
   --surface-100: #221e2e;
   --surface-200: #1c1926;
   --surface-300: #2c2740;
@@ -142,6 +144,7 @@
   --color-rail-hover: var(--rail-hover);
   --color-rail-line: var(--rail-line);
   --color-rail-mark: var(--rail-mark);
+  --color-rail-active: var(--rail-active);
   --color-surface-100: var(--surface-100);
   --color-surface-200: var(--surface-200);
   --color-surface-300: var(--surface-300);
@@ -193,16 +196,18 @@
   --text-display-xl--letter-spacing: -0.02em;
 
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
   --radius-pill: 999px;
 
   --shadow-sm: var(--so-shadow-sm);
   --shadow-md: var(--so-shadow-md);
+  --shadow-lift: var(--so-shadow-lift, 0 1px 2px rgba(0,0,0,.3));
 }
 
 body {
   background: var(--paper);
+  font-feature-settings: "ss01";
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   accent-color: var(--brand);
@@ -212,9 +217,9 @@ body {
 ::selection { background: var(--brand-soft); color: var(--ink); }
 :root { scrollbar-color: var(--border-strong) transparent; }
 
-/* Carimbo: status batido como carimbo de borracha (Badge em components/ui.tsx) */
-.so-stamp { transform: rotate(-1deg); }
-@media print { .so-stamp { transform: none; } }
+/* Entrada da página: um único movimento, curto, de algo já visível (main em shell.tsx) */
+@keyframes so-enter { from { opacity: 0.001; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.so-enter { animation: so-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* Anel de foco sólido de 3px em todo controle (design system) */
 :focus-visible {

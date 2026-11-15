@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "./confirm";
 import { useState } from "react";
 import Link from "next/link";
 import { Pencil, Pill, Plus, Printer, Trash2 } from "lucide-react";
@@ -67,11 +68,11 @@ export function Documents({ db, patientId }: { db: Db; patientId: string }) {
                   </span>
                   <span className="flex flex-wrap items-center gap-1">
                     <Link href={href} target="_blank" aria-label={`Ver e imprimir ${label} de ${dateBR(e.doc.issuedOn)}`}
-                      className="inline-flex h-9 items-center gap-1 rounded-pill px-4 text-sm font-semibold text-brand hover:bg-brand-soft"><Printer className="size-3.5" />Ver/imprimir</Link>
+                      className="inline-flex h-9 items-center gap-1 rounded-md px-4 text-sm font-semibold text-brand hover:bg-brand-soft"><Printer className="size-3.5" />Ver/imprimir</Link>
                     <Button size="sm" variant="ghost" disabled={readOnly} onClick={() => setEditing(e)} aria-label={`Editar ${label} de ${dateBR(e.doc.issuedOn)}`}><Pencil className="size-3.5" />Editar</Button>
                     <Button size="sm" variant="ghost" disabled={readOnly} aria-label={`Excluir ${label} de ${dateBR(e.doc.issuedOn)}`}
-                      onClick={() => {
-                        if (!window.confirm(`Excluir esta ${label}? Não dá para desfazer.`)) return;
+                      onClick={async () => {
+                        if (!(await ask({ title: `Excluir esta ${label}?`, body: "Não dá para desfazer.", confirmLabel: "Excluir", danger: true }))) return;
                         void run(() => (e.type === "rx" ? api.prescriptions.remove(e.doc.id) : e.type === "cert" ? api.certificates.remove(e.doc.id) : api.customDocuments.remove(e.doc.id)), removed);
                       }}><Trash2 className="size-3.5" />Excluir</Button>
                   </span>
