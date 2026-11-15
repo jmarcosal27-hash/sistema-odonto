@@ -103,7 +103,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, s
         <button
           key={o.value} type="button" role="radio" aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={cx("rounded-pill font-semibold transition-colors duration-150", size === "sm" ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm",
+          className={cx("whitespace-nowrap rounded-pill font-semibold transition-colors duration-150", size === "sm" ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm",
             value === o.value ? "bg-surface-100 text-ink shadow-sm" : "text-ink-muted hover:text-ink")}
         >{o.label}</button>
       ))}

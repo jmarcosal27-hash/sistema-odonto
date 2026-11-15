@@ -196,7 +196,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </nav>
       <CommandPalette open={search} onClose={() => setSearch(false)} onHelp={(q) => { setHelpQ(q); setHelp(true); }} />
       <ConfirmHost />
-      <HelpModal open={help} question={helpQ} onClose={() => { setHelp(false); setHelpQ(undefined); }} onStartTour={() => { setHelp(false); setOnboard(true); }} />
+      <HelpModal open={help} path={path} question={helpQ} onClose={() => { setHelp(false); setHelpQ(undefined); }} onStartTour={() => { setHelp(false); setOnboard(true); }} />
       <Onboarding open={onboard} onClose={() => setOnboard(false)} />
     </ToastProvider>
   );
