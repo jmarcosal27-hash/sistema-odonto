@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ask } from "@/components/confirm";
 import { MessageCircle, Check, CheckCheck, PencilLine, Send } from "lucide-react";
 import { useDb, api } from "@/lib/store";
-import { addDays, dateLong, dateShort, todayISO, whatsappLink } from "@/lib/format";
+import { addDays, dateLong, dateShort, notStarted, todayISO, whatsappLink } from "@/lib/format";
 import { Button, Card, Empty, Kpi, PageSkeleton, Badge } from "@/components/ui";
 import { AgendaTabs } from "@/components/agenda-tabs";
 import { TemplateEditor, fill } from "@/components/template-editor";
@@ -19,7 +19,7 @@ export default function Page() {
   const markSent = (id: string) => setSent((x) => new Set(x).add(id));
   if (!db) return <PageSkeleton />;
   const end = addDays(todayISO(), 7);
-  const window7 = db.appointments.filter((a) => a.patientId && a.date >= todayISO() && a.date <= end && a.status !== "cancelled");
+  const window7 = db.appointments.filter((a) => a.patientId && notStarted(a) && a.date <= end && a.status !== "cancelled");
   const pending = window7.filter((a) => a.status === "to_confirm").sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
   const confirmed = window7.filter((a) => a.status === "confirmed").length;
   const noPhone = pending.filter((a) => !db.patients.find((p) => p.id === a.patientId)?.phone).length;

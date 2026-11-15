@@ -139,7 +139,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <header className="sticky top-0 z-30 border-b border-border bg-paper/85 px-4 backdrop-blur-md supports-[not(backdrop-filter:blur(1px))]:bg-paper lg:px-8">
             <div className="mx-auto flex max-w-[68rem] items-center gap-2 py-2.5 lg:py-3.5">
             <button type="button" aria-label="Abrir menu" onClick={() => setDrawer(true)} className="lg:hidden grid size-11 place-items-center rounded-pill transition-colors duration-150 hover:bg-surface-300"><Menu aria-hidden className="size-5" /></button>
-            <LogoIcon size={32} className="lg:hidden shrink-0 rounded-md" />
+            <LogoIcon size={32} className="hidden sm:block lg:hidden shrink-0 rounded-md" />
             <div className="min-w-0 flex-1 flex items-baseline gap-3">
               <h1 className="text-xl lg:text-[28px] lg:leading-9 font-semibold tracking-[-0.025em] truncate">{title}</h1>
               <p className="hidden md:block min-w-0 truncate text-sm text-ink-muted first-letter:uppercase">{[todayLong, mounted && db?.profile.clinicName].filter(Boolean).join(" · ")}</p>

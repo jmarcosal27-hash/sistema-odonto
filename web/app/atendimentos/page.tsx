@@ -57,7 +57,7 @@ export default function Page() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Segmented size="sm" label="Período" value={preset} onChange={pickPreset}
-          options={[{ value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher mês" }, { value: "all", label: "Todo o período" }]} />
+          options={[{ value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher" }, { value: "all", label: "Tudo" }]} />
         {preset === "custom" && <>
         <Select aria-label="Mês" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-36">{MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select>
         <Select aria-label="Ano" value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-28">{years.map((y) => <option key={y}>{y}</option>)}</Select>
@@ -74,16 +74,16 @@ export default function Page() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Kpi tone="success" label="Recebido" value={money(received)} sub="nos atendimentos filtrados" />
         <Kpi tone="warning" label="A receber (avulsos)" value={money(pending)} sub={<>parcelas de orçamento em <Link href="/financeiro?aba=receivable" className="font-semibold text-brand">Financeiro</Link></>} />
-        <Kpi label="Em andamento" value={inProgress} sub="tratamentos não concluídos" />
+        <Kpi label="Em tratamento" value={inProgress} sub="tratamentos não concluídos" />
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Input aria-label="Buscar" placeholder="Paciente ou procedimento" value={q} onChange={(e) => setQ(e.target.value)} className="flex-1 min-w-48" />
-        <Select aria-label="Situação clínica" value={clinical} onChange={(e) => setClinical(e.target.value as typeof clinical)} className="w-48">
-          <option value="">Toda situação clínica</option><option value="in_progress">Em andamento</option><option value="done">Concluído</option>
+        <Select aria-label="Situação clínica" value={clinical} onChange={(e) => setClinical(e.target.value as typeof clinical)} className="w-auto">
+          <option value="">Qualquer situação</option><option value="in_progress">Em tratamento</option><option value="done">Concluído</option>
         </Select>
-        <Select aria-label="Pagamento" value={pay} onChange={(e) => setPay(e.target.value as typeof pay)} className="w-44">
-          <option value="">Todo pagamento</option><option value="pending">A receber</option><option value="received">Recebido</option>
+        <Select aria-label="Pagamento" value={pay} onChange={(e) => setPay(e.target.value as typeof pay)} className="w-auto">
+          <option value="">Qualquer pagamento</option><option value="pending">A receber</option><option value="received">Recebido</option>
         </Select>
       </div>
 
@@ -101,7 +101,7 @@ export default function Page() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold tabular-nums">{money(t.priceCents)}</span>
-                  {t.clinicalStatus === "done" ? <Badge tone="info">Concluído</Badge> : <Badge tone="accent">Em andamento</Badge>}
+                  {t.clinicalStatus === "done" ? <Badge tone="info">Concluído</Badge> : <Badge tone="accent">Em tratamento</Badge>}
                   {t.paymentStatus === "received" ? <Badge tone="success">Recebido</Badge> : t.paymentStatus === "budget" ? <Badge tone="neutral">Cobrado no orçamento</Badge> : <Badge tone="warning">A receber</Badge>}
                 </div>
                 <div className="flex gap-2 md:justify-end">

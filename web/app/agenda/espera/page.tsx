@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { MessageCircle, Plus, CalendarPlus } from "lucide-react";
 import { useDb, api, activePatients } from "@/lib/store";
-import { dateBR, dateLong, todayISO, whatsappLink } from "@/lib/format";
+import { dateBR, dateLong, notStarted, whatsappLink } from "@/lib/format";
 import type { Appointment, WaitlistEntry, WaitlistStatus } from "@/lib/types";
 import { Avatar, Badge, Button, Card, Empty, Field, Modal, PageSkeleton, Segmented, Select, Textarea } from "@/components/ui";
 import { AgendaTabs } from "@/components/agenda-tabs";
@@ -26,7 +26,7 @@ export default function Page() {
   const counts = Object.fromEntries((Object.keys(LABEL) as WaitlistStatus[]).map((s) => [s, db.waitlist.filter((w) => w.status === s).length])) as Record<WaitlistStatus, number>;
   const list = db.waitlist.filter((w) => w.status === tab).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   // Horários futuros que vagaram por cancelamento e ainda não foram reocupados.
-  const freed = db.appointments.filter((a) => a.status === "cancelled" && a.time && a.date >= todayISO()
+  const freed = db.appointments.filter((a) => a.status === "cancelled" && a.time && notStarted(a)
     && !db.appointments.some((x) => x.id !== a.id && x.status !== "cancelled" && x.date === a.date && x.time === a.time))
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const waiting = db.waitlist.filter((w) => w.status === "waiting" || w.status === "contacted");

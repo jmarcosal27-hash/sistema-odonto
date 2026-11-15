@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Plus, UserPlus } from "lucide-react";
 import { useDb, recallInfo, activePatients, stalledTreatments } from "@/lib/store";
 import { monthSummary, overdue } from "@/lib/finance";
-import { addDays, plural, dateLong, dateShort, fromISODate, money, todayISO, greetingName } from "@/lib/format";
+import { addDays, plural, dateLong, dateShort, fromISODate, money, todayISO, greetingName, notStarted } from "@/lib/format";
 import type { Appointment, AppointmentStatus } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/agenda";
 import { Badge, Card, PageSkeleton, SheetTitle, cx } from "@/components/ui";
@@ -67,10 +67,13 @@ export default function Home() {
   const late = overdue(db);
   const waiting = db.waitlist.filter((w) => w.status === "waiting" || w.status === "contacted");
   const stalled = stalledTreatments(db);
-  const toConfirm = live.filter((a) => a.patientId && a.status === "to_confirm" && a.date >= today && a.date <= addDays(today, 2)).length;
+  const toConfirm = live.filter((a) => a.patientId && a.status === "to_confirm" && notStarted(a) && a.date <= addDays(today, 2)).length;
   const first = greetingName(db.profile.professionalName);
+  // Consultas de hoje que já passaram e continuam sem desfecho (atendido ou faltou).
+  const unresolved = todays.filter((a) => a.patientId && !notStarted(a) && ["to_confirm", "confirmed", "waiting"].includes(a.status)).length;
 
   const todo = [
+    { n: unresolved, text: ["consulta de hoje já passou sem registro", "consultas de hoje já passaram sem registro"], link: "Marcar na agenda", href: "/agenda" },
     { n: late.length ? new Set(late.map((i) => i.patientId)).size : 0, text: ["paciente com parcela vencida", "pacientes com parcela vencida"], link: "Ver cobranças", href: "/financeiro?aba=receivable" },
     { n: toConfirm, text: ["consulta nos próximos 2 dias sem confirmação", "consultas nos próximos 2 dias sem confirmação"], link: "Confirmar", href: "/agenda/confirmar" },
     { n: recall.length, text: ["retorno para chamar", "retornos para chamar"], link: "Ver retornos", href: "/agenda/retornos" },

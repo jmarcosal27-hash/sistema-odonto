@@ -18,7 +18,7 @@ export default function Page() {
   const remote = useRemoteState();
   const run = useAction();
   const [q, setQ] = useState("");
-  const [period, setPeriod] = useState<Period>("all");
+  const [period, setPeriod] = useState<Period>("month");
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(false);
@@ -91,7 +91,7 @@ export default function Page() {
       <div className="flex flex-wrap items-center gap-3">
         <Input aria-label="Buscar paciente" placeholder="Buscar paciente" value={q} onChange={(e) => setQ(e.target.value)} className="min-w-48 flex-1" />
         <Segmented size="sm" label="Período de criação" value={period} onChange={setPeriod}
-          options={[{ value: "month", label: "Este mês" }, { value: "30", label: "30 dias" }, { value: "90", label: "90 dias" }, { value: "all", label: "Todo o período" }]} />
+          options={[{ value: "month", label: "Este mês" }, { value: "30", label: "30 dias" }, { value: "90", label: "90 dias" }, { value: "all", label: "Tudo" }]} />
         {canManage && <Button variant="secondary" onClick={() => setManaging(true)}><Settings2 aria-hidden className="size-4" />Etapas</Button>}
         <Button onClick={() => setCreating(true)}><Plus aria-hidden className="size-4" />Criar oportunidade</Button>
       </div>
@@ -107,7 +107,7 @@ export default function Page() {
                 action={!db.opportunities.length && <Button onClick={() => setCreating(true)}><Plus aria-hidden className="size-4" />Criar oportunidade</Button>} />
             </Card>
           )}
-          <p className="text-xs text-ink-muted">Arraste os cartões entre as colunas, use o campo “Etapa” ou, com o cartão focado, Shift + seta para a esquerda ou direita.</p>
+          <p className="hidden text-xs text-ink-muted sm:block">Arraste os cartões entre as colunas, use o campo “Etapa” ou, com o cartão focado, Shift + seta para a esquerda ou direita.</p>
           <SalesBoard stages={stages} byStage={byStage} patientName={patientName} onOpen={(o) => setOpenId(o.id)} onMove={(o, id) => void move(o, id)} onManageStages={canManage ? () => setManaging(true) : undefined} />
         </>
       )}

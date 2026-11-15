@@ -8,6 +8,7 @@ import { SPECIALTIES } from "@/lib/catalog";
 import type { Profile } from "@/lib/types";
 
 const COLORS = ["#6d4fd8", "#0f766e", "#8a5a00", "#b42318", "#1f1b2e"];
+const COLOR_NAMES: Record<string, string> = { "#6d4fd8": "Roxo (padrão)", "#0f766e": "Verde-petróleo", "#8a5a00": "Mostarda", "#b42318": "Vermelho", "#1f1b2e": "Grafite" };
 
 export function Onboarding({ open, onClose }: { open: boolean; onClose: () => void }) {
   const db = useDb();
@@ -57,8 +58,8 @@ export function Onboarding({ open, onClose }: { open: boolean; onClose: () => vo
       body: (
         <div className="flex gap-3" role="radiogroup" aria-label="Cor do documento">
           {COLORS.map((c) => (
-            <button key={c} type="button" role="radio" aria-checked={p.pdfColor === c} aria-label={c} onClick={() => set({ pdfColor: c })}
-              style={{ background: c }} className={cx("size-10 rounded-full ring-offset-2", p.pdfColor === c && "ring-2 ring-ink")} />
+            <button key={c} type="button" role="radio" aria-checked={(p.pdfColor ?? COLORS[0]) === c} aria-label={COLOR_NAMES[c]} title={COLOR_NAMES[c]} onClick={() => set({ pdfColor: c })}
+              style={{ background: c }} className={cx("size-10 rounded-full ring-offset-2", (p.pdfColor ?? COLORS[0]) === c && "ring-2 ring-ink")} />
           ))}
         </div>
       ),
