@@ -152,7 +152,7 @@ export default function Page() {
             a.kind === "personal" && "!bg-surface-300 !border-ink-muted", a.forced && "outline outline-2 outline-warning")}>
           <span className={cx("text-xs font-semibold leading-4 break-words", height > 60 ? "line-clamp-2" : "block truncate")}>
             {a.forced && <Zap aria-hidden className="mr-0.5 inline size-3 text-warning" />}{a.forced && <span className="sr-only">Encaixe. </span>}
-            {who}
+            {view === "week" ? <><span aria-hidden>{shortName(who)}</span><span className="sr-only">{who}</span></> : who}
           </span>
           {height > 30 && <span className="block truncate text-[11px] leading-4 text-ink-muted"><span><span className="font-semibold text-ink">{a.time}</span>{view === "week" ? "" : <>{height <= 64 && ` · ${STATUS_LABEL[a.status]}`} · {what} · {a.durationMinutes} min{t.cents ? ` · R$ ${(t.cents / 100).toFixed(2).replace(".", ",")}` : ""}</>}</span></span>}
           {height > 64 && view !== "week" && <span className="flex items-center gap-1 truncate text-[11px] text-ink-muted"><StatusDot status={a.status} className="size-2" />{STATUS_LABEL[a.status]}{a.forced && " · Encaixe"}{a.label && ` · ${a.label}`}</span>}
@@ -342,4 +342,10 @@ export default function Page() {
       {managing && <ProfessionalsDialog professionals={db.professionals as Professional[]} onClose={() => setManaging(false)} />}
     </div>
   );
+}
+
+/** "Marina Albuquerque Teixeira" → "Marina A." (colunas estreitas da semana). */
+function shortName(full: string) {
+  const w = full.trim().split(/\s+/);
+  return w.length > 1 ? `${w[0]} ${w[w.length - 1][0]}.` : full;
 }

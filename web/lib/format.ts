@@ -14,6 +14,13 @@ export function parseMoney(input: string): number | undefined {
 
 export const todayISO = () => toISODate(new Date());
 
+/** A consulta ainda não começou? Compara data e hora (sem hora definida, vale o dia inteiro). */
+export function notStarted(a: { date: string; time?: string }, now = new Date()) {
+  const t = toISODate(now);
+  if (a.date !== t) return a.date > t;
+  return !a.time || a.time >= now.toTimeString().slice(0, 5);
+}
+
 export function toISODate(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");

@@ -45,12 +45,11 @@ export default function Page() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-ink-muted">Como a clínica está indo, em números.</p>
-        <Segmented size="sm" label="Período" value={period} onChange={pick} options={[{ value: "month", label: "Este mês" }, { value: "30d", label: "Últimos 30 dias" }, { value: "year", label: "Este ano" }, { value: "custom", label: "Escolher datas" }]} />
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented size="sm" label="Período" value={period} onChange={pick} options={[{ value: "month", label: "Este mês" }, { value: "30d", label: "30 dias" }, { value: "year", label: "Este ano" }, { value: "custom", label: "Escolher" }]} />
       </div>
       {period === "custom" && (
-        <div className="flex flex-wrap items-end justify-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Field label="De">{(id) => <Input id={id} type="date" value={range[0]} max={range[1]} onChange={(e) => e.target.value && setRange([e.target.value, range[1]])} />}</Field>
           <Field label="Até">{(id) => <Input id={id} type="date" value={range[1]} min={range[0]} onChange={(e) => e.target.value && setRange([range[0], e.target.value])} />}</Field>
         </div>

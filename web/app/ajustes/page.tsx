@@ -13,6 +13,7 @@ import { logoFromFile } from "@/lib/files";
 const UFS = "AC AL AM AP BA CE DF ES GO MA MG MS MT PA PB PE PI PR RJ RN RO RR RS SC SE SP TO".split(" ");
 
 const COLORS = ["#6d4fd8", "#0f766e", "#8a5a00", "#b42318", "#1f1b2e"];
+const COLOR_NAMES: Record<string, string> = { "#6d4fd8": "Roxo (padrão)", "#0f766e": "Verde-petróleo", "#8a5a00": "Mostarda", "#b42318": "Vermelho", "#1f1b2e": "Grafite" };
 
 export default function Page() {
   const db = useDb();
@@ -57,7 +58,7 @@ export default function Page() {
         <div className="flex flex-col gap-2">
           <span className="text-xs font-medium text-ink-muted">Cor do orçamento impresso</span>
           <div className="flex gap-3" role="radiogroup" aria-label="Cor do documento">
-            {COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={p.pdfColor === c} aria-label={c} onClick={() => set({ pdfColor: c })} style={{ background: c }} className={cx("size-9 rounded-full ring-offset-2", p.pdfColor === c && "ring-2 ring-ink")} />)}
+            {COLORS.map((c) => <button key={c} type="button" role="radio" aria-checked={(p.pdfColor ?? COLORS[0]) === c} aria-label={COLOR_NAMES[c]} title={COLOR_NAMES[c]} onClick={() => set({ pdfColor: c })} style={{ background: c }} className={cx("size-9 rounded-full ring-offset-2", (p.pdfColor ?? COLORS[0]) === c && "ring-2 ring-ink")} />)}
           </div>
         </div>
         <div className="flex flex-col gap-2">

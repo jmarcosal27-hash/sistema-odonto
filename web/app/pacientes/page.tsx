@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Plus, Upload, Download, Cake } from "lucide-react";
 import { useDb, api, patientStatus, isBirthdayMonth } from "@/lib/store";
-import { age, dateShort, todayISO, plural } from "@/lib/format";
+import { age, dateShort, notStarted, todayISO, plural } from "@/lib/format";
 import type { Patient } from "@/lib/types";
 import { Avatar, Badge, Button, Card, Empty, Input, PageSkeleton, Segmented, Select, cx } from "@/components/ui";
 import { PatientForm } from "@/components/patient-form";
@@ -52,7 +52,7 @@ export default function Page() {
     ["seen", "Já atendidos", ""], ["new", "Ainda não vieram", ""], ["birthday", "Aniversário no mês", ""],
   ];
 
-  const nextVisit = (p: Patient) => db.appointments.filter((a) => a.patientId === p.id && a.date >= todayISO() && a.status !== "cancelled").sort((a, b) => a.date.localeCompare(b.date))[0];
+  const nextVisit = (p: Patient) => db.appointments.filter((a) => a.patientId === p.id && notStarted(a) && a.status !== "cancelled").sort((a, b) => a.date.localeCompare(b.date))[0];
 
   const exportCsv = () => {
     const head = ["Nome", "Nascimento", "Sexo", "CPF", "Celular", "E-mail", "Cidade", "UF", "Origem"];

@@ -28,7 +28,7 @@ function Caixa() {
   return (
     <div className="space-y-4">
       {staff && <Segmented label="Seção" value={active} onChange={setTab} options={[
-        { value: "book", label: "Livro-caixa" }, { value: "close", label: "Fechamento do dia" }, { value: "commission", label: "Comissões" },
+        { value: "book", label: "Livro-caixa" }, { value: "close", label: "Fechamento" }, { value: "commission", label: "Comissões" },
       ]} />}
       {readOnly && <p role="status" className="rounded-md bg-warning-soft p-3 text-sm">Acesso vencido: o caixa está só para consulta.</p>}
       {active === "book" && <Book db={db} readOnly={readOnly} />}
@@ -81,7 +81,7 @@ function Book({ db, readOnly }: { db: Db; readOnly: boolean }) {
     <>
       <div className="flex flex-wrap items-center gap-2">
         <Segmented size="sm" label="Período rápido" value={preset} onChange={pickPreset}
-          options={[{ value: "today", label: "Hoje" }, { value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher datas" }]} />
+          options={[{ value: "today", label: "Hoje" }, { value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher" }]} />
         <Segmented size="sm" label="Tipo de lançamento" value={kind} onChange={setKind}
           options={[{ value: "all", label: "Tudo" }, { value: "in", label: "Entradas" }, { value: "out", label: "Saídas" }]} />
       </div>

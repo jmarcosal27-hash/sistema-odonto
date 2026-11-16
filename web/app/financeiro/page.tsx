@@ -69,10 +69,9 @@ function Finance() {
           { value: "receivable", label: <>A receber{late.length ? <span className="ml-1.5 rounded-pill bg-danger px-1.5 text-[11px] text-on-brand">{late.length}</span> : null}</> },
           { value: "expenses", label: "Despesas" },
         ]} />
-        <div className="flex-1" />
         {tab !== "receivable" && <>
           <Segmented size="sm" label="Período" value={preset} onChange={pickPreset}
-            options={[{ value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher mês" }]} />
+            options={[{ value: "month", label: "Este mês" }, { value: "last", label: "Mês passado" }, { value: "custom", label: "Escolher" }]} />
           {preset === "custom" && <>
           <Select aria-label="Mês" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="w-36">{MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select>
           <Select aria-label="Ano" value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-28">{[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => <option key={y}>{y}</option>)}</Select>
