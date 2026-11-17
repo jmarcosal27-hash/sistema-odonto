@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Tokens do design system SmileOS (fonte: design-system/tokens.json).
+/* Tokens do design system SmillicOS (fonte: design-system/tokens.json).
    Componentes usam as classes geradas (bg-surface-200, text-ink-muted, bg-brand...),
    nunca hex cru. Os tokens brand-* são fixos nos dois temas. */
 :root {

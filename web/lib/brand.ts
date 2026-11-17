@@ -1,2 +1,2 @@
-// Grafia exata da marca: "SmileOS". Nunca "Smile OS", "SMILEOS" ou "Smileos".
-export const APP_NAME = "SmileOS";
+// Grafia exata da marca: "SmillicOS". Nunca "Smillic OS", "SMILLICOS" ou "Smillicos".
+export const APP_NAME = "SmillicOS";

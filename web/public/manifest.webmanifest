@@ -1,6 +1,6 @@
 {
-  "name": "SmileOS",
-  "short_name": "SmileOS",
+  "name": "SmillicOS",
+  "short_name": "SmillicOS",
   "description": "Gestão do consultório odontológico: planos, orçamentos, agenda e financeiro.",
   "start_url": "/",
   "display": "standalone",

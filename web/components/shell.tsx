@@ -95,7 +95,7 @@ export function Shell({ children }: { children: ReactNode }) {
   if (remote?.status === "error") return <ToastProvider><main className="grid min-h-dvh place-items-center p-6 text-center"><div className="space-y-3"><p className="font-semibold">{remote.message}</p><a href="/entrar" className="font-semibold text-brand">Entrar de novo</a></div></main></ToastProvider>;
   const todayLong = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const patientId = path.match(/^\/pacientes\/([^/]+)$/)?.[1];
-  const title = (mounted && patientId && db?.patients.find((p) => p.id === patientId)?.fullName) || (TITLES.find(([p]) => path.startsWith(p))?.[1] ?? (path === "/" ? "Início" : "SmileOS"));
+  const title = (mounted && patientId && db?.patients.find((p) => p.id === patientId)?.fullName) || (TITLES.find(([p]) => path.startsWith(p))?.[1] ?? (path === "/" ? "Início" : "SmillicOS"));
   const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
 

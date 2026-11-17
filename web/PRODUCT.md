@@ -32,7 +32,7 @@ Acesso anual com pagamento único, sem cobrança recorrente: resposta direta às
 - Termos do domínio: paciente, plano de tratamento, orçamento, atendimento, parcela, caixa, comissão, convênio, lote, glosa, prótese, HOF.
 
 ## Brand Commitments
-- Nome **SmileOS**, grafia exata (nunca "Smile OS", "SMILEOS", "Smileos").
+- Nome **SmillicOS**, grafia exata (nunca "Smillic OS", "SMILLICOS", "Smillicos").
 - Logotipo e ícone em `public/brand/` são fixos: usados por `<img>`, nunca recoloridos; regras em `components/logo.tsx`.
 - Cores da identidade são obrigatórias (decisão do usuário, 2026-11-15): tinta da marca `#1F1B2E`, violeta `#6D4FD8`, lavanda `#BBA8F5`, branco. Tipografia e o restante do visual podem ser refeitos.
 

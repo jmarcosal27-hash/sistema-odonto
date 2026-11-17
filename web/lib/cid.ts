@@ -1,5 +1,5 @@
 // Sugestões de CID (datalist do formulário) para atestado odontológico: poucos códigos comuns do capítulo de
-// dentes e boca da CID-10, com descrições escritas pelo SmileOS (não é a tabela oficial).
+// dentes e boca da CID-10, com descrições escritas pelo SmillicOS (não é a tabela oficial).
 // A busca é a do próprio navegador sobre código e descrição. O campo continua livre: qualquer outro código pode ser digitado.
 
 export interface CidOption { code: string; label: string }

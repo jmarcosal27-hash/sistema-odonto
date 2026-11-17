@@ -1,4 +1,4 @@
-// Gerado por traçado vetorial da prancha de dentes decíduos (ilustração própria do SmileOS).
+// Gerado por traçado vetorial da prancha de dentes decíduos (ilustração própria do SmillicOS).
 // Coordenadas em px da prancha, origem no centro do colo (linha cervical). Orientação original da prancha:
 // superiores = raiz para cima (y negativo); inferiores = raiz para baixo. cb/rb = bbox [x0,y0,x1,y1] da coroa/raiz.
 export interface ToothShape { crown: string; root: string; canals: string[]; cb: number[]; rb: number[] }

@@ -12,8 +12,8 @@ import { Badge, Button, Card, ErrorNote, Field, Input, Modal, Segmented, Select,
 import { useAction } from "./toast";
 import { CustomDocumentForm, MedicationsManager } from "./documents-extra";
 
-export const DOCUMENT_NOTICE = "Minuta gerada pelo SmileOS. O texto e a conformidade com as normas do CFO, da vigilância sanitária e da LGPD são de responsabilidade do profissional e da clínica; revise antes de entregar.";
-export const CONTROLLED_NOTICE = "Medicamento controlado: o SmileOS não gera receita de controle especial. Use só como rascunho e transcreva para o talonário oficial.";
+export const DOCUMENT_NOTICE = "Minuta gerada pelo SmillicOS. O texto e a conformidade com as normas do CFO, da vigilância sanitária e da LGPD são de responsabilidade do profissional e da clínica; revise antes de entregar.";
+export const CONTROLLED_NOTICE = "Medicamento controlado: o SmillicOS não gera receita de controle especial. Use só como rascunho e transcreva para o talonário oficial.";
 export const CID_NOTICE = "O CID é dado de saúde sensível e só pode constar no atestado com o consentimento do paciente.";
 const UNIT_SUGGESTIONS = ["caixa", "frasco", "comprimido", "cápsula", "tubo", "bisnaga", "ampola", "pacote", "envelope"];
 

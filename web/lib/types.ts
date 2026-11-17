@@ -305,7 +305,7 @@ export interface PrescriptionItem {
   unit?: string;
   posology: string;
   route: MedicationRoute;
-  /** Só sinaliza: o SmileOS não gera receita de controle especial válida. */
+  /** Só sinaliza: o SmillicOS não gera receita de controle especial válida. */
   controlled: boolean;
 }
 

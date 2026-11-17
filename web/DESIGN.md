@@ -1,4 +1,4 @@
-# Design system SmileOS — "Receituário"
+# Design system SmillicOS — "Receituário"
 
 O sistema é o bloco timbrado da clínica, numa leitura contemporânea: papel claro, tinta da marca, filetes finos e selos de status discretos. (Revisão 2026-11-15: menos peso estrutural, mais respiro.) Modo Operate: a tarefa vem antes da expressão; a marca vive nos detalhes.
 
