@@ -12,14 +12,14 @@ export const metadata: Metadata = {
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: APP_DESCRIPTION,
   manifest: "/manifest.webmanifest",
-  metadataBase: new URL("https://app.smileosistema.com.br"),
+  metadataBase: new URL("https://app.smillicos.com.br"),
   icons: {
     icon: [{ url: "/brand/smileos_icone_lavanda.svg", type: "image/svg+xml" }, { url: "/brand/icone-192.png", sizes: "192x192", type: "image/png" }],
     apple: "/brand/icone-192.png",
   },
   openGraph: {
     type: "website",
-    url: "https://app.smileosistema.com.br",
+    url: "https://app.smillicos.com.br",
     siteName: APP_NAME,
     title: `${APP_NAME} — Gestão do consultório odontológico`,
     description: APP_DESCRIPTION,
